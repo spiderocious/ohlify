@@ -2,10 +2,17 @@ export const ERROR_CODES = {
   // Auth
   INVALID_CREDENTIALS: 'invalid_credentials',
   ACCOUNT_LOCKED: 'account_locked',
+  ACCOUNT_SUSPENDED: 'account_suspended',
+  ACCOUNT_BLOCKED: 'account_blocked',
   INVALID_OTP: 'invalid_otp',
   OTP_EXPIRED: 'otp_expired',
+  OTP_MAX_ATTEMPTS: 'otp_max_attempts',
   EMAIL_EXISTS: 'email_exists',
   PHONE_EXISTS: 'phone_exists',
+  TOKEN_INVALID: 'token_invalid',
+  SESSION_REVOKED: 'session_revoked',
+  SESSION_EXPIRED: 'session_expired',
+  CREDENTIAL_NOT_SET: 'credential_not_set',
   UNAUTHORIZED: 'unauthorized',
   // Bookings
   SLOT_TAKEN: 'slot_taken',

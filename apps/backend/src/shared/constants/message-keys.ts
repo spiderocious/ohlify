@@ -1,11 +1,16 @@
 export const MESSAGE_KEYS = {
   // Auth
+  REGISTER_INITIATED: 'auth.register.initiated',
+  REGISTER_SET_CREDENTIAL: 'auth.register.credential_set',
   USER_REGISTERED: 'auth.register.success',
   USER_LOGGED_IN: 'auth.login.success',
   INVALID_CREDENTIALS: 'auth.login.invalid',
   OTP_SENT: 'auth.otp.sent',
+  OTP_VERIFIED: 'auth.otp.verified',
+  OTP_RESENT: 'auth.otp.resent',
   OTP_INVALID: 'auth.otp.invalid',
   OTP_EXPIRED: 'auth.otp.expired',
+  SENSITIVE_OTP_SENT: 'auth.sensitive_otp.sent',
   CREDENTIAL_RESET: 'auth.credential.reset',
   LOGGED_OUT: 'auth.logout.success',
   TOKEN_REFRESHED: 'auth.token.refreshed',

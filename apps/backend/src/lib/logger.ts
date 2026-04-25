@@ -1,12 +1,15 @@
 import pino, { type LoggerOptions } from 'pino';
 
+import { env } from '../env.js';
+
 const transport: LoggerOptions['transport'] =
-  process.env['NODE_ENV'] !== 'production'
+  env.NODE_ENV !== 'production'
     ? { target: 'pino-pretty', options: { colorize: true } }
     : undefined;
 
 export const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
+  level: env.LOG_LEVEL,
+  base: { service: 'ohlify-backend', env: env.NODE_ENV },
   ...(transport !== undefined ? { transport } : {}),
   redact: {
     paths: [
@@ -16,11 +19,13 @@ export const logger = pino({
       'body.token',
       'body.otp',
       '*.password',
+      '*.password_hash',
       '*.token',
+      '*.refresh_token',
       '*.secret',
       '*.accessToken',
       '*.refreshToken',
     ],
-    censor: '[REDACTED]',
+    remove: true,
   },
 });
