@@ -2,14 +2,18 @@ import type { ErrorCode } from '@shared/constants/error-codes.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 export class AppError extends Error {
+  public readonly retryAfter?: number;
+
   constructor(
     public readonly code: ErrorCode,
     message: string,
     public readonly status = 400,
     public readonly fieldErrors?: Record<string, string[]>,
+    retryAfter?: number,
   ) {
     super(message);
     this.name = 'AppError';
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
     Error.captureStackTrace(this, this.constructor);
   }
 }

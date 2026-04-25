@@ -5,7 +5,9 @@ export const globalRateLimit = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests' } },
+  message: {
+    error: { code: 'rate_limited', message: 'Too many requests, please try again later' },
+  },
 });
 
 export const authRateLimit = rateLimit({
@@ -13,5 +15,7 @@ export const authRateLimit = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests' } },
+  message: {
+    error: { code: 'rate_limited', message: 'Too many requests, please try again later' },
+  },
 });

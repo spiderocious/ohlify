@@ -24,13 +24,16 @@ export class ServiceSuccess<T> implements ServiceResult<T> {
 export class ServiceError implements ServiceResult<never> {
   success = false as const;
   fieldErrors?: Record<string, string[]>;
+  retryAfter?: number;
 
   constructor(
     public errorCode: ErrorCode,
     public messageKey: MessageKey,
     public httpStatus = 400,
     fieldErrors?: Record<string, string[]>,
+    retryAfter?: number,
   ) {
     if (fieldErrors !== undefined) this.fieldErrors = fieldErrors;
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
   }
 }
