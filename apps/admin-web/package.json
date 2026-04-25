@@ -1,0 +1,10 @@
+{
+  "name": "@ohlify/admin-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'admin-web: not yet implemented'",
+    "build": "echo 'admin-web: not yet implemented'",
+    "start": "echo 'admin-web: not yet implemented'"
+  }
+}

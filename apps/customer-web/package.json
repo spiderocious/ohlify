@@ -1,0 +1,10 @@
+{
+  "name": "@ohlify/customer-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'customer-web: not yet implemented'",
+    "build": "echo 'customer-web: not yet implemented'",
+    "start": "echo 'customer-web: not yet implemented'"
+  }
+}
