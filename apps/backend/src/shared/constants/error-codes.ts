@@ -35,6 +35,18 @@ export const ERROR_CODES = {
   INTERNAL: 'internal',
   CONFLICT: 'conflict',
   IDEMPOTENCY_MISMATCH: 'idempotency_mismatch',
+  // Onboarding / role
+  ROLE_ALREADY_SET: 'role_already_set',
+  ROLE_REQUIRED: 'role_required',
+  ROLE_MISMATCH: 'role_mismatch',
+  KYC_INCOMPLETE: 'kyc_incomplete',
+  // Profile
+  ACCOUNT_NAME_MISMATCH: 'account_name_mismatch',
+  UNRESOLVABLE_ACCOUNT: 'unresolvable_account',
+  CONFIRMATION_REQUIRED: 'confirmation_required',
+  BANK_NOT_FOUND: 'bank_not_found',
+  CATEGORY_INVALID: 'category_invalid',
+  AVATAR_INVALID: 'avatar_invalid',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

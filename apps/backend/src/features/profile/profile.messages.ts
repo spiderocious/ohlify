@@ -1,0 +1,17 @@
+export const PROFILE_MESSAGES = {
+  PROFILE_FETCHED: 'profile.fetched',
+  PROFILE_UPDATED: 'profile.updated',
+  EMAIL_CHANGE_INITIATED: 'profile.email.change_initiated',
+  EMAIL_VERIFIED: 'profile.email.verified',
+  PHONE_CHANGE_INITIATED: 'profile.phone.change_initiated',
+  PHONE_VERIFIED: 'profile.phone.verified',
+  ACCOUNT_DELETED: 'profile.account_deleted',
+  PREFERENCES_FETCHED: 'profile.preferences.fetched',
+  PREFERENCES_UPDATED: 'profile.preferences.updated',
+  AVATAR_UPDATED: 'profile.avatar.updated',
+  AVATAR_REMOVED: 'profile.avatar.removed',
+  BANK_ACCOUNT_FETCHED: 'profile.bank_account.fetched',
+  BANK_ACCOUNT_UPDATED: 'profile.bank_account.updated',
+  BANK_ACCOUNT_REMOVED: 'profile.bank_account.removed',
+  OTP_INVALID: 'auth.otp.invalid',
+} as const;

@@ -22,6 +22,8 @@ export type SensitiveAction =
   | 'change_password'
   | 'delete_account';
 
+export type KycStatus = 'none' | 'pending_review' | 'approved' | 'rejected';
+
 export interface UserRow {
   id: string;
   role: UserRole;
@@ -33,9 +35,20 @@ export interface UserRow {
   password_hash: string;
   full_name: string | null;
   handle: string | null;
+  handle_changed_at: Date | null;
   avatar_url: string | null;
-  kyc_status: string;
+  cover_photo_url: string | null;
+  occupation: string | null;
+  description: string | null;
+  interests: string[];
+  categories: string[];
+  is_available: boolean;
+  kyc_status: KycStatus;
+  kyc_submitted_at: Date | null;
+  kyc_reviewed_at: Date | null;
+  kyc_reject_reason: string | null;
   last_seen_at: Date | null;
+  suspended_until: Date | null;
   deleted_at: Date | null;
   created_at: Date;
   updated_at: Date;
