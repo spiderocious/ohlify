@@ -1,6 +1,3 @@
-// Root message catalog — feature slices add their own AUTH_MESSAGES etc.
-// and are spread in here. Kept flat at runtime; split by feature for ownership.
-
 export const MESSAGE_KEYS = {
   // Auth
   USER_REGISTERED: 'auth.register.success',
@@ -9,7 +6,7 @@ export const MESSAGE_KEYS = {
   OTP_SENT: 'auth.otp.sent',
   OTP_INVALID: 'auth.otp.invalid',
   OTP_EXPIRED: 'auth.otp.expired',
-  PASSWORD_RESET: 'auth.password.reset',
+  CREDENTIAL_RESET: 'auth.credential.reset',
   LOGGED_OUT: 'auth.logout.success',
   TOKEN_REFRESHED: 'auth.token.refreshed',
   // General
@@ -19,7 +16,7 @@ export const MESSAGE_KEYS = {
   VALIDATION_FAILED: 'general.validation_failed',
   // Profile
   PROFILE_UPDATED: 'profile.updated',
-  PASSWORD_CHANGED: 'profile.password_changed',
+  CREDENTIAL_CHANGED: 'profile.credential.changed',
   ACCOUNT_DELETED: 'profile.account_deleted',
   // KYC
   KYC_SUBMITTED: 'kyc.submitted',

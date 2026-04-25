@@ -18,23 +18,6 @@ const EnvSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().min(1),
   PAYSTACK_WEBHOOK_SECRET: z.string().min(1),
 
-  AGORA_APP_ID: z.string().min(1),
-  AGORA_APP_CERTIFICATE: z.string().min(1),
-
-  RESEND_API_KEY: z.string().min(1),
-
-  R2_ACCOUNT_ID: z.string().min(1),
-  R2_ACCESS_KEY_ID: z.string().min(1),
-  R2_SECRET_ACCESS_KEY: z.string().min(1),
-  R2_BUCKET: z.string().min(1),
-  R2_PUBLIC_URL: z.string().url(),
-
-  FCM_SERVICE_ACCOUNT_JSON: z.string().min(1),
-  APNS_KEY: z.string().min(1),
-  APNS_KEY_ID: z.string().min(1),
-  APNS_TEAM_ID: z.string().min(1),
-
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 

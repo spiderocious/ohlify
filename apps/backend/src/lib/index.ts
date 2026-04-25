@@ -1,7 +1,5 @@
 export * from './db/index.js';
 export * from './redis/index.js';
-export * from './queue/index.js';
-export * from './otel/index.js';
 export * from './logger.js';
 export * from './errors.js';
 export * from './response.js';
@@ -9,5 +7,7 @@ export * from './service-result.js';
 export * from './ids.js';
 export * from './money.js';
 export * from './time.js';
+export * from './pagination.js';
 export * from './http/asyncHandler.js';
 export * from './http/requestContext.js';
+export * from './http/validateRequest.js';
