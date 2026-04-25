@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
-import { initOtel, shutdownOtel } from '@lib/otel/init.js';
+import { shutdownOtel } from '@lib/otel/init.js';
 import { redis } from '@lib/redis/client.js';
 
 import { buildApp } from './app.js';
@@ -10,7 +10,6 @@ import { env } from './env.js';
 
 
 const start = async (): Promise<void> => {
-  await initOtel();
 
   const app = buildApp();
   const server = createServer(app);

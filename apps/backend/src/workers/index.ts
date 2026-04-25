@@ -1,6 +1,6 @@
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
-import { initOtel, shutdownOtel } from '@lib/otel/init.js';
+import { shutdownOtel } from '@lib/otel/init.js';
 import { redis } from '@lib/redis/client.js';
 
 import { env } from '../env.js';
@@ -10,7 +10,6 @@ import { env } from '../env.js';
 // as features are implemented.
 
 const start = async (): Promise<void> => {
-  await initOtel();
 
   logger.info({ env: env.NODE_ENV }, 'worker process starting');
 

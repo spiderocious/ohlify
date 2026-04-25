@@ -1,7 +1,7 @@
 import { env } from '../../env.js';
 import { logger } from '../logger.js';
 
-export const initOtel = async (): Promise<void> => {
+export const initOtel = () => {
   if (!env.OTEL_EXPORTER_OTLP_ENDPOINT) {
     logger.info('OTel disabled (no OTEL_EXPORTER_OTLP_ENDPOINT set)');
     return;
