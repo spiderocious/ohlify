@@ -24,7 +24,7 @@ import * as service from './auth.service.js';
 const bail = (
   errorCode: string | undefined,
   httpStatus: number | undefined,
-  retryAfter?: number  ,
+  retryAfter?: number,
 ): never => {
   throw new AppError(
     (errorCode ?? 'internal') as ErrorCode,

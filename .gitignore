@@ -18,3 +18,5 @@ node_modules
 dist
 /apps/backend/dist
 /apps/backend/build
+/apps/backend/.env
+/apps/backend/.env.local
