@@ -18,6 +18,9 @@ const EnvSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().min(1),
   PAYSTACK_WEBHOOK_SECRET: z.string().min(1),
 
+  RESEND_API_KEY: z.string().min(1),
+  RESEND_FROM_EMAIL: z.string(),
+
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 
