@@ -20,9 +20,27 @@ export const MESSAGE_KEYS = {
   INTERNAL_ERROR: 'general.internal_error',
   VALIDATION_FAILED: 'general.validation_failed',
   // Profile
+  PROFILE_FETCHED: 'profile.fetched',
   PROFILE_UPDATED: 'profile.updated',
   CREDENTIAL_CHANGED: 'profile.credential.changed',
   ACCOUNT_DELETED: 'profile.account_deleted',
+  EMAIL_CHANGE_INITIATED: 'profile.email.change_initiated',
+  EMAIL_VERIFIED: 'profile.email.verified',
+  PHONE_CHANGE_INITIATED: 'profile.phone.change_initiated',
+  PHONE_VERIFIED: 'profile.phone.verified',
+  PREFERENCES_FETCHED: 'profile.preferences.fetched',
+  PREFERENCES_UPDATED: 'profile.preferences.updated',
+  AVATAR_UPDATED: 'profile.avatar.updated',
+  AVATAR_REMOVED: 'profile.avatar.removed',
+  BANK_ACCOUNT_FETCHED: 'profile.bank_account.fetched',
+  BANK_ACCOUNT_UPDATED: 'profile.bank_account.updated',
+  BANK_ACCOUNT_REMOVED: 'profile.bank_account.removed',
+  // Onboarding
+  ONBOARDING_STATUS_FETCHED: 'onboarding.status.fetched',
+  ROLE_SET: 'onboarding.role.set',
+  KYC_PROGRESS_UPDATED: 'onboarding.kyc.progress_updated',
+  HANDLE_CHECKED: 'onboarding.handle.checked',
+  HANDLE_CHANGED: 'onboarding.handle.changed',
   // KYC
   KYC_SUBMITTED: 'kyc.submitted',
   KYC_APPROVED: 'kyc.approved',
@@ -35,8 +53,30 @@ export const MESSAGE_KEYS = {
   // Feedback
   FEEDBACK_SUBMITTED: 'feedback.submitted',
   // Rates
+  RATES_LIST_FETCHED: 'rates.list.fetched',
   RATE_CREATED: 'rate.created',
+  RATE_UPDATED: 'rate.updated',
   RATE_DELETED: 'rate.deleted',
+  RATE_NOT_FOUND: 'rate.not_found',
+  RATE_DUPLICATE: 'rate.duplicate',
+  RATE_INVALID_DURATION: 'rate.invalid_duration',
+  RATE_INVALID_PRICE: 'rate.invalid_price',
+  // Categories
+  CATEGORIES_LIST_FETCHED: 'categories.list.fetched',
+  // Professionals
+  PROFESSIONALS_LIST_FETCHED: 'professionals.list.fetched',
+  PROFESSIONAL_FETCHED: 'professional.fetched',
+  PROFESSIONAL_RATES_FETCHED: 'professional.rates.fetched',
+  PROFESSIONAL_REVIEWS_FETCHED: 'professional.reviews.fetched',
+  PROFESSIONAL_AVAILABILITY_FETCHED: 'professional.availability.fetched',
+  HOME_FETCHED: 'home.fetched',
+  PROFESSIONAL_NOT_FOUND: 'professional.not_found',
+  // Banks
+  BANKS_LIST_FETCHED: 'banks.list.fetched',
+  BANK_ACCOUNT_RESOLVED: 'banks.resolve.success',
+  BANK_ACCOUNT_UNRESOLVABLE: 'banks.resolve.unresolvable',
+  BANKS_UPSTREAM_ERROR: 'banks.resolve.upstream_error',
+  BANK_NOT_FOUND: 'banks.bank_not_found',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];
