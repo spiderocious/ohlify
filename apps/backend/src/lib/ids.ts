@@ -19,7 +19,11 @@ type Prefix =
   | 'we' // wallet entry
   | 'pay' // payment
   | 'tk' // ticket
-  | 'ban'; // banner
+  | 'ban' // banner
+  | 'acct' // account (wallet account)
+  | 'je' // journal entry
+  | 'out' // outbox event
+  | 'pwh'; // paystack webhook envelope
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;
 

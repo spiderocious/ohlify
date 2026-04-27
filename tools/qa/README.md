@@ -13,6 +13,11 @@ Helpers used by the [.claude/agents/qa-runner.md](../../.claude/agents/qa-runner
 | [`register-user.mjs`](register-user.mjs) | End-to-end registration. `node tools/qa/register-user.mjs <email> <phone> [pw]` → emits JSON with `{user_id, email, access_token, refresh_token}`. |
 | [`regression-smoke.sh`](regression-smoke.sh) | One happy-path call per endpoint group. `bash tools/qa/regression-smoke.sh [features...]`. Exits non-zero on any failure. |
 | [`sim-search.mjs`](sim-search.mjs) | Boundary search for `nameSimilarityPercent`. Finds inputs that score exactly N-1 / N / N+1 against a target. |
+| [`set-fullname.mjs`](set-fullname.mjs) | Direct UPDATE on `users.full_name` for boundary tests. CLI: `<user_id> "<name>"`. |
+| [`soft-delete-user.mjs`](soft-delete-user.mjs) | Toggle `users.deleted_at` for F-02 sweeps. CLI: `<user_id> delete\|restore`. |
+| [`sign-paystack.mjs`](sign-paystack.mjs) | Compute HMAC-SHA512 signature for a Paystack webhook body using `PAYSTACK_WEBHOOK_SECRET`. CLI: `'<json-body>'` or stdin. Stdout = hex digest. |
+| [`post-webhook.mjs`](post-webhook.mjs) | Build, sign, and POST a synthetic Paystack webhook. CLI: `charge.success\|charge.failed <reference> <amount_kobo> [<fees>] [<data_id>]` or `--raw '<json>'`. |
+| [`reset-payments.mjs`](reset-payments.mjs) | Wipe payments + journals + wallet_entries + system balances for a user, for clean state between funding tests. **Bypasses append-only triggers via `session_replication_role` — dev DB only.** CLI: `<user_id>`. |
 
 ## Conventions
 

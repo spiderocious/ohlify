@@ -77,6 +77,39 @@ export const MESSAGE_KEYS = {
   BANK_ACCOUNT_UNRESOLVABLE: 'banks.resolve.unresolvable',
   BANKS_UPSTREAM_ERROR: 'banks.resolve.upstream_error',
   BANK_NOT_FOUND: 'banks.bank_not_found',
+  // Legal
+  LEGAL_FETCHED: 'legal.fetched',
+  LEGAL_NOT_FOUND: 'legal.not_found',
+  // Support
+  FAQS_FETCHED: 'support.faqs.fetched',
+  CONTACT_FETCHED: 'support.contact.fetched',
+  TICKET_CREATED: 'support.ticket.created',
+  // Platform config
+  CONFIG_PUBLIC_FETCHED: 'config.public.fetched',
+  // Wallet (read paths)
+  WALLET_FETCHED: 'wallet.fetched',
+  WALLET_STATS_FETCHED: 'wallet.stats.fetched',
+  WALLET_TRANSACTIONS_FETCHED: 'wallet.transactions.fetched',
+  // Wallet funding
+  WALLET_FUNDING_INITIALIZED: 'wallet.funding.initialized',
+  WALLET_FUNDING_VERIFIED: 'wallet.funding.verified',
+  WALLET_FUNDING_PENDING: 'wallet.funding.pending',
+  WALLET_FUNDING_FAILED: 'wallet.funding.failed',
+  // Payments
+  PAYMENT_FETCHED: 'payment.fetched',
+  PAYMENT_NOT_FOUND: 'payment.not_found',
+  WEBHOOK_ACCEPTED: 'webhook.accepted',
+  // Admin (stub-token gated for now)
+  ADMIN_WALLET_FETCHED: 'admin.wallet.fetched',
+  ADMIN_ACCOUNTS_LIST_FETCHED: 'admin.accounts.list.fetched',
+  ADMIN_ACCOUNT_FETCHED: 'admin.account.fetched',
+  ADMIN_JOURNALS_LIST_FETCHED: 'admin.journals.list.fetched',
+  ADMIN_JOURNAL_FETCHED: 'admin.journal.fetched',
+  ADMIN_RECONCILIATION_OK: 'admin.reconciliation.ok',
+  ADMIN_RECONCILIATION_DRIFT: 'admin.reconciliation.drift',
+  ADMIN_PAYSTACK_WEBHOOKS_LIST_FETCHED: 'admin.paystack_webhooks.list.fetched',
+  ADMIN_PAYSTACK_FEES_FETCHED: 'admin.paystack_fees.fetched',
+  ADMIN_PLATFORM_REVENUE_FETCHED: 'admin.platform_revenue.fetched',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];

@@ -21,6 +21,12 @@ const EnvSchema = z.object({
   RESEND_API_KEY: z.string().min(1),
   RESEND_FROM_EMAIL: z.string(),
 
+  // STUB: admin endpoints in this slice are gated by a single shared bearer-
+  // style token. Replace with proper admin TOTP auth in §21 admin slice.
+  // Production deployment must set this to a long random secret.
+  // Tracked as a §21 follow-up — see middlewares/requireAdmin.middleware.ts.
+  ADMIN_STUB_TOKEN: z.string().min(32),
+
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 
