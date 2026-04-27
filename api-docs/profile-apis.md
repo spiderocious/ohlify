@@ -268,7 +268,7 @@ or `{ "data": null }` if unset.
 
 ## 11. `PUT /me/bank-account`
 
-Create or replace the user's bank account.
+Create or replace the user's bank account. **Calls Paystack `/bank/resolve`** synchronously, then verifies the resolved name against the user's `full_name` using a Jaro-Winkler similarity score.
 
 **Auth:** required.
 
@@ -279,19 +279,55 @@ Create or replace the user's bank account.
 - `account_number`: 8–12 digits.
 - `bank_code` must exist in the `banks` table and be active.
 
-**Response — 200** — same shape as §10.
+**Server-side flow**
+1. Look up `bank_code` in `banks` (must be `is_active = TRUE`). 422 `bank_not_found` otherwise.
+2. Reject if `users.full_name` is empty — we have nothing to compare the resolved name against. 422 `kyc_incomplete`.
+3. Resolve the account via the **shared cached resolver** (`resolveBankAccountCached`). 60s positive + negative cache, keyed by `bank-resolve:{bank_code}:{account_number}`. The same cache is used by `GET /banks/resolve`, so a typical mobile flow (resolve-on-type → PUT-on-submit within 60s) only hits Paystack once.
+4. On Paystack failure or timeout (cache miss only) → 502 (transient; the user retries).
+5. On Paystack 422 / "no match" → 422 `unresolvable_account` (terminal; the user fixes their input). Cached for 60s as a negative result.
+6. Compare the resolved `account_name` to `users.full_name` using `nameSimilarityPercent`. The score is the **best** of three strategies: length-ratio-capped full-string Jaro-Winkler, sorted-token Jaro-Winkler (≥2 tokens both sides), and coverage-weighted best-pairwise-token average (≥2 tokens both sides). Single-token user names are scored only by the length-ratio-capped direct strategy, which prevents trivial single-word bypasses.
+7. If similarity < `bank_account.min_name_match_percent` (default **45**) → 422 `account_name_mismatch` with `field_errors.account_name`.
+8. Otherwise upsert the row using the **resolved** name (NOT what the user typed). Returns 200 with the canonical bank-account view.
 
-**Errors:**
-| Status | code | When |
+**Response — 200** — same shape as §10. The `account_name` is the Paystack-resolved name.
+
+**Errors**
+| Status | code | When | Includes `field_errors`? |
+|---|---|---|---|
+| 400 | `validation_error` | bad shape | yes |
+| 401 | `token_invalid` | user not found / soft-deleted | no |
+| 422 | `bank_not_found` | `bank_code` unknown or inactive | no |
+| 422 | `kyc_incomplete` | user has no `full_name` set yet | no |
+| 422 | `unresolvable_account` | Paystack returned no match for `(account_number, bank_code)` | no |
+| 422 | `account_name_mismatch` | Resolved name's similarity to `users.full_name` is below threshold | yes — `field_errors.account_name` carries the matched percent and the threshold |
+| 502 | `upstream_unavailable` | Paystack upstream failure (transport / 5xx). Response includes `Retry-After: 5`. Retry. | no |
+
+**Field-error message example (422 account_name_mismatch)**
+```json
+{
+  "error": {
+    "code": "account_name_mismatch",
+    "message": "Request failed",
+    "field_errors": {
+      "account_name": [
+        "Resolved bank account name does not match your profile name closely enough (matched 32%, need ≥45%)."
+      ]
+    }
+  }
+}
+```
+
+**Side-effects**
+- Upserts a row in `bank_accounts` keyed by `user_id`. The stored `account_name` is the **Paystack-resolved** name.
+- The standalone `GET /banks/resolve` endpoint shares the same Paystack client + Redis cache (`bank-resolve:{bank_code}:{account_number}`, 60s positive TTL) — calling resolve immediately before this PUT will likely hit cache and avoid a second upstream round-trip.
+
+**Configuration**
+
+| Key | Default | Effect |
 |---|---|---|
-| 400 | `validation_error` | bad shape |
-| 401 | `token_invalid` | user not found |
-| 422 | `bank_not_found` | `bank_code` unknown or inactive |
-| 422 | `kyc_incomplete` | user has no `full_name` set yet (cannot derive `account_name`) |
+| `bank_account.min_name_match_percent` | `45` | Lower → more lenient (more `account_name_mismatch` users get through). Higher → stricter. |
 
-**MVP note:** Paystack name resolve is deferred. `account_name` is currently set to the user's `full_name`. Real implementation will call Paystack `/bank/resolve` and 422 with `account_name_mismatch` on inequality.
-
-**Side-effects:** upserts a row in `bank_accounts` keyed by `user_id`.
+Tunable via [platform-config.service.ts](apps/backend/src/lib/config/platform-config.service.ts).
 
 ---
 
@@ -301,7 +337,9 @@ Create or replace the user's bank account.
 
 **Response — 204**.
 
-**Side-effects:** deletes the user's row from `bank_accounts` (no-op if absent).
+**Side-effects:**
+- Deletes the user's row from `bank_accounts` (no-op if absent).
+- Re-evaluates KYC status: if the user was `approved`, they are demoted back to `pending_review` (bank_account is a required item for pros). See onboarding-apis §1 "Status demotion."
 
 ---
 

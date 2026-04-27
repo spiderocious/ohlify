@@ -31,8 +31,10 @@ export const ERROR_CODES = {
   NOT_FOUND: 'not_found',
   FORBIDDEN: 'forbidden',
   VALIDATION_ERROR: 'validation_error',
+  VALUE_OUT_OF_RANGE: 'value_out_of_range',
   RATE_LIMITED: 'rate_limited',
   INTERNAL: 'internal',
+  UPSTREAM_UNAVAILABLE: 'upstream_unavailable',
   CONFLICT: 'conflict',
   IDEMPOTENCY_MISMATCH: 'idempotency_mismatch',
   // Onboarding / role

@@ -1,11 +1,20 @@
 import crypto from 'node:crypto';
 
 import type { UserRow } from '@features/auth/auth.types.js';
+import * as onboardingService from '@features/onboarding/onboarding.service.js';
+import { invalidateProfessionalCaches } from '@features/professionals/professionals.cache.js';
+import { platformConfig } from '@lib/config/platform-config.service.js';
 import { newRawId } from '@lib/ids.js';
 import { logger } from '@lib/logger.js';
 import { notificationService } from '@lib/notifications/notification.service.js';
+import {
+  PaystackUnresolvableError,
+  PaystackUpstreamError,
+  resolveBankAccountCached,
+} from '@lib/paystack/resolve-cached.js';
 import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
+import { nameSimilarityPercent } from '@lib/util/string-similarity.js';
 
 import { PROFILE_MESSAGES } from './profile.messages.js';
 import * as repo from './profile.repo.js';
@@ -144,6 +153,10 @@ export const patchMe = async (dto: PatchMeDto, userId: string) => {
 
   const updates = buildPatchMeUpdates(dto);
   const updated = (await repo.updateUserFields(userId, updates)) ?? user;
+  // Bust per-pro caches when fields surfaced by /professionals change.
+  if (user.role === 'professional') {
+    await invalidateProfessionalCaches(userId);
+  }
   const view = await toMeView(updated);
   return new ServiceSuccess(view, PROFILE_MESSAGES.PROFILE_UPDATED);
 };
@@ -360,13 +373,47 @@ export const putBankAccount = async (dto: PutBankAccountDto, userId: string) => 
     return new ServiceError('bank_not_found', PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED, 422);
   }
 
-  // Paystack name resolve is deferred until the wallet feature lands. MVP stores
-  // the user's full_name as account_name; full implementation must call
-  // Paystack /bank/resolve and surface 422 `account_name_mismatch` on inequality.
-  const accountName = user.full_name ?? '';
-
-  if (accountName.trim().length === 0) {
+  if (!user.full_name || user.full_name.trim().length === 0) {
     return new ServiceError('kyc_incomplete', PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED, 422);
+  }
+
+  // Resolve account name via Paystack. Reuses the same Redis-cached resolve
+  // helper as GET /banks/resolve so a typical mobile flow (resolve-on-type →
+  // PUT-on-submit within 60s) only hits Paystack once. Surfaces upstream
+  // failures as 502 so the user retries instead of silently storing stale data.
+  let resolvedName: string;
+  try {
+    const resolved = await resolveBankAccountCached(dto.account_number, dto.bank_code);
+    resolvedName = resolved.accountName;
+  } catch (err) {
+    if (err instanceof PaystackUnresolvableError) {
+      return new ServiceError('unresolvable_account', PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED, 422);
+    }
+    if (err instanceof PaystackUpstreamError) {
+      return new ServiceError(
+        'upstream_unavailable',
+        PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED,
+        502,
+        undefined,
+        5,
+      );
+    }
+    throw err;
+  }
+
+  // Fuzzy name-match: accept anything ≥ platformConfig.bankAccount().min_name_match_percent.
+  const { min_name_match_percent } = platformConfig.bankAccount();
+  const matchPercent = nameSimilarityPercent(user.full_name, resolvedName);
+  if (matchPercent < min_name_match_percent) {
+    logger.info(
+      { userId, matchPercent, threshold: min_name_match_percent },
+      'bank account name mismatch',
+    );
+    return new ServiceError('account_name_mismatch', PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED, 422, {
+      account_name: [
+        `Resolved bank account name does not match your profile name closely enough (matched ${matchPercent}%, need ≥${min_name_match_percent}%).`,
+      ],
+    });
   }
 
   const row = await repo.upsertBankAccount({
@@ -374,16 +421,32 @@ export const putBankAccount = async (dto: PutBankAccountDto, userId: string) => 
     accountNumber: dto.account_number,
     bankCode: dto.bank_code,
     bankName: bank.name,
-    accountName,
+    accountName: resolvedName,
   });
 
-  logger.info({ userId, bankCode: dto.bank_code }, 'bank account upserted (paystack resolve TODO)');
+  logger.info({ userId, bankCode: dto.bank_code, matchPercent }, 'bank account upserted');
+
+  // Bust per-pro caches: bank_account presence is a KYC item, and adding it may
+  // unblock a future kyc_status approval; even if the status doesn't flip yet,
+  // /home and /professionals/:id should reflect the freshest state.
+  if (user.role === 'professional') {
+    await invalidateProfessionalCaches(userId);
+  }
 
   return new ServiceSuccess(toBankView(row), PROFILE_MESSAGES.BANK_ACCOUNT_UPDATED);
 };
 
 export const deleteBankAccount = async (userId: string) => {
   await repo.deleteBankAccount(userId);
+  // Re-evaluate KYC: bank_account is a required item for pros. If they were
+  // already approved, this demotes them back to pending_review (which itself
+  // busts the per-pro caches via invalidateProfessionalCaches inside the
+  // demotion path).
+  await onboardingService.revaluateKycStatus(userId);
+  // Always bust on delete: even when the user wasn't approved, /home and
+  // /professionals/:id may have surfaced base_price/etc that referenced the
+  // bank state. Cheap and avoids stale views.
+  await invalidateProfessionalCaches(userId);
   return new ServiceSuccess(null, PROFILE_MESSAGES.BANK_ACCOUNT_REMOVED);
 };
 
@@ -395,10 +458,17 @@ export const setAvatar = async (dto: PostAvatarDto, userId: string) => {
     return new ServiceError('token_invalid', PROFILE_MESSAGES.AVATAR_UPDATED, 401);
   }
   await repo.updateUserFields(userId, { avatar_url: dto.file_key });
+  if (user.role === 'professional') {
+    await invalidateProfessionalCaches(userId);
+  }
   return new ServiceSuccess({ avatar_url: dto.file_key }, PROFILE_MESSAGES.AVATAR_UPDATED);
 };
 
 export const removeAvatar = async (userId: string) => {
+  const user = await repo.findUserById(userId);
   await repo.updateUserFields(userId, { avatar_url: null });
+  if (user?.role === 'professional') {
+    await invalidateProfessionalCaches(userId);
+  }
   return new ServiceSuccess(null, PROFILE_MESSAGES.AVATAR_REMOVED);
 };

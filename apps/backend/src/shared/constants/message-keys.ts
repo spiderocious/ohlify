@@ -53,8 +53,30 @@ export const MESSAGE_KEYS = {
   // Feedback
   FEEDBACK_SUBMITTED: 'feedback.submitted',
   // Rates
+  RATES_LIST_FETCHED: 'rates.list.fetched',
   RATE_CREATED: 'rate.created',
+  RATE_UPDATED: 'rate.updated',
   RATE_DELETED: 'rate.deleted',
+  RATE_NOT_FOUND: 'rate.not_found',
+  RATE_DUPLICATE: 'rate.duplicate',
+  RATE_INVALID_DURATION: 'rate.invalid_duration',
+  RATE_INVALID_PRICE: 'rate.invalid_price',
+  // Categories
+  CATEGORIES_LIST_FETCHED: 'categories.list.fetched',
+  // Professionals
+  PROFESSIONALS_LIST_FETCHED: 'professionals.list.fetched',
+  PROFESSIONAL_FETCHED: 'professional.fetched',
+  PROFESSIONAL_RATES_FETCHED: 'professional.rates.fetched',
+  PROFESSIONAL_REVIEWS_FETCHED: 'professional.reviews.fetched',
+  PROFESSIONAL_AVAILABILITY_FETCHED: 'professional.availability.fetched',
+  HOME_FETCHED: 'home.fetched',
+  PROFESSIONAL_NOT_FOUND: 'professional.not_found',
+  // Banks
+  BANKS_LIST_FETCHED: 'banks.list.fetched',
+  BANK_ACCOUNT_RESOLVED: 'banks.resolve.success',
+  BANK_ACCOUNT_UNRESOLVABLE: 'banks.resolve.unresolvable',
+  BANKS_UPSTREAM_ERROR: 'banks.resolve.upstream_error',
+  BANK_NOT_FOUND: 'banks.bank_not_found',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];

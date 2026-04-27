@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import type { UserRow } from '@features/auth/auth.types.js';
+import { invalidateProfessionalCaches } from '@features/professionals/professionals.cache.js';
 import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { HANDLE_REGEX, RESERVED_HANDLES } from '@shared/constants/reserved-handles.js';
@@ -67,15 +68,16 @@ const buildProgress = (completed: readonly string[], total: number): KycProgress
 });
 
 const stepFor = (user: UserRow, completed: readonly string[], total: number): OnboardingStep => {
-  if (user.kyc_status === 'approved') return 'complete';
-  if (!user.full_name && completed.length === 0) {
-    // Heuristic: if role is set but no fields touched, still in role's KYC step.
-  }
+  // Derive step from items, NOT just from kyc_status. The status can be
+  // `approved` while items are incomplete in narrow windows (e.g. a delete
+  // request between revaluateKycStatus running and a later GET). Trust items.
+  const allItemsComplete = completed.length === total;
+  if (user.kyc_status === 'approved' && allItemsComplete) return 'complete';
   if (user.role === 'professional') {
-    return completed.length === total ? 'complete' : 'professional_kyc';
+    return allItemsComplete ? 'complete' : 'professional_kyc';
   }
   // role = client (default until role explicitly chosen)
-  return completed.length === total ? 'complete' : 'client_kyc';
+  return allItemsComplete ? 'complete' : 'client_kyc';
 };
 
 const loadProAggregates = async (userId: string): Promise<ProAggregates> => {
@@ -245,6 +247,10 @@ export const patchProfessionalKyc = async (dto: ProfessionalKycPatchDto, userId:
     });
   }
 
+  // Any of these fields (full_name, handle, occupation, description, interests)
+  // is surfaced by /professionals/:id, so bust the per-pro caches.
+  await invalidateProfessionalCaches(userId);
+
   const agg = await loadProAggregates(userId);
   const done = computeProfessionalCompleted(updated, agg);
   const progress = buildProgress(done, PROFESSIONAL_KYC_ITEMS.length);
@@ -387,6 +393,9 @@ export const changeHandle = async (dto: ChangeHandleDto, userId: string) => {
     await repo.insertHandleRedirect(oldHandle, userId, expiresAt);
   }
 
+  // share_slug derives from handle in /professionals/:id; bust the cache.
+  await invalidateProfessionalCaches(userId);
+
   return new ServiceSuccess(
     {
       handle: dto.handle,
@@ -410,6 +419,25 @@ const isClientKycComplete = (user: UserRow): boolean => {
   return done.length === CLIENT_KYC_ITEMS.length;
 };
 
+// Re-evaluate a user's KYC status after a required item has potentially
+// disappeared (e.g. last rate deleted, bank account deleted). If the user is
+// currently `approved` but no longer has all required items, demote to
+// `pending_review`. No-op when the user is already incomplete or remains
+// complete. Safe to call from any feature service after a delete-style mutation.
+export const revaluateKycStatus = async (userId: string): Promise<void> => {
+  const user = await repo.findUserById(userId);
+  if (!user || user.kyc_status !== 'approved') return;
+
+  const stillComplete =
+    user.role === 'professional' ? await isProKycComplete(user) : isClientKycComplete(user);
+  if (stillComplete) return;
+
+  await repo.setKycStatus(userId, 'pending_review', false, false);
+  // Bust per-pro caches so a de-approved pro disappears from detail/rates/home
+  // immediately rather than after the cache TTL.
+  await invalidateProfessionalCaches(userId);
+};
+
 export const completeKyc = async (userId: string) => {
   const user = await repo.findUserById(userId);
   if (!user) {
@@ -425,6 +453,11 @@ export const completeKyc = async (userId: string) => {
 
   const finalStatus: KycStatus = KYC_AUTO_APPROVE ? 'approved' : 'pending_review';
   await repo.setKycStatus(userId, finalStatus, true, finalStatus === 'approved');
+  // Approval flips visibility; bust caches so the new pro shows up in
+  // /home and /professionals/:id immediately.
+  if (finalStatus === 'approved') {
+    await invalidateProfessionalCaches(userId);
+  }
 
   return new ServiceSuccess(
     { kyc_status: finalStatus, next_step: 'complete' as const },

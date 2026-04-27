@@ -4,9 +4,13 @@ import express from 'express';
 import helmet from 'helmet';
 
 import { register as registerAuth } from '@features/auth/index.js';
+import { register as registerBanks } from '@features/banks/index.js';
+import { register as registerCategories } from '@features/categories/index.js';
 import { register as registerHealth } from '@features/health/index.js';
 import { register as registerOnboarding } from '@features/onboarding/index.js';
+import { register as registerProfessionals } from '@features/professionals/index.js';
 import { register as registerProfile } from '@features/profile/index.js';
+import { register as registerRates } from '@features/rates/index.js';
 import { errorHandler } from '@middlewares/errorHandler.middleware.js';
 import { globalRateLimit } from '@middlewares/rateLimit.middleware.js';
 import { requestIdMiddleware } from '@middlewares/requestId.middleware.js';
@@ -14,7 +18,16 @@ import { requestLogMiddleware } from '@middlewares/requestLog.middleware.js';
 
 import { env } from './env.js';
 
-const features = [registerHealth, registerAuth, registerOnboarding, registerProfile];
+const features = [
+  registerHealth,
+  registerAuth,
+  registerOnboarding,
+  registerProfile,
+  registerBanks,
+  registerRates,
+  registerCategories,
+  registerProfessionals,
+];
 
 export const buildApp = (): express.Express => {
   const app = express();

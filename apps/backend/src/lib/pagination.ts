@@ -26,12 +26,31 @@ export const MAX_LIMIT_ADMIN = 100;
 export const encodeCursor = (payload: CursorPayload): string =>
   Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 
+// Decodes a cursor and validates the shape. Throws `Error('Invalid cursor')` on
+// any failure (bad base64, malformed JSON, missing/wrong-type fields, empty
+// strings). Callers translate into 400 validation_error.
 export const decodeCursor = (cursor: string): CursorPayload => {
+  let parsed: unknown;
   try {
-    return JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as CursorPayload;
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
   } catch {
     throw new Error('Invalid cursor');
   }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('Invalid cursor');
+  }
+  const obj = parsed as Record<string, unknown>;
+  const lastId = obj['last_id'];
+  const lastSortKey = obj['last_sort_key'];
+  if (
+    typeof lastId !== 'string' ||
+    lastId.length === 0 ||
+    typeof lastSortKey !== 'string' ||
+    lastSortKey.length === 0
+  ) {
+    throw new Error('Invalid cursor');
+  }
+  return { last_id: lastId, last_sort_key: lastSortKey };
 };
 
 export const resolveLimit = (limit?: number, max = MAX_LIMIT): number =>

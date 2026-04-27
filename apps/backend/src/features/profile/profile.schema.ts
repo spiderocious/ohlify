@@ -66,14 +66,18 @@ export const DeleteAccountSchema = z.object({
   confirm: z.literal(true),
 });
 
-export const PutBankAccountSchema = z.object({
-  account_number: z.string().regex(/^\d{8,12}$/, 'account_number must be 8-12 digits'),
-  bank_code: z.string().min(2).max(10),
-});
+export const PutBankAccountSchema = z
+  .object({
+    account_number: z.string().regex(/^\d{8,12}$/, 'account_number must be 8-12 digits'),
+    bank_code: z.string().min(2).max(10),
+  })
+  .strict();
 
-export const PostAvatarSchema = z.object({
-  file_key: avatarFileKey,
-});
+export const PostAvatarSchema = z
+  .object({
+    file_key: avatarFileKey,
+  })
+  .strict();
 
 export type PatchMeDto = z.infer<typeof PatchMeSchema>;
 export type ChangeEmailDto = z.infer<typeof ChangeEmailSchema>;
