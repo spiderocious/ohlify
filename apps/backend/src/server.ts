@@ -9,15 +9,18 @@ import { redis } from '@lib/redis/client.js';
 import { buildApp } from './app.js';
 import { env } from './env.js';
 import { startOutboxWorker } from './workers/outbox.worker.js';
+import { startReconciliationWorker } from './workers/reconciliation.worker.js';
 
 const emailWorker = createEmailWorker(env.REDIS_URL);
 const outboxWorker = startOutboxWorker();
+const reconciliationWorker = startReconciliationWorker();
 
 const shutdown = async (signal: string): Promise<void> => {
   logger.info({ signal }, 'shutting down gracefully');
   await Promise.allSettled([
     new Promise<void>((resolve) => server.close(() => resolve())),
     outboxWorker.stop(),
+    reconciliationWorker.stop(),
     pool.end(),
     redis.quit(),
     emailWorker.close(),

@@ -73,7 +73,12 @@
 //
 //    Journal: withdrawal_completed   idempotency_key: wd:<id>:completed
 //      paystack_payouts:          -amount_kobo
-//      paystack_clearing:         -amount_kobo
+//      paystack_clearing:         +amount_kobo
+//
+//    paystack_clearing is a contra-asset (negative on funding inflows). An
+//    outflow walks it back toward zero, which is positive in our signed
+//    convention. Net across requested+completed: user_wallet -amount,
+//    paystack_clearing +amount, paystack_payouts net 0.
 //
 // 8. Withdrawal reversed (Paystack reports transfer failed)
 //

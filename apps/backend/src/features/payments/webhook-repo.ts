@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 
+import { pool } from '@lib/db/pool.js';
 import { id } from '@lib/ids.js';
 
 interface QueryRunner {
@@ -45,5 +46,39 @@ export const markProcessed = async (
             processing_error = $2
       WHERE id = $1`,
     [webhookId, error],
+  );
+};
+
+export interface WebhookEnvelopeRow {
+  id: string;
+  event_id: string;
+  event_type: string;
+  signature: string | null;
+  raw_body: unknown;
+  received_at: Date;
+  processed_at: Date | null;
+  processing_error: string | null;
+  replay_count: number;
+}
+
+export const findById = async (webhookId: string): Promise<WebhookEnvelopeRow | null> => {
+  const res = await pool.query<WebhookEnvelopeRow>(
+    `SELECT * FROM paystack_webhooks WHERE id = $1 LIMIT 1`,
+    [webhookId],
+  );
+  return res.rows[0] ?? null;
+};
+
+// Bumps replay_count and clears processed_at so a replay treats the row as
+// fresh. The processWebhook path uses the event_id UNIQUE collision to dedupe,
+// so re-processing the same envelope still posts no duplicate journals.
+export const markReplayed = async (webhookId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE paystack_webhooks
+        SET replay_count = replay_count + 1,
+            processed_at = NULL,
+            processing_error = NULL
+      WHERE id = $1`,
+    [webhookId],
   );
 };

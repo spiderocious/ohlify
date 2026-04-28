@@ -1,3 +1,4 @@
+import { koboToJson } from '@lib/money.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import {
@@ -26,7 +27,7 @@ const toAccountView = (row: repo.AccountWithBalance): AdminAccountView => ({
   system_code: row.system_code,
   currency: row.currency,
   label: row.label,
-  balance_kobo: Number(row.balance_kobo),
+  balance_kobo: koboToJson(BigInt(row.balance_kobo)),
   is_active: row.is_active,
 });
 
@@ -59,9 +60,9 @@ export const getUserWallet = async (userId: string) => {
   const view: AdminUserWalletView = {
     user_id: userId,
     account_id: account.id,
-    available_kobo: available,
-    pending_kobo: pending,
-    withdrawable_kobo: available,
+    available_kobo: koboToJson(available),
+    pending_kobo: koboToJson(pending),
+    withdrawable_kobo: koboToJson(available),
     currency: account.currency,
     recent_journals: recent.map(toJournalSummary),
   };
@@ -152,7 +153,7 @@ export const getJournal = async (journalId: string) => {
       id: l.id,
       account_id: l.account_id,
       account_label: l.account_label,
-      signed_amount_kobo: Number(l.signed_amount_kobo),
+      signed_amount_kobo: koboToJson(BigInt(l.signed_amount_kobo)),
       currency: l.currency,
     })),
   };
@@ -169,9 +170,9 @@ export const runReconciliation = async () => {
     drift: drift.map((row) => ({
       account_id: row.account_id,
       account_label: row.account_label,
-      cached_balance_kobo: Number(row.cached_balance_kobo),
-      ledger_sum_kobo: Number(row.ledger_sum_kobo),
-      drift_kobo: Number(row.drift_kobo),
+      cached_balance_kobo: koboToJson(BigInt(row.cached_balance_kobo)),
+      ledger_sum_kobo: koboToJson(BigInt(row.ledger_sum_kobo)),
+      drift_kobo: koboToJson(BigInt(row.drift_kobo)),
     })),
   };
   const messageKey = report.ok
@@ -203,7 +204,7 @@ export const getPaystackFeesSummary = async (from: Date | null, to: Date | null)
   const total = await repo.sumAccountInWindow(acct.id, from, to);
   const view: AdminAccountSummaryView = {
     account_id: acct.id,
-    total_kobo: Number(total),
+    total_kobo: koboToJson(BigInt(total)),
     currency: acct.currency,
     from: from ? from.toISOString() : null,
     to: to ? to.toISOString() : null,
@@ -218,7 +219,7 @@ export const getPlatformRevenueSummary = async (from: Date | null, to: Date | nu
   const total = await repo.sumAccountInWindow(acct.id, from, to);
   const view: AdminAccountSummaryView = {
     account_id: acct.id,
-    total_kobo: Number(total),
+    total_kobo: koboToJson(BigInt(total)),
     currency: acct.currency,
     from: from ? from.toISOString() : null,
     to: to ? to.toISOString() : null,

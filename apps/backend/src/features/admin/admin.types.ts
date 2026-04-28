@@ -1,3 +1,5 @@
+import type { JsonKobo } from '@features/wallet/wallet.types.js';
+
 export interface AdminAccountView {
   id: string;
   kind: 'user' | 'system' | 'liability';
@@ -5,16 +7,16 @@ export interface AdminAccountView {
   system_code: string | null;
   currency: string;
   label: string;
-  balance_kobo: number;
+  balance_kobo: JsonKobo;
   is_active: boolean;
 }
 
 export interface AdminUserWalletView {
   user_id: string;
   account_id: string;
-  available_kobo: number;
-  pending_kobo: number;
-  withdrawable_kobo: number;
+  available_kobo: JsonKobo;
+  pending_kobo: JsonKobo;
+  withdrawable_kobo: JsonKobo;
   currency: string;
   recent_journals: AdminJournalSummary[];
 }
@@ -40,16 +42,16 @@ export interface AdminJournalLine {
   id: string;
   account_id: string;
   account_label: string;
-  signed_amount_kobo: number;
+  signed_amount_kobo: JsonKobo;
   currency: string;
 }
 
 export interface AdminReconciliationDriftRow {
   account_id: string;
   account_label: string;
-  cached_balance_kobo: number;
-  ledger_sum_kobo: number;
-  drift_kobo: number;
+  cached_balance_kobo: JsonKobo;
+  ledger_sum_kobo: JsonKobo;
+  drift_kobo: JsonKobo;
 }
 
 export interface AdminReconciliationReport {
@@ -70,7 +72,7 @@ export interface AdminPaystackWebhookSummary {
 
 export interface AdminAccountSummaryView {
   account_id: string;
-  total_kobo: number;
+  total_kobo: JsonKobo;
   currency: string;
   from: string | null;
   to: string | null;

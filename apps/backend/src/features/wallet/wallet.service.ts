@@ -1,33 +1,45 @@
 import * as authRepo from '@features/auth/auth.repo.js';
 import * as paymentsRepo from '@features/payments/payments.repo.js';
 import { PaymentPurpose, PaymentStatus } from '@features/payments/payments.types.js';
+import * as profileRepo from '@features/profile/profile.repo.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { pool } from '@lib/db/pool.js';
 import { newRawId } from '@lib/ids.js';
 import { logger } from '@lib/logger.js';
+import { koboToJson } from '@lib/money.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import {
+  createTransferRecipient,
   initializeTransaction,
+  initiateTransfer,
   PaystackUpstreamError,
   verifyTransaction,
 } from '@lib/paystack/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
+import { reservePayment } from '@lib/wallet/flows/pay.js';
+import { postWithdrawalRequestedJournal } from '@lib/wallet/flows/withdrawal.js';
 import { accountFor, readUserAvailableBalance, readUserPendingBalance } from '@lib/wallet/index.js';
 
 import { WALLET_MESSAGES } from './wallet.messages.js';
 import * as repo from './wallet.repo.js';
 import type {
   InitializeFundingDto,
+  ListWithdrawalsQueryDto,
+  PayFromWalletDto,
+  RequestWithdrawalDto,
   TransactionsQueryDto,
   VerifyFundingDto,
 } from './wallet.schema.js';
 import type {
   FundingInitView,
   FundingVerifyView,
+  InsufficientBalanceView,
+  PayResponseView,
   WalletStatsView,
   WalletSummaryView,
   WalletTransactionView,
+  WithdrawalView,
 } from './wallet.types.js';
 
 // Stable client-facing transaction `type` derived from the journal kind.
@@ -65,8 +77,7 @@ const journalKindToTxType = (kind: string): string => {
 };
 
 // Free-form description of the row for receipts / customer support.
-const describeTransaction = (kind: string, signedAmount: number): string => {
-  const credit = signedAmount > 0;
+const describeTransaction = (kind: string, credit: boolean): string => {
   switch (kind) {
     case 'wallet_funding':
       return 'Wallet funding';
@@ -110,10 +121,14 @@ export const getSummary = async (userId: string) => {
   // this user. The pending balance is a positive number; available already
   // excludes it (because the reserve journal subtracted it from the wallet).
   // So withdrawable IS the available balance. Surfaced separately for clarity.
+  // Available is the SUM of every wallet_entry hitting the user's account.
+  // Pending is the user's slice of pending_debits_pool. Withdrawable equals
+  // available because the reserve journal already subtracted pending from the
+  // wallet itself; surfaced separately for client clarity.
   const view: WalletSummaryView = {
-    balance_kobo: available,
-    pending_balance_kobo: pending,
-    withdrawable_balance_kobo: available,
+    balance_kobo: koboToJson(available),
+    pending_balance_kobo: koboToJson(pending),
+    withdrawable_balance_kobo: koboToJson(available),
     currency: 'NGN',
   };
   return new ServiceSuccess(view, WALLET_MESSAGES.FETCHED);
@@ -129,8 +144,8 @@ export const getStats = async (userId: string) => {
   // and remove this comment. Currently visible as constant 0 in every API
   // response so the gap is impossible to miss during QA.
   const view: WalletStatsView = {
-    this_week_kobo: Number(row.this_week_kobo),
-    this_month_kobo: Number(row.this_month_kobo),
+    this_week_kobo: koboToJson(BigInt(row.this_week_kobo)),
+    this_month_kobo: koboToJson(BigInt(row.this_month_kobo)),
     total_calls: 0,
   };
   return new ServiceSuccess(view, WALLET_MESSAGES.STATS_FETCHED);
@@ -156,20 +171,20 @@ export const listTransactions = async (dto: TransactionsQueryDto, userId: string
   const page = hasMore ? rows.slice(0, limit) : rows;
 
   const items: WalletTransactionView[] = page.map((row) => {
-    const signed = Number(row.signed_amount_kobo);
+    const signed = BigInt(row.signed_amount_kobo);
     return {
       id: row.entry_id,
       journal_id: row.journal_id,
       reference: row.reference,
       type: journalKindToTxType(row.journal_kind),
-      amount_kobo: signed,
+      amount_kobo: koboToJson(signed),
       currency: row.currency,
       // status mapping: in slice A every wallet_entry that exists is
       // `completed` — withdrawals (slice B) introduce `pending`/`failed`
       // states by writing distinct journal kinds.
       status: 'completed',
       occurred_at: row.occurred_at.toISOString(),
-      description: describeTransaction(row.journal_kind, signed),
+      description: describeTransaction(row.journal_kind, signed > 0n),
       related_call_id: row.related_call_id,
       related_payment_id: row.related_payment_id,
       related_withdrawal_id: row.related_withdrawal_id,
@@ -255,7 +270,7 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
   const view: FundingInitView = {
     reference,
     paystack_reference: paystackResult.reference,
-    amount_kobo: dto.amount_kobo,
+    amount_kobo: koboToJson(BigInt(dto.amount_kobo)),
     currency: 'NGN',
     authorization_url: paystackResult.authorization_url,
     access_code: paystackResult.access_code,
@@ -329,7 +344,7 @@ export const verifyFunding = async (dto: VerifyFundingDto, userId: string) => {
   if (payment.status === PaymentStatus.SUCCESS || payment.status === PaymentStatus.FAILED) {
     const view: FundingVerifyView = {
       status: payment.status === PaymentStatus.SUCCESS ? 'success' : 'failed',
-      amount_kobo: Number(payment.amount_kobo),
+      amount_kobo: koboToJson(BigInt(payment.amount_kobo)),
       currency: payment.currency,
       reference: payment.reference,
     };
@@ -356,7 +371,7 @@ export const verifyFunding = async (dto: VerifyFundingDto, userId: string) => {
   if (paystackResult.status === 'pending' || paystackResult.status === 'abandoned') {
     const view: FundingVerifyView = {
       status: 'pending',
-      amount_kobo: Number(payment.amount_kobo),
+      amount_kobo: koboToJson(BigInt(payment.amount_kobo)),
       currency: payment.currency,
       reference: payment.reference,
     };
@@ -374,7 +389,7 @@ export const verifyFunding = async (dto: VerifyFundingDto, userId: string) => {
     paystackResult.status === 'success' ? 'success' : 'failed';
   const view: FundingVerifyView = {
     status: finalStatus,
-    amount_kobo: Number(payment.amount_kobo),
+    amount_kobo: koboToJson(BigInt(payment.amount_kobo)),
     currency: payment.currency,
     reference: payment.reference,
   };
@@ -384,3 +399,358 @@ export const verifyFunding = async (dto: VerifyFundingDto, userId: string) => {
 // Wallets are materialized just-in-time by `accountFor.user(userId)` on first
 // access — no boot-time pre-create needed. New users see balance=0 from the
 // default account_balances row.
+
+// ── POST /wallet/pay ────────────────────────────────────────────────────────
+//
+// Wallet-first payment: debits the user's wallet directly into the
+// pending_debits_pool. Mobile uses this for call payments. On insufficient
+// balance, returns 409 with a `short_by_kobo` so mobile can redirect to the
+// fund flow and retry. The journal id returned IS the receipt — settlement
+// happens later (via the calls feature in §8).
+
+const SUFFICIENT_BUFFER_KOBO = 50_000n; // ₦500 buffer above shortfall for retry safety.
+
+export const payFromWallet = async (
+  dto: PayFromWalletDto,
+  userId: string,
+): Promise<ServiceSuccess<PayResponseView | InsufficientBalanceView> | ServiceError> => {
+  // Materialize the user wallet if missing (first-time payer with promo credit).
+  await accountFor.user(userId);
+
+  const result = await reservePayment({
+    userId,
+    amountKobo: BigInt(dto.amount_kobo),
+    purpose: 'call_payment',
+    externalRefId: dto.external_ref_id,
+    ...(dto.metadata !== undefined ? { metadata: dto.metadata } : {}),
+  });
+
+  if (result.status === 'insufficient_balance') {
+    const view: InsufficientBalanceView = {
+      status: 'insufficient_balance',
+      short_by_kobo: koboToJson(result.shortByKobo),
+      current_balance_kobo: koboToJson(result.currentBalanceKobo),
+      suggested_funding_amount_kobo: koboToJson(result.shortByKobo + SUFFICIENT_BUFFER_KOBO),
+      currency: 'NGN',
+    };
+    return new ServiceSuccess(view, WALLET_MESSAGES.PAY_INSUFFICIENT);
+  }
+
+  const view: PayResponseView = {
+    status: 'paid',
+    journal_id: result.journalId,
+    amount_kobo: koboToJson(BigInt(dto.amount_kobo)),
+    currency: 'NGN',
+    purpose: dto.purpose,
+    metadata: dto.metadata ?? {},
+    paid_at: new Date().toISOString(),
+  };
+  return new ServiceSuccess(view, WALLET_MESSAGES.PAY_OK);
+};
+
+// ── POST /wallet/withdraw ───────────────────────────────────────────────────
+//
+// Initiate a withdrawal. Validates the user has a saved bank account, has
+// enough wallet balance, and isn't over the daily/cooldown caps. Creates a
+// withdrawal row + posts the `withdrawal_requested` journal in one tx, then
+// kicks off the Paystack transfer. The webhook drives terminal state.
+
+const maskAccountNumber = (accountNumber: string): string => {
+  if (accountNumber.length <= 4) return accountNumber;
+  return `${'*'.repeat(accountNumber.length - 4)}${accountNumber.slice(-4)}`;
+};
+
+const withdrawalRowToView = (row: {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'reversed';
+  amount_kobo: string;
+  currency: string;
+  bank_snapshot: { bank_name: string; account_number: string };
+  failure_reason: string | null;
+  requested_at: Date;
+  processed_at: Date | null;
+}): WithdrawalView => ({
+  id: row.id,
+  status: row.status,
+  amount_kobo: koboToJson(BigInt(row.amount_kobo)),
+  currency: row.currency,
+  bank_name: row.bank_snapshot.bank_name,
+  account_number_masked: maskAccountNumber(row.bank_snapshot.account_number),
+  failure_reason: row.failure_reason,
+  requested_at: row.requested_at.toISOString(),
+  processed_at: row.processed_at ? row.processed_at.toISOString() : null,
+});
+
+interface RequestWithdrawalContext {
+  dto: RequestWithdrawalDto;
+  userId: string;
+  idempotencyKey: string | null;
+}
+
+interface WalletConfigSnapshot {
+  min_withdrawal_kobo: number;
+  max_withdrawal_per_day_kobo: number;
+  max_withdrawals_per_day: number;
+  withdrawal_cooldown_seconds: number;
+}
+
+const validateWithdrawalRequest = async (
+  userId: string,
+  amount: bigint,
+  cfg: WalletConfigSnapshot,
+): Promise<ServiceError | null> => {
+  if (amount < BigInt(cfg.min_withdrawal_kobo)) {
+    return new ServiceError('value_out_of_range', WALLET_MESSAGES.WITHDRAWAL_CONFLICT, 422, {
+      amount_kobo: [`amount_kobo must be at least ${cfg.min_withdrawal_kobo}`],
+    });
+  }
+  const last = await repo.lastWithdrawalRequestAtForUser(userId);
+  if (last) {
+    const elapsed = (Date.now() - last.getTime()) / 1000;
+    if (elapsed < cfg.withdrawal_cooldown_seconds) {
+      return new ServiceError(
+        'rate_limited',
+        WALLET_MESSAGES.WITHDRAWAL_CONFLICT,
+        429,
+        undefined,
+        Math.ceil(cfg.withdrawal_cooldown_seconds - elapsed),
+      );
+    }
+  }
+  const today = await repo.countWithdrawalsTodayForUser(userId);
+  if (today.count >= cfg.max_withdrawals_per_day) {
+    return new ServiceError('rate_limited', WALLET_MESSAGES.WITHDRAWAL_CONFLICT, 429);
+  }
+  if (today.sumKobo + amount > BigInt(cfg.max_withdrawal_per_day_kobo)) {
+    return new ServiceError('value_out_of_range', WALLET_MESSAGES.WITHDRAWAL_CONFLICT, 422, {
+      amount_kobo: ['Daily withdrawal cap exceeded'],
+    });
+  }
+  const balance = await readUserAvailableBalance(userId);
+  if (balance < amount) {
+    return new ServiceError('insufficient_balance', WALLET_MESSAGES.WITHDRAWAL_CONFLICT, 409);
+  }
+  return null;
+};
+
+interface BankAccountInfo {
+  account_number: string;
+  bank_code: string;
+  bank_name: string;
+  account_name: string;
+  paystack_recipient_code: string | null;
+}
+
+const ensureRecipientCode = async (
+  userId: string,
+  bank: BankAccountInfo,
+): Promise<{ recipientCode: string } | ServiceError> => {
+  if (bank.paystack_recipient_code) {
+    return { recipientCode: bank.paystack_recipient_code };
+  }
+  try {
+    const created = await createTransferRecipient({
+      name: bank.account_name,
+      accountNumber: bank.account_number,
+      bankCode: bank.bank_code,
+    });
+    await repo.setWithdrawalRecipient(userId, created.recipient_code);
+    return { recipientCode: created.recipient_code };
+  } catch (err) {
+    if (err instanceof PaystackUpstreamError) {
+      return new ServiceError(
+        'upstream_unavailable',
+        WALLET_MESSAGES.WITHDRAWAL_CONFLICT,
+        502,
+        undefined,
+        5,
+      );
+    }
+    throw err;
+  }
+};
+
+const createWithdrawalRowAndJournal = async (input: {
+  userId: string;
+  amount: bigint;
+  recipientCode: string;
+  bankSnapshot: repo.BankSnapshot;
+  idempotencyKey: string | null;
+}): Promise<repo.WithdrawalRow> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const withdrawalRow = await repo.createWithdrawal(client, {
+      userId: input.userId,
+      amountKobo: input.amount,
+      recipientCode: input.recipientCode,
+      bankSnapshot: input.bankSnapshot,
+      idempotencyKey: input.idempotencyKey,
+    });
+    await postWithdrawalRequestedJournal(client, {
+      withdrawalId: withdrawalRow.id,
+      userId: input.userId,
+      amountKobo: input.amount,
+    });
+    await client.query('COMMIT');
+    return withdrawalRow;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, userId: input.userId }, 'requestWithdrawal tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+const setProcessing = async (
+  withdrawalId: string,
+  transferCode: string,
+  paystackId: number | null,
+): Promise<void> => {
+  const innerClient = await pool.connect();
+  try {
+    await innerClient.query('BEGIN');
+    await repo.setWithdrawalProcessing(
+      innerClient,
+      withdrawalId,
+      transferCode,
+      paystackId !== null ? String(paystackId) : null,
+    );
+    await innerClient.query('COMMIT');
+  } catch (err) {
+    await innerClient.query('ROLLBACK').catch(() => {});
+    logger.error({ err, withdrawalId }, 'set withdrawal processing failed');
+  } finally {
+    innerClient.release();
+  }
+};
+
+const fireTransferAndUpdate = async (
+  withdrawalRow: repo.WithdrawalRow,
+  recipientCode: string,
+  amount: bigint,
+): Promise<repo.WithdrawalRow> => {
+  try {
+    const transfer = await initiateTransfer({
+      recipientCode,
+      amountKobo: Number(amount),
+      reference: `wd_${withdrawalRow.id}`,
+      reason: 'Ohlify withdrawal',
+    });
+    await setProcessing(withdrawalRow.id, transfer.transfer_code, transfer.paystack_id);
+    const refreshed = await repo.findWithdrawalById(withdrawalRow.id);
+    return refreshed ?? withdrawalRow;
+  } catch (err) {
+    if (err instanceof PaystackUpstreamError) {
+      logger.warn(
+        { err, withdrawalId: withdrawalRow.id },
+        'paystack transfer initiation failed; leaving withdrawal pending',
+      );
+      return withdrawalRow;
+    }
+    throw err;
+  }
+};
+
+export const requestWithdrawal = async (
+  ctx: RequestWithdrawalContext,
+): Promise<ServiceSuccess<WithdrawalView> | ServiceError> => {
+  if (ctx.idempotencyKey) {
+    const replay = await repo.findWithdrawalByIdempotencyKey(ctx.userId, ctx.idempotencyKey);
+    if (replay) {
+      return new ServiceSuccess(withdrawalRowToView(replay), WALLET_MESSAGES.WITHDRAWAL_REQUESTED);
+    }
+  }
+
+  const cfg = platformConfig.wallet();
+  const amount = BigInt(ctx.dto.amount_kobo);
+
+  const bank = await profileRepo.findBankAccount(ctx.userId);
+  if (!bank) {
+    return new ServiceError('no_bank_account', WALLET_MESSAGES.WITHDRAWAL_NO_BANK, 409);
+  }
+
+  const validationError = await validateWithdrawalRequest(ctx.userId, amount, cfg);
+  if (validationError) return validationError;
+
+  const recipientResult = await ensureRecipientCode(ctx.userId, bank);
+  if (recipientResult instanceof ServiceError) return recipientResult;
+  const recipientCode = recipientResult.recipientCode;
+
+  const bankSnapshot: repo.BankSnapshot = {
+    account_number: bank.account_number,
+    bank_code: bank.bank_code,
+    bank_name: bank.bank_name,
+    account_name: bank.account_name,
+  };
+
+  const withdrawalRow = await createWithdrawalRowAndJournal({
+    userId: ctx.userId,
+    amount,
+    recipientCode,
+    bankSnapshot,
+    idempotencyKey: ctx.idempotencyKey,
+  });
+
+  if (cfg.payout_mode === 'manual_review') {
+    logger.info(
+      { withdrawalId: withdrawalRow.id, mode: cfg.payout_mode },
+      'withdrawal awaiting manual review',
+    );
+    return new ServiceSuccess(
+      withdrawalRowToView(withdrawalRow),
+      WALLET_MESSAGES.WITHDRAWAL_REQUESTED,
+    );
+  }
+
+  const finalRow = await fireTransferAndUpdate(withdrawalRow, recipientCode, amount);
+  return new ServiceSuccess(withdrawalRowToView(finalRow), WALLET_MESSAGES.WITHDRAWAL_REQUESTED);
+};
+
+// ── GET /wallet/withdrawals ─────────────────────────────────────────────────
+
+export const listWithdrawals = async (dto: ListWithdrawalsQueryDto, userId: string) => {
+  const limit = resolveLimit(dto.limit);
+  let cursor: { last_id: string; last_sort_key: string } | undefined;
+  if (dto.cursor !== undefined) {
+    try {
+      cursor = decodeCursor(dto.cursor);
+    } catch {
+      return new ServiceError('validation_error', WALLET_MESSAGES.WITHDRAWALS_LIST_FETCHED, 400, {
+        cursor: ['Invalid cursor'],
+      });
+    }
+  }
+  const rows = await repo.listWithdrawalsForUser({
+    userId,
+    limit,
+    ...(cursor ? { cursor } : {}),
+    ...(dto.status ? { status: dto.status } : {}),
+  });
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeCursor({ last_id: last.id, last_sort_key: last.requested_at.toISOString() })
+      : null;
+
+  return new ServiceSuccess(
+    {
+      items: page.map(withdrawalRowToView),
+      meta: { next_cursor: nextCursor, has_more: hasMore },
+    },
+    WALLET_MESSAGES.WITHDRAWALS_LIST_FETCHED,
+  );
+};
+
+// ── GET /wallet/withdrawals/:id ─────────────────────────────────────────────
+
+export const getWithdrawal = async (withdrawalId: string, userId: string) => {
+  const row = await repo.findWithdrawalById(withdrawalId);
+  if (!row || row.user_id !== userId) {
+    return new ServiceError('not_found', WALLET_MESSAGES.WITHDRAWAL_NOT_FOUND, 404);
+  }
+  return new ServiceSuccess(withdrawalRowToView(row), WALLET_MESSAGES.WITHDRAWAL_FETCHED);
+};

@@ -15,6 +15,7 @@ import { register as registerPlatformConfig } from '@features/platform-config/in
 import { register as registerProfessionals } from '@features/professionals/index.js';
 import { register as registerProfile } from '@features/profile/index.js';
 import { register as registerRates } from '@features/rates/index.js';
+import { register as registerRefunds } from '@features/refunds/index.js';
 import { register as registerSupport } from '@features/support/index.js';
 import { register as registerWallet } from '@features/wallet/index.js';
 import { errorHandler } from '@middlewares/errorHandler.middleware.js';
@@ -44,6 +45,7 @@ const features = [
   registerPlatformConfig,
   registerWallet,
   registerPayments,
+  registerRefunds,
   registerAdmin,
 ];
 

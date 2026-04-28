@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 
+import * as authRepo from '@features/auth/auth.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+import { notificationService } from '@lib/notifications/notification.service.js';
+import { OutboxEventType } from '@lib/outbox/events.js';
 
 // Polls the outbox table and "publishes" events. In Slice A there are no real
 // consumers — the worker simply marks rows published and logs them. Slice B
@@ -25,8 +28,92 @@ interface OutboxRow {
   attempt_count: number;
 }
 
-const publishOne = (row: OutboxRow): Promise<void> => {
-  // Slice A: log only. Slice B replaces this switch with real fanout.
+// Resolve a user email from a payload that may carry user_id / payer_user_id /
+// payee_user_id depending on the event. Returns null if no user context is
+// present or the user can't be found.
+const resolveRecipientEmail = async (
+  payload: Record<string, unknown>,
+  userKey: 'user_id' | 'payer_user_id' | 'payee_user_id',
+): Promise<string | null> => {
+  const userId = payload[userKey];
+  if (typeof userId !== 'string' || userId.length === 0) return null;
+  const user = await authRepo.findUserById(userId);
+  return user?.email ?? null;
+};
+
+const asString = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+// Maps an outbox event to one or more email sends. Returns silently when the
+// event has no email-worthy recipient (e.g. CALL_PAYMENT_RESERVED for an
+// unauthenticated payload).
+const dispatchToEmail = async (row: OutboxRow): Promise<void> => {
+  const payload = row.payload;
+  const amount = asString(payload['amount_kobo']) ?? '0';
+  switch (row.event_type) {
+    case OutboxEventType.CALL_PAYMENT_RESERVED: {
+      const email = await resolveRecipientEmail(payload, 'user_id');
+      if (email) {
+        await notificationService.sendWalletEvent(email, 'call_payment_reserved', {
+          amountKobo: amount,
+        });
+      }
+      return;
+    }
+    case OutboxEventType.CALL_SETTLED: {
+      const payeeEmail = await resolveRecipientEmail(payload, 'payee_user_id');
+      const netKobo = asString(payload['net_kobo']) ?? amount;
+      if (payeeEmail) {
+        await notificationService.sendWalletEvent(payeeEmail, 'call_settled', {
+          amountKobo: netKobo,
+        });
+      }
+      return;
+    }
+    case OutboxEventType.CALL_REFUNDED: {
+      const payerEmail = await resolveRecipientEmail(payload, 'payer_user_id');
+      if (payerEmail) {
+        await notificationService.sendWalletEvent(payerEmail, 'call_refunded', {
+          amountKobo: amount,
+        });
+      }
+      return;
+    }
+    case OutboxEventType.WITHDRAWAL_REQUESTED: {
+      const email = await resolveRecipientEmail(payload, 'user_id');
+      if (email) {
+        await notificationService.sendWalletEvent(email, 'withdrawal_requested', {
+          amountKobo: amount,
+        });
+      }
+      return;
+    }
+    case OutboxEventType.WITHDRAWAL_COMPLETED: {
+      const email = await resolveRecipientEmail(payload, 'user_id');
+      if (email) {
+        await notificationService.sendWalletEvent(email, 'withdrawal_completed', {
+          amountKobo: amount,
+        });
+      }
+      return;
+    }
+    case OutboxEventType.WITHDRAWAL_REVERSED: {
+      const email = await resolveRecipientEmail(payload, 'user_id');
+      if (email) {
+        await notificationService.sendWalletEvent(email, 'withdrawal_reversed', {
+          amountKobo: amount,
+        });
+      }
+      return;
+    }
+    default:
+      // No-op for non-email events. Funding success/failure already emails
+      // through the existing slice A path; left untouched.
+      return;
+  }
+};
+
+const publishOne = async (row: OutboxRow): Promise<void> => {
+  await dispatchToEmail(row);
   logger.info(
     {
       outboxId: row.id,
@@ -34,9 +121,8 @@ const publishOne = (row: OutboxRow): Promise<void> => {
       aggregateId: row.aggregate_id,
       eventType: row.event_type,
     },
-    'outbox event published (slice A — no consumers wired yet)',
+    'outbox event published',
   );
-  return Promise.resolve();
 };
 
 const tickOnce = async (): Promise<void> => {

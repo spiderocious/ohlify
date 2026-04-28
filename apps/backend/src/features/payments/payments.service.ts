@@ -1,9 +1,14 @@
 import type { PoolClient } from 'pg';
 
+import * as walletRepo from '@features/wallet/wallet.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
+import {
+  postWithdrawalCompletedJournal,
+  postWithdrawalReversedJournal,
+} from '@lib/wallet/flows/withdrawal.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
 import * as repo from './payments.repo.js';
@@ -158,6 +163,125 @@ const handleChargeFailed = async (
   await repo.markFailed(runner, payment.id, data.status ?? 'failed', rawPayload);
 };
 
+interface TransferEventData {
+  transfer_code?: string;
+  reference?: string;
+  status?: string;
+  reason?: string | null;
+  failure_reason?: string | null;
+}
+
+const findWithdrawalForTransfer = async (
+  runner: PoolClient,
+  data: TransferEventData,
+): Promise<walletRepo.WithdrawalRow | null> => {
+  // Prefer the transfer_code (stored on the withdrawal row at initiation
+  // time). Fall back to the reference, which we set to `wd_<id>`.
+  if (typeof data.transfer_code === 'string') {
+    const row = await walletRepo.findWithdrawalByTransferCode(runner, data.transfer_code);
+    if (row) return row;
+  }
+  if (typeof data.reference === 'string' && data.reference.startsWith('wd_')) {
+    const wdId = data.reference.slice(3);
+    const row = await walletRepo.findWithdrawalByIdForUpdate(runner, wdId);
+    if (row) return row;
+  }
+  return null;
+};
+
+const handleTransferSuccess = async (
+  runner: PoolClient,
+  data: TransferEventData,
+): Promise<void> => {
+  const wd = await findWithdrawalForTransfer(runner, data);
+  if (!wd) {
+    logger.warn({ transferCode: data.transfer_code }, 'transfer.success for unknown withdrawal');
+    return;
+  }
+  if (wd.status === 'completed') return;
+  if (wd.status === 'failed' || wd.status === 'reversed') {
+    logger.warn(
+      { withdrawalId: wd.id, status: wd.status },
+      'transfer.success for already-terminal withdrawal',
+    );
+    return;
+  }
+  await postWithdrawalCompletedJournal(runner, {
+    withdrawalId: wd.id,
+    userId: wd.user_id,
+    amountKobo: BigInt(wd.amount_kobo),
+  });
+  await walletRepo.setWithdrawalCompleted(runner, wd.id);
+};
+
+const handleTransferFailed = async (runner: PoolClient, data: TransferEventData): Promise<void> => {
+  const wd = await findWithdrawalForTransfer(runner, data);
+  if (!wd) {
+    logger.warn({ transferCode: data.transfer_code }, 'transfer.failed for unknown withdrawal');
+    return;
+  }
+  if (wd.status === 'failed' || wd.status === 'reversed' || wd.status === 'completed') return;
+  const reason = data.failure_reason ?? data.reason ?? 'paystack transfer failed';
+  await postWithdrawalReversedJournal(runner, {
+    withdrawalId: wd.id,
+    userId: wd.user_id,
+    amountKobo: BigInt(wd.amount_kobo),
+  });
+  await walletRepo.setWithdrawalFailed(runner, wd.id, reason);
+};
+
+const handleTransferReversed = async (
+  runner: PoolClient,
+  data: TransferEventData,
+): Promise<void> => {
+  const wd = await findWithdrawalForTransfer(runner, data);
+  if (!wd) {
+    logger.warn({ transferCode: data.transfer_code }, 'transfer.reversed for unknown withdrawal');
+    return;
+  }
+  if (wd.status === 'reversed') return;
+  // For reversed events on a withdrawal that was already completed (rare —
+  // bank rejected after success), we post the reversed journal and flip
+  // status. If still in flight, same effect.
+  const reason = data.failure_reason ?? data.reason ?? 'paystack transfer reversed';
+  await postWithdrawalReversedJournal(runner, {
+    withdrawalId: wd.id,
+    userId: wd.user_id,
+    amountKobo: BigInt(wd.amount_kobo),
+  });
+  await walletRepo.setWithdrawalReversed(runner, wd.id, reason);
+};
+
+// Dispatcher — exported so admin replay can reuse without re-inserting the
+// envelope. Caller owns the tx.
+export const dispatchPaystackEvent = async (
+  runner: PoolClient,
+  eventType: string,
+  parsed: PaystackWebhookEvent,
+): Promise<void> => {
+  const data = (parsed.data ?? {}) as ChargeSuccessData & TransferEventData;
+  switch (eventType) {
+    case 'charge.success':
+      await handleChargeSuccess(runner, data, parsed);
+      break;
+    case 'charge.failed':
+      await handleChargeFailed(runner, data, parsed);
+      break;
+    case 'transfer.success':
+      await handleTransferSuccess(runner, data);
+      break;
+    case 'transfer.failed':
+      await handleTransferFailed(runner, data);
+      break;
+    case 'transfer.reversed':
+      await handleTransferReversed(runner, data);
+      break;
+    default:
+      logger.info({ eventType }, 'paystack webhook event_type not handled');
+      break;
+  }
+};
+
 export const processWebhook = async (input: {
   signatureHeader: string;
   rawBody: Buffer;
@@ -191,21 +315,7 @@ export const processWebhook = async (input: {
 
     let processError: string | null = null;
     try {
-      const data = (parsed.data ?? {}) as ChargeSuccessData;
-      switch (eventType) {
-        case 'charge.success':
-          await handleChargeSuccess(client, data, parsed);
-          break;
-        case 'charge.failed':
-          await handleChargeFailed(client, data, parsed);
-          break;
-        default:
-          // Slice A handles only charge.success / charge.failed. Other event
-          // types (transfer.success, refund.processed, etc) are recorded in
-          // paystack_webhooks for forensics but no business processing.
-          logger.info({ eventType, eventId }, 'paystack webhook event_type not yet handled');
-          break;
-      }
+      await dispatchPaystackEvent(client, eventType, parsed);
     } catch (err) {
       processError = err instanceof Error ? err.message : String(err);
       logger.error({ err, eventId, eventType }, 'paystack webhook processing failed');
@@ -226,6 +336,34 @@ export const processWebhook = async (input: {
     await client.query('ROLLBACK').catch(() => {});
     logger.error({ err }, 'paystack webhook tx failed');
     return { accepted: false, reason: 'tx_error' };
+  } finally {
+    client.release();
+  }
+};
+
+// Re-runs business processing against a stored envelope without going through
+// the event_id dedupe path. Journal idempotency keys still protect the ledger
+// from double-posting; this is the right tool when the envelope was recorded
+// but processing crashed AFTER the journal posted (rare) or when ops needs to
+// re-trigger transfer.* handling for a stuck withdrawal.
+export const replayWebhookEnvelope = async (input: {
+  rawBody: unknown;
+}): Promise<{ accepted: boolean; reason?: string }> => {
+  const parsed = input.rawBody as PaystackWebhookEvent;
+  if (typeof parsed.event !== 'string') {
+    return { accepted: false, reason: 'missing_event_type' };
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await dispatchPaystackEvent(client, parsed.event, parsed);
+    await client.query('COMMIT');
+    return { accepted: true };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    const reason = err instanceof Error ? err.message : 'replay_error';
+    logger.error({ err }, 'paystack webhook replay failed');
+    return { accepted: false, reason };
   } finally {
     client.release();
   }

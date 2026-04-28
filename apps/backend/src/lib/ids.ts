@@ -23,7 +23,8 @@ type Prefix =
   | 'acct' // account (wallet account)
   | 'je' // journal entry
   | 'out' // outbox event
-  | 'pwh'; // paystack webhook envelope
+  | 'pwh' // paystack webhook envelope
+  | 'rfd'; // refund request
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;
 

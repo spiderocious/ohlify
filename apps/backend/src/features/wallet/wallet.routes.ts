@@ -9,6 +9,9 @@ import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js'
 import * as controller from './wallet.controller.js';
 import {
   InitializeFundingSchema,
+  ListWithdrawalsQuerySchema,
+  PayFromWalletSchema,
+  RequestWithdrawalSchema,
   TransactionsQuerySchema,
   VerifyFundingSchema,
 } from './wallet.schema.js';
@@ -41,6 +44,29 @@ export const register = (app: Express): void => {
     validate(VerifyFundingSchema),
     controller.verifyFunding,
   );
+
+  // Wallet-first pay (debits wallet → pending pool). Returns 409 +
+  // short_by_kobo on insufficient balance so mobile can redirect to fund.
+  router.post(
+    '/pay',
+    rateLimitMiddleware((req) => `wallet-pay:${req.userId ?? 'anon'}`, 30, 60),
+    validate(PayFromWalletSchema),
+    controller.pay,
+  );
+
+  // Withdrawals.
+  router.post(
+    '/withdraw',
+    rateLimitMiddleware((req) => `wallet-withdraw:${req.userId ?? 'anon'}`, 5, 600),
+    validate(RequestWithdrawalSchema),
+    controller.requestWithdrawal,
+  );
+  router.get(
+    '/withdrawals',
+    validate(ListWithdrawalsQuerySchema, 'query'),
+    controller.listWithdrawals,
+  );
+  router.get('/withdrawals/:id', controller.getWithdrawal);
 
   app.use('/api/v1/wallet', router);
 };

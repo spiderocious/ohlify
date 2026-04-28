@@ -18,6 +18,8 @@ Helpers used by the [.claude/agents/qa-runner.md](../../.claude/agents/qa-runner
 | [`sign-paystack.mjs`](sign-paystack.mjs) | Compute HMAC-SHA512 signature for a Paystack webhook body using `PAYSTACK_WEBHOOK_SECRET`. CLI: `'<json-body>'` or stdin. Stdout = hex digest. |
 | [`post-webhook.mjs`](post-webhook.mjs) | Build, sign, and POST a synthetic Paystack webhook. CLI: `charge.success\|charge.failed <reference> <amount_kobo> [<fees>] [<data_id>]` or `--raw '<json>'`. |
 | [`reset-payments.mjs`](reset-payments.mjs) | Wipe payments + journals + wallet_entries + system balances for a user, for clean state between funding tests. **Bypasses append-only triggers via `session_replication_role` — dev DB only.** CLI: `<user_id>`. |
+| [`inject-balanced-journal.mjs`](inject-balanced-journal.mjs) | Direct DB-level poster for arbitrary balanced multi-line journals. Relies on the deferred sum-to-zero trigger to catch mistakes. CLI: `'<json-of-{kind,idempotency_key,lines[],...}>'`. |
+| [`inject-call-settlement.mjs`](inject-call-settlement.mjs) | Posts a `call_settlement` journal (`pending_debits_pool -gross, payee +(gross-fee), platform_revenue +fee`) so QA can drive the post-settle clawback refund branch without §8 (calls). CLI: `<payer_user_id> <payee_user_id> <gross_kobo> <fee_kobo> <call_id>`. |
 
 ## Conventions
 
