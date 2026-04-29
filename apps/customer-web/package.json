@@ -2,9 +2,34 @@
   "name": "@ohlify/customer-web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "echo 'customer-web: not yet implemented'",
-    "build": "echo 'customer-web: not yet implemented'",
-    "start": "echo 'customer-web: not yet implemented'"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "start": "vite preview --port 4173",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint --config ../../eslint.web.config.mjs 'src/**/*.{ts,tsx}'",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/mona-sans": "^5.1.0",
+    "@ohlify/api": "workspace:*",
+    "@ohlify/core": "workspace:*",
+    "@ohlify/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
   }
 }

@@ -47,13 +47,18 @@ export const adminUphold: RequestHandler = asyncHandler(async (req: Request, res
   const r = await service.adminUpholdStrike(
     String(req.params['id']),
     req.body as AdminUpholdStrikeDto,
+    req.adminId!,
   );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
 
 export const adminVoid: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.adminVoidStrike(String(req.params['id']), req.body as AdminVoidStrikeDto);
+  const r = await service.adminVoidStrike(
+    String(req.params['id']),
+    req.body as AdminVoidStrikeDto,
+    req.adminId!,
+  );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

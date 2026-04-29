@@ -1,0 +1,39 @@
+{
+  "name": "@ohlify/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme": "./src/theme/index.ts",
+    "./icons": "./src/icons/index.ts",
+    "./styles.css": "./src/styles.css",
+    "./tailwind-preset": "./tailwind-preset.cjs",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --config ../../eslint.web.config.mjs 'src/**/*.{ts,tsx}'",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@ohlify/core": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "tailwind-merge": "^2.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.3"
+  }
+}

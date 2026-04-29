@@ -19,20 +19,20 @@ import * as service from './admin.write.service.js';
 
 export const postManualJournal: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const r = await service.postManualJournalAction(req.body as ManualJournalDto);
+    const r = await service.postManualJournalAction(req.body as ManualJournalDto, req.adminId!);
     if (!r.success) bail(r);
     else ResponseUtil.created(res, r.data);
   },
 );
 
 export const adminCredit: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.adminCreditAction(req.body as AdminCreditDto);
+  const r = await service.adminCreditAction(req.body as AdminCreditDto, req.adminId!);
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
 });
 
 export const adminDebit: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.adminDebitAction(req.body as AdminDebitDto);
+  const r = await service.adminDebitAction(req.body as AdminDebitDto, req.adminId!);
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
 });
@@ -47,13 +47,18 @@ export const approveRefund: RequestHandler = asyncHandler(async (req: Request, r
   const r = await service.approveRefund(
     String(req.params['id']),
     req.body as AdminApproveRefundDto,
+    req.adminId!,
   );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
 
 export const rejectRefund: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.rejectRefund(String(req.params['id']), req.body as AdminRejectRefundDto);
+  const r = await service.rejectRefund(
+    String(req.params['id']),
+    req.body as AdminRejectRefundDto,
+    req.adminId!,
+  );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
@@ -69,6 +74,7 @@ export const forceFailWithdrawal: RequestHandler = asyncHandler(
     const r = await service.forceFailWithdrawal(
       String(req.params['id']),
       req.body as AdminForceFailWithdrawalDto,
+      req.adminId!,
     );
     if (!r.success) bail(r);
     else ResponseUtil.ok(res, r.data);
@@ -90,6 +96,7 @@ export const testInitCall: RequestHandler = asyncHandler(async (req: Request, re
     calleeUserId: dto.callee_user_id,
     ...(dto.rate_id !== undefined ? { rateId: dto.rate_id } : {}),
     ...(dto.start_in_seconds !== undefined ? { startInSeconds: dto.start_in_seconds } : {}),
+    adminId: req.adminId!,
   });
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
@@ -101,8 +108,14 @@ export const listCalls: RequestHandler = asyncHandler(async (req: Request, res: 
   else ResponseUtil.ok(res, r.data.items, r.data.meta);
 });
 
+export const getCallDetail: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await callsService.adminGetCallDetail(String(req.params['id']));
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
 export const forceEndCall: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await callsService.adminForceEndCall(String(req.params['id']));
+  const r = await callsService.adminForceEndCall(String(req.params['id']), req.adminId!);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

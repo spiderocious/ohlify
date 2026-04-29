@@ -2,7 +2,7 @@ import * as authRepo from '@features/auth/auth.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { maybeIssueStrike } from '@features/strikes/strikes.service.js';
-import { StrikeReason } from '@features/strikes/strikes.types.js';
+import { StrikeReason, SubjectRole } from '@features/strikes/strikes.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
@@ -83,6 +83,23 @@ interface CreateContext {
   userId: string;
   idempotencyKey: string | null;
 }
+
+// Two race-condition error codes both end up at the booking-create catch
+// block when N callers hit the same callee+slot at once. Both translate
+// to the same `professional_unavailable` 409 — the booking didn't happen,
+// money rolled back, the user can retry.
+//
+//   23P01 = exclusion_violation. The bookings_no_overlap GiST constraint
+//           tripped — a concurrent request slipped past the FOR UPDATE
+//           check.
+//   40P01 = deadlock_detected. Two racers grabbed conflicting row locks
+//           in opposite order. Postgres aborts one to break the cycle.
+//           (C-NEW-08)
+const isBookingRaceError = (err: unknown): boolean => {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: string }).code;
+  return code === '23P01' || code === '40P01';
+};
 
 // ── POST /bookings ──────────────────────────────────────────────────────────
 
@@ -247,15 +264,10 @@ export const createBooking = async (ctx: CreateContext) => {
     return new ServiceSuccess(toView(fresh!, call.id), BOOKING_MESSAGES.CREATED);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    // 23P01 = exclusion_violation. The bookings_no_overlap GiST constraint
-    // tripped, which means a concurrent request slipped past the FOR UPDATE
-    // check (extremely rare — both racers would need to acquire row locks
-    // on disjoint rows that don't overlap any existing bookings, then both
-    // attempt INSERT). The DB rejected the second one. Surface as 409.
-    if (typeof err === 'object' && err !== null && (err as { code?: string }).code === '23P01') {
+    if (isBookingRaceError(err)) {
       logger.warn(
         { err, callerUserId: ctx.userId },
-        'booking exclusion violation — concurrent overlap caught at DB',
+        'booking race translated to professional_unavailable',
       );
       return new ServiceError('professional_unavailable', BOOKING_MESSAGES.CONFLICT, 409);
     }
@@ -433,7 +445,8 @@ export const cancelBooking = async (bookingId: string, _dto: CancelBookingDto, u
     // strikes service gates on the trigger toggle.
     if (newStatus === 'cancelled_inside_window' && !cancelledByCaller) {
       await maybeIssueStrike(client, {
-        professionalUserId: booking.callee_user_id,
+        subjectUserId: booking.callee_user_id,
+        subjectRole: SubjectRole.PROFESSIONAL,
         relatedCallId: null,
         relatedBookingId: booking.id,
         reasonCode: StrikeReason.LATE_CANCEL,

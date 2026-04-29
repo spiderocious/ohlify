@@ -31,6 +31,10 @@ export const ERROR_CODES = {
   STRIKE_NOT_FOUND: 'strike_not_found',
   STRIKE_DISPUTE_WINDOW_CLOSED: 'strike_dispute_window_closed',
   STRIKE_NOT_DISPUTABLE: 'strike_not_disputable',
+  // Reviews
+  REVIEW_NOT_FOUND: 'review_not_found',
+  REVIEW_EXISTS: 'review_exists',
+  REVIEW_NOT_ELIGIBLE: 'review_not_eligible',
   // Handles
   HANDLE_TAKEN: 'handle_taken',
   HANDLE_INVALID_FORMAT: 'handle_invalid_format',

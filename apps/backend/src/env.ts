@@ -36,6 +36,18 @@ const EnvSchema = z.object({
   // verification (dev only).
   AGORA_WEBHOOK_SECRET: z.string().optional(),
 
+  // Admin TOTP secret encryption key. 32-byte hex (= 64 hex chars). Generate
+  // via `openssl rand -hex 32`. Required for the admin auth slice — secrets
+  // are encrypted at rest in admin_users.totp_secret_encrypted.
+  ADMIN_TOTP_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/),
+
+  // Admin JWT secrets — separate from user JWT secrets so admin tokens can't
+  // be replayed against user routes and vice versa.
+  ADMIN_JWT_ACCESS_SECRET: z.string().min(32),
+  ADMIN_JWT_REFRESH_SECRET: z.string().min(32),
+  ADMIN_JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+  ADMIN_JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 

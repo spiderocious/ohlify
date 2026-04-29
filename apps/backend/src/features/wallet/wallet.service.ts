@@ -1,4 +1,6 @@
 import * as authRepo from '@features/auth/auth.repo.js';
+import * as bookingsRepo from '@features/bookings/bookings.repo.js';
+import * as callsRepo from '@features/calls/calls.repo.js';
 import * as paymentsRepo from '@features/payments/payments.repo.js';
 import { PaymentPurpose, PaymentStatus } from '@features/payments/payments.types.js';
 import * as profileRepo from '@features/profile/profile.repo.js';
@@ -141,15 +143,18 @@ export const getSummary = async (userId: string) => {
 
 export const getStats = async (userId: string) => {
   const row = await repo.readUserWalletStats(userId);
-  // ⚠️ SMOKING-GUN STUB: total_calls is hardcoded to 0 because the calls
-  // table doesn't exist yet (§8). When §8 ships, replace with:
-  //   SELECT count(*) FROM calls WHERE caller_user_id = $1 AND status='completed'
-  // and remove this comment. Currently visible as constant 0 in every API
-  // response so the gap is impossible to miss during QA.
+  const totalCallsRow = await pool.query<{ n: string }>(
+    `SELECT count(*)::text AS n
+       FROM calls c
+       JOIN bookings b ON b.id = c.booking_id
+      WHERE b.caller_user_id = $1
+        AND c.status = 'completed'`,
+    [userId],
+  );
   const view: WalletStatsView = {
     this_week_kobo: koboToJson(BigInt(row.this_week_kobo)),
     this_month_kobo: koboToJson(BigInt(row.this_month_kobo)),
-    total_calls: 0,
+    total_calls: Number(totalCallsRow.rows[0]?.n ?? '0'),
   };
   return new ServiceSuccess(view, WALLET_MESSAGES.STATS_FETCHED);
 };
@@ -417,6 +422,30 @@ export const payFromWallet = async (
   dto: PayFromWalletDto,
   userId: string,
 ): Promise<ServiceSuccess<PayResponseView | InsufficientBalanceView> | ServiceError> => {
+  // C-NEW-09: validate the target call exists + belongs to this caller
+  // BEFORE we hit the journal layer. Without this, a bogus external_ref_id
+  // bubbles up the journal_entries.related_call_id FK violation as a
+  // generic 500. Validating up-front lets us return a structured 404,
+  // and as a side-effect blocks a caller from "paying" against someone
+  // else's call_id (they'd never be able to settle anyway, but no need
+  // to even let them try).
+  if (dto.purpose === 'call_payment') {
+    const call = await callsRepo.findById(dto.external_ref_id);
+    if (!call) {
+      return new ServiceError('not_found', WALLET_MESSAGES.PAY_TARGET_NOT_FOUND, 404, {
+        external_ref_id: ['Call not found'],
+      });
+    }
+    const booking = await bookingsRepo.findById(call.booking_id);
+    if (!booking || booking.caller_user_id !== userId) {
+      // Same shape as call-not-found — don't differentiate, that would let
+      // a malicious caller probe other users' call ids.
+      return new ServiceError('not_found', WALLET_MESSAGES.PAY_TARGET_NOT_FOUND, 404, {
+        external_ref_id: ['Call not found'],
+      });
+    }
+  }
+
   // Materialize the user wallet if missing (first-time payer with promo credit).
   await accountFor.user(userId);
 

@@ -29,15 +29,14 @@ export const get: RequestHandler = asyncHandler(async (req: Request, res: Respon
   else ResponseUtil.ok(res, r.data);
 });
 
-// Admin handlers — assume requireAdmin middleware has run upstream. The
-// adminId comes from the X-Admin-Token stub for now (no per-admin identity);
-// once §21 ships, swap to req.adminId.
-const STUB_ADMIN_ID = 'adm_stub';
+// Admin handlers — assume requireAdmin middleware has run upstream so
+// req.adminId is set (either a real admin user or 'adm_stub' from the
+// legacy X-Admin-Token fallback).
 
 export const adminApprove: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.approveRefund({
     refundId: String(req.params['id']),
-    adminId: STUB_ADMIN_ID,
+    adminId: req.adminId!,
     dto: req.body as ApproveRefundDto,
   });
   if (!r.success) bail(r);
@@ -47,7 +46,7 @@ export const adminApprove: RequestHandler = asyncHandler(async (req: Request, re
 export const adminReject: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.rejectRefund({
     refundId: String(req.params['id']),
-    adminId: STUB_ADMIN_ID,
+    adminId: req.adminId!,
     dto: req.body as RejectRefundDto,
   });
   if (!r.success) bail(r);

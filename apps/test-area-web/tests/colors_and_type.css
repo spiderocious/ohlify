@@ -1,0 +1,263 @@
+/* ============================================================
+   HEARTH DESIGN TOKENS
+   Warm domestic palette + type system
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---------- PRIMARY (terracotta) ---------- */
+  --primary-50:  #FBF1EC;
+  --primary-100: #F4DDD0;
+  --primary-200: #EBC0AA;
+  --primary-300: #E0A284;
+  --primary-400: #D97757;  /* base */
+  --primary-500: #C45F3F;
+  --primary-600: #A84A2D;
+  --primary-700: #823720;
+  --primary-800: #5C2615;
+  --primary-900: #3A170C;
+
+  /* ---------- SECONDARY (sage) ---------- */
+  --secondary-50:  #EFF3EE;
+  --secondary-100: #DBE4D8;
+  --secondary-200: #B8C9B2;
+  --secondary-300: #93AE8B;
+  --secondary-400: #6F9166;  /* base */
+  --secondary-500: #587650;
+  --secondary-600: #455D3F;
+  --secondary-700: #344730;
+  --secondary-800: #243121;
+  --secondary-900: #161E14;
+
+  /* ---------- WARM NEUTRALS (10 steps) ---------- */
+  --neutral-0:   #FFFFFF;
+  --neutral-50:  #FAF6F0;  /* canvas */
+  --neutral-100: #F2EBE0;
+  --neutral-200: #E5DBCB;
+  --neutral-300: #D2C5B0;
+  --neutral-400: #B0A088;
+  --neutral-500: #8B7B63;
+  --neutral-600: #6B5D49;
+  --neutral-700: #4D4234;
+  --neutral-800: #332B22;
+  --neutral-900: #1C1714;
+
+  /* ---------- SEMANTIC ---------- */
+  --success-light: #DCEAD2;
+  --success:       #5C8A3C;
+  --success-dark:  #2F4D1A;
+
+  --warning-light: #FBE7C2;
+  --warning:       #C68A1E;
+  --warning-dark:  #6B4710;
+
+  --danger-light:  #F4D5CC;
+  --danger:        #B8442B;
+  --danger-dark:   #5E2113;
+
+  --info-light:    #D6DDE9;
+  --info:          #4A6896;
+  --info-dark:     #233655;
+
+  /* ---------- MEMBER IDENTITY (8 colors) ---------- */
+  --member-terracotta: #D97757;
+  --member-sage:       #6F9166;
+  --member-marigold:   #D4A03A;
+  --member-plum:       #8C5A82;
+  --member-denim:      #4F7CA8;
+  --member-olive:      #8B8540;
+  --member-rose:       #C57A8C;
+  --member-slate:      #5F6B7A;
+
+  /* ---------- SURFACES (light theme) ---------- */
+  --surface-canvas:  var(--neutral-50);
+  --surface-raised:  var(--neutral-0);
+  --surface-sunken:  var(--neutral-100);
+  --surface-overlay: rgba(28, 23, 20, 0.55);
+  --surface-tint:    var(--primary-50);
+
+  /* ---------- TEXT (light theme) ---------- */
+  --fg-primary:   var(--neutral-900);
+  --fg-secondary: var(--neutral-700);
+  --fg-tertiary:  var(--neutral-500);
+  --fg-disabled:  var(--neutral-400);
+  --fg-on-primary: var(--neutral-0);
+  --fg-on-tint:    var(--primary-700);
+
+  /* ---------- BORDERS (light theme) ---------- */
+  --border-subtle: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --border-focus:  var(--primary-400);
+
+  /* ---------- TYPE ---------- */
+  --font-display: 'Instrument Serif', 'Tiempos Headline', Georgia, serif;
+  --font-body:    'Inter', 'Söhne', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fraktion Mono', ui-monospace, monospace;
+
+  /* sizes */
+  --text-display: 56px;
+  --text-h1: 40px;
+  --text-h2: 32px;
+  --text-h3: 24px;
+  --text-h4: 20px;
+  --text-body-lg: 17px;
+  --text-body: 15px;
+  --text-body-sm: 13px;
+  --text-caption: 12px;
+  --text-overline: 11px;
+
+  /* ---------- SPACING (4px base) ---------- */
+  --sp-0: 0;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------- RADII ---------- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 24px;
+  --r-pill: 999px;
+
+  /* ---------- ELEVATION (warm-tinted shadows) ---------- */
+  --shadow-1: 0 1px 2px rgba(76, 51, 32, 0.06), 0 1px 1px rgba(76, 51, 32, 0.04);
+  --shadow-2: 0 2px 4px rgba(76, 51, 32, 0.06), 0 4px 8px rgba(76, 51, 32, 0.04);
+  --shadow-3: 0 4px 8px rgba(76, 51, 32, 0.08), 0 8px 16px rgba(76, 51, 32, 0.06);
+  --shadow-4: 0 8px 16px rgba(76, 51, 32, 0.10), 0 16px 32px rgba(76, 51, 32, 0.08);
+  --shadow-5: 0 16px 32px rgba(76, 51, 32, 0.14), 0 32px 64px rgba(76, 51, 32, 0.10);
+
+  /* ---------- MOTION ---------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:  cubic-bezier(0.55, 0, 0.68, 0.19);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 400ms;
+
+  /* ---------- BREAKPOINTS (reference) ---------- */
+  --bp-mobile:  480px;
+  --bp-tablet:  768px;
+  --bp-desktop: 1200px;
+}
+
+/* ============================================================
+   DARK THEME (cocoa, not blue-black)
+   ============================================================ */
+[data-theme="dark"] {
+  --surface-canvas:  #1C1714;
+  --surface-raised:  #2A221D;
+  --surface-sunken:  #15110F;
+  --surface-overlay: rgba(0, 0, 0, 0.7);
+  --surface-tint:    #3A2218;
+
+  --fg-primary:   #F2EBE0;
+  --fg-secondary: #C9BCA8;
+  --fg-tertiary:  #8B7B63;
+  --fg-disabled:  #5C4F3D;
+  --fg-on-primary: #1C1714;
+  --fg-on-tint:    #F4DDD0;
+
+  --border-subtle: #3A2F26;
+  --border-strong: #4D4234;
+  --border-focus:  var(--primary-300);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.42);
+  --shadow-4: 0 8px 20px rgba(0, 0, 0, 0.50);
+  --shadow-5: 0 16px 40px rgba(0, 0, 0, 0.60);
+}
+
+/* ============================================================
+   SEMANTIC TYPOGRAPHY
+   ============================================================ */
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-h1);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+.t-h2 {
+  font-family: var(--font-body);
+  font-size: var(--text-h2);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.t-h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-h3);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+.t-h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-h4);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.t-body-lg {
+  font-family: var(--font-body);
+  font-size: var(--text-body-lg);
+  font-weight: 400;
+  line-height: 1.55;
+}
+.t-body {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.t-body-sm {
+  font-family: var(--font-body);
+  font-size: var(--text-body-sm);
+  font-weight: 400;
+  line-height: 1.45;
+}
+.t-caption {
+  font-family: var(--font-body);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--fg-tertiary);
+}
+.t-overline {
+  font-family: var(--font-body);
+  font-size: var(--text-overline);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+}
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.t-tabular {
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}

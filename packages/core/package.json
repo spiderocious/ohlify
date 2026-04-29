@@ -1,0 +1,21 @@
+{
+  "name": "@ohlify/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --config ../../eslint.web.config.mjs 'src/**/*.{ts,tsx}'",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

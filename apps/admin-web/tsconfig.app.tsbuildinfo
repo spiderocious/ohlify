@@ -1,0 +1,1 @@
+{"root":["./src/app.entrypoint.tsx","./src/app.provider.tsx","./src/app.routes.tsx","./src/app.tsx","./src/main.tsx","./src/features/welcome/screen/welcome-screen.tsx"],"version":"5.9.3"}

@@ -15,17 +15,22 @@ import type {
   DisputeStrikeDto,
   ListStrikesQueryDto,
 } from './strikes.schema.js';
-import { StrikeReason, StrikeStatus, type StrikeRow, type StrikeView } from './strikes.types.js';
+import {
+  StrikeReason,
+  StrikeStatus,
+  SubjectRole,
+  type StrikeRow,
+  type StrikeView,
+} from './strikes.types.js';
 
 interface QueryRunner {
   query: PoolClient['query'];
 }
 
-const STUB_ADMIN_ID = 'adm_stub';
-
 const toView = (row: StrikeRow): StrikeView => ({
   id: row.id,
-  professional_user_id: row.professional_user_id,
+  subject_user_id: row.subject_user_id,
+  subject_role: row.subject_role,
   related_call_id: row.related_call_id,
   related_booking_id: row.related_booking_id,
   reason_code: row.reason_code,
@@ -42,59 +47,89 @@ const toView = (row: StrikeRow): StrikeView => ({
 //
 // Called from the calls resolver path (not exposed via HTTP). Caller owns
 // the tx. Auto-ban happens inline if the threshold is hit. Both are
-// gated by config (each strike trigger is independently toggleable; the
-// auto-ban threshold is itself configurable).
+// gated by config. Each subject_role has its OWN config namespace
+// (`professional.*` vs `caller.*`) and its own threshold.
 
 export interface IssueStrikeInput {
-  professionalUserId: string;
+  subjectUserId: string;
+  subjectRole: SubjectRole;
   relatedCallId: string | null;
   relatedBookingId: string | null;
   reasonCode: StrikeReason;
   description: string | null;
 }
 
+const isTriggerEnabled = (subjectRole: SubjectRole, reason: StrikeReason): boolean => {
+  if (subjectRole === SubjectRole.PROFESSIONAL) {
+    const cfg = platformConfig.professional();
+    return (
+      (reason === StrikeReason.NO_SHOW && cfg.strike_on_no_show) ||
+      (reason === StrikeReason.LATE_CANCEL && cfg.strike_on_late_cancel) ||
+      (reason === StrikeReason.MID_CALL_QUIT && cfg.strike_on_mid_call_quit)
+    );
+  }
+  // Caller
+  const cfg = platformConfig.caller();
+  return (
+    (reason === StrikeReason.CALLER_NO_SHOW && cfg.strike_on_no_show) ||
+    (reason === StrikeReason.CALLER_DISCONNECT && cfg.strike_on_disconnect)
+  );
+};
+
+const banThresholdFor = (subjectRole: SubjectRole): number =>
+  subjectRole === SubjectRole.PROFESSIONAL
+    ? platformConfig.professional().strikes_before_ban
+    : platformConfig.caller().strikes_before_ban;
+
+const disputeWindowDaysFor = (subjectRole: SubjectRole): number =>
+  subjectRole === SubjectRole.PROFESSIONAL
+    ? platformConfig.professional().strike_dispute_window_days
+    : platformConfig.caller().strike_dispute_window_days;
+
 export const maybeIssueStrike = async (
   runner: QueryRunner,
   input: IssueStrikeInput,
 ): Promise<{ issued: boolean; banned: boolean; strikeId?: string }> => {
-  const cfg = platformConfig.professional();
-  const triggerEnabled =
-    (input.reasonCode === StrikeReason.NO_SHOW && cfg.strike_on_no_show) ||
-    (input.reasonCode === StrikeReason.LATE_CANCEL && cfg.strike_on_late_cancel) ||
-    (input.reasonCode === StrikeReason.MID_CALL_QUIT && cfg.strike_on_mid_call_quit);
-  if (!triggerEnabled) {
+  if (!isTriggerEnabled(input.subjectRole, input.reasonCode)) {
     logger.info(
-      { professionalUserId: input.professionalUserId, reason: input.reasonCode },
+      {
+        subjectUserId: input.subjectUserId,
+        subjectRole: input.subjectRole,
+        reason: input.reasonCode,
+      },
       'strike trigger disabled in config; skipping',
     );
     return { issued: false, banned: false };
   }
 
   const strike = await repo.create(runner, input);
-  const counting = await repo.countCountingStrikes(runner, input.professionalUserId);
+  const counting = await repo.countCountingStrikes(runner, input.subjectUserId, input.subjectRole);
+  const threshold = banThresholdFor(input.subjectRole);
   let banned = false;
-  if (counting >= cfg.strikes_before_ban) {
+  if (counting >= threshold) {
     // Auto-ban: flip user status to suspended. Already-suspended is a no-op.
     await runner.query(
       `UPDATE users
           SET status = 'suspended', updated_at = now()
         WHERE id = $1 AND status = 'active'`,
-      [input.professionalUserId],
+      [input.subjectUserId],
     );
     banned = true;
     logger.warn(
       {
-        professionalUserId: input.professionalUserId,
+        subjectUserId: input.subjectUserId,
+        subjectRole: input.subjectRole,
         countingStrikes: counting,
-        threshold: cfg.strikes_before_ban,
+        threshold,
       },
-      'auto-ban: professional suspended on strike threshold',
+      'auto-ban: user suspended on strike threshold',
     );
   }
   logger.info(
     {
       strikeId: strike.id,
-      professionalUserId: input.professionalUserId,
+      subjectUserId: input.subjectUserId,
+      subjectRole: input.subjectRole,
       reason: input.reasonCode,
       countingAfter: counting,
       banned,
@@ -105,6 +140,10 @@ export const maybeIssueStrike = async (
 };
 
 // ── GET /me/strikes ─────────────────────────────────────────────────────────
+//
+// Returns BOTH role's strikes for the authenticated user. Mobile renders
+// per-role sections from the response. The summary block carries per-role
+// counters so mobile can show "You have N strikes as a pro / M as a caller".
 
 export const listMyStrikes = async (dto: ListStrikesQueryDto, userId: string) => {
   const limit = resolveLimit(dto.limit);
@@ -118,11 +157,12 @@ export const listMyStrikes = async (dto: ListStrikesQueryDto, userId: string) =>
       });
     }
   }
-  const rows = await repo.listForProfessional({
-    professionalUserId: userId,
+  const rows = await repo.listForSubject({
+    subjectUserId: userId,
     limit,
     ...(cursor ? { cursor } : {}),
     ...(dto.status ? { status: dto.status } : {}),
+    ...(dto.subject_role ? { subjectRole: dto.subject_role } : {}),
   });
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -132,27 +172,53 @@ export const listMyStrikes = async (dto: ListStrikesQueryDto, userId: string) =>
       ? encodeCursor({ last_id: last.id, last_sort_key: last.created_at.toISOString() })
       : null;
 
-  // Summary attached to every list response so mobile can render the
-  // "X strikes left before ban" UI without a separate call.
-  const cfg = platformConfig.professional();
-  // countCountingStrikes uses a runner; for a read-only list we use pool.query directly.
-  const counting = await pool.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM professional_strikes
-      WHERE professional_user_id = $1 AND status IN ('active', 'upheld')`,
+  // Per-role counters. Read directly from pool — these are bounded queries.
+  const proCfg = platformConfig.professional();
+  const callerCfg = platformConfig.caller();
+  const counts = await pool.query<{ subject_role: SubjectRole; n: string }>(
+    `SELECT subject_role, count(*)::text AS n
+       FROM strikes
+      WHERE subject_user_id = $1 AND status IN ('active', 'upheld')
+      GROUP BY subject_role`,
     [userId],
   );
-  const total = await repo.countTotal(userId);
-  const activeCount = Number(counting.rows[0]?.n ?? '0');
+  const totals = await pool.query<{ subject_role: SubjectRole; n: string }>(
+    `SELECT subject_role, count(*)::text AS n
+       FROM strikes
+      WHERE subject_user_id = $1
+      GROUP BY subject_role`,
+    [userId],
+  );
+  const proActive = Number(
+    counts.rows.find((r) => r.subject_role === SubjectRole.PROFESSIONAL)?.n ?? '0',
+  );
+  const callerActive = Number(
+    counts.rows.find((r) => r.subject_role === SubjectRole.CALLER)?.n ?? '0',
+  );
+  const proTotal = Number(
+    totals.rows.find((r) => r.subject_role === SubjectRole.PROFESSIONAL)?.n ?? '0',
+  );
+  const callerTotal = Number(
+    totals.rows.find((r) => r.subject_role === SubjectRole.CALLER)?.n ?? '0',
+  );
 
   return new ServiceSuccess(
     {
       items: page.map(toView),
       meta: { next_cursor: nextCursor, has_more: hasMore },
       summary: {
-        active_count: activeCount,
-        total_count: total,
-        strikes_before_ban: cfg.strikes_before_ban,
-        remaining_before_ban: Math.max(0, cfg.strikes_before_ban - activeCount),
+        professional: {
+          active_count: proActive,
+          total_count: proTotal,
+          strikes_before_ban: proCfg.strikes_before_ban,
+          remaining_before_ban: Math.max(0, proCfg.strikes_before_ban - proActive),
+        },
+        caller: {
+          active_count: callerActive,
+          total_count: callerTotal,
+          strikes_before_ban: callerCfg.strikes_before_ban,
+          remaining_before_ban: Math.max(0, callerCfg.strikes_before_ban - callerActive),
+        },
       },
     },
     STRIKE_MESSAGES.LIST_FETCHED,
@@ -162,12 +228,11 @@ export const listMyStrikes = async (dto: ListStrikesQueryDto, userId: string) =>
 // ── POST /strikes/:id/dispute ───────────────────────────────────────────────
 
 export const disputeStrike = async (strikeId: string, dto: DisputeStrikeDto, userId: string) => {
-  const cfg = platformConfig.professional();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const strike = await repo.findByIdForUpdate(client, strikeId);
-    if (!strike || strike.professional_user_id !== userId) {
+    if (!strike || strike.subject_user_id !== userId) {
       await client.query('ROLLBACK');
       return new ServiceError('strike_not_found', STRIKE_MESSAGES.NOT_FOUND, 404);
     }
@@ -176,7 +241,7 @@ export const disputeStrike = async (strikeId: string, dto: DisputeStrikeDto, use
       return new ServiceError('strike_not_disputable', STRIKE_MESSAGES.NOT_DISPUTABLE, 409);
     }
     const ageMs = Date.now() - strike.created_at.getTime();
-    const windowMs = cfg.strike_dispute_window_days * 24 * 3600 * 1000;
+    const windowMs = disputeWindowDaysFor(strike.subject_role) * 24 * 3600 * 1000;
     if (ageMs > windowMs) {
       await client.query('ROLLBACK');
       return new ServiceError(
@@ -188,7 +253,10 @@ export const disputeStrike = async (strikeId: string, dto: DisputeStrikeDto, use
     await repo.setDisputed(client, strike.id, dto.comment);
     await client.query('COMMIT');
     const fresh = await repo.findById(strike.id);
-    logger.info({ strikeId: strike.id, userId }, 'strike disputed');
+    logger.info(
+      { strikeId: strike.id, userId, subjectRole: strike.subject_role },
+      'strike disputed',
+    );
     return new ServiceSuccess(toView(fresh!), STRIKE_MESSAGES.DISPUTED);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -203,7 +271,7 @@ export const disputeStrike = async (strikeId: string, dto: DisputeStrikeDto, use
 
 export const getMyStrike = async (strikeId: string, userId: string) => {
   const row = await repo.findById(strikeId);
-  if (!row || row.professional_user_id !== userId) {
+  if (!row || row.subject_user_id !== userId) {
     return new ServiceError('strike_not_found', STRIKE_MESSAGES.NOT_FOUND, 404);
   }
   return new ServiceSuccess(toView(row), STRIKE_MESSAGES.FETCHED);
@@ -227,7 +295,8 @@ export const adminListStrikes = async (dto: AdminListStrikesQueryDto) => {
     limit,
     ...(cursor ? { cursor } : {}),
     ...(dto.status ? { status: dto.status } : {}),
-    ...(dto.professional_user_id ? { professionalUserId: dto.professional_user_id } : {}),
+    ...(dto.subject_user_id ? { subjectUserId: dto.subject_user_id } : {}),
+    ...(dto.subject_role ? { subjectRole: dto.subject_role } : {}),
     ...(dto.reason_code ? { reasonCode: dto.reason_code } : {}),
   });
   const hasMore = rows.length > limit;
@@ -246,8 +315,11 @@ export const adminListStrikes = async (dto: AdminListStrikesQueryDto) => {
   );
 };
 
-export const adminUpholdStrike = async (strikeId: string, dto: AdminUpholdStrikeDto) => {
-  const cfg = platformConfig.professional();
+export const adminUpholdStrike = async (
+  strikeId: string,
+  dto: AdminUpholdStrikeDto,
+  adminId: string,
+) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -260,22 +332,28 @@ export const adminUpholdStrike = async (strikeId: string, dto: AdminUpholdStrike
       await client.query('ROLLBACK');
       return new ServiceError('strike_not_disputable', STRIKE_MESSAGES.NOT_DISPUTABLE, 409);
     }
-    await repo.setUpheld(client, strike.id, STUB_ADMIN_ID, dto.comment ?? null);
-    // Re-check ban threshold — disputed strike going to upheld may push count
-    // past the threshold for the first time (since disputed didn't count).
-    const counting = await repo.countCountingStrikes(client, strike.professional_user_id);
-    if (counting >= cfg.strikes_before_ban) {
+    await repo.setUpheld(client, strike.id, adminId, dto.comment ?? null);
+    // Re-check ban threshold for the strike's role — disputed → upheld may
+    // push count past threshold (since disputed didn't count).
+    const counting = await repo.countCountingStrikes(
+      client,
+      strike.subject_user_id,
+      strike.subject_role,
+    );
+    const threshold = banThresholdFor(strike.subject_role);
+    if (counting >= threshold) {
       await client.query(
         `UPDATE users SET status = 'suspended', updated_at = now()
           WHERE id = $1 AND status = 'active'`,
-        [strike.professional_user_id],
+        [strike.subject_user_id],
       );
       logger.warn(
         {
-          professionalUserId: strike.professional_user_id,
+          subjectUserId: strike.subject_user_id,
+          subjectRole: strike.subject_role,
           countingStrikes: counting,
         },
-        'auto-ban: upheld strike pushed pro past threshold',
+        'auto-ban: upheld strike pushed user past threshold',
       );
     }
     await client.query('COMMIT');
@@ -290,7 +368,11 @@ export const adminUpholdStrike = async (strikeId: string, dto: AdminUpholdStrike
   }
 };
 
-export const adminVoidStrike = async (strikeId: string, dto: AdminVoidStrikeDto) => {
+export const adminVoidStrike = async (
+  strikeId: string,
+  dto: AdminVoidStrikeDto,
+  adminId: string,
+) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -303,7 +385,7 @@ export const adminVoidStrike = async (strikeId: string, dto: AdminVoidStrikeDto)
       await client.query('ROLLBACK');
       return new ServiceError('strike_not_disputable', STRIKE_MESSAGES.NOT_DISPUTABLE, 409);
     }
-    await repo.setVoided(client, strike.id, STUB_ADMIN_ID, dto.reason);
+    await repo.setVoided(client, strike.id, adminId, dto.reason);
     await client.query('COMMIT');
     const fresh = await repo.findById(strike.id);
     return new ServiceSuccess(toView(fresh!), STRIKE_MESSAGES.VOIDED);

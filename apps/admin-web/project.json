@@ -2,7 +2,7 @@
   "name": "admin-web",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "sourceRoot": "apps/admin-web",
+  "sourceRoot": "apps/admin-web/src",
   "targets": {
     "serve": {
       "executor": "nx:run-commands",
@@ -10,8 +10,26 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm build", "cwd": "apps/admin-web" }
+      "options": { "command": "pnpm build", "cwd": "apps/admin-web" },
+      "dependsOn": ["^build"]
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm preview", "cwd": "apps/admin-web" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm typecheck", "cwd": "apps/admin-web" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm lint", "cwd": "apps/admin-web" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm test", "cwd": "apps/admin-web" }
     }
   },
-  "tags": ["scope:admin-web", "type:app"]
+  "tags": ["scope:admin-web", "type:app"],
+  "implicitDependencies": ["ui", "core", "api"]
 }

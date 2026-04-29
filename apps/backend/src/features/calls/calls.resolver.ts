@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import { type BookingRow } from '@features/bookings/bookings.types.js';
 import { maybeIssueStrike } from '@features/strikes/strikes.service.js';
-import { StrikeReason } from '@features/strikes/strikes.types.js';
+import { StrikeReason, SubjectRole } from '@features/strikes/strikes.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { logger } from '@lib/logger.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
@@ -248,9 +248,11 @@ const issueStrikeForResolution = async (
   booking: BookingRow,
   status: CallStatus,
 ): Promise<void> => {
+  // Pro-side strikes
   if (status === CallStatus.NO_SHOW_CALLEE) {
     await maybeIssueStrike(runner, {
-      professionalUserId: booking.callee_user_id,
+      subjectUserId: booking.callee_user_id,
+      subjectRole: SubjectRole.PROFESSIONAL,
       relatedCallId: call.id,
       relatedBookingId: booking.id,
       reasonCode: StrikeReason.NO_SHOW,
@@ -258,11 +260,32 @@ const issueStrikeForResolution = async (
     });
   } else if (status === CallStatus.DISCONNECTED_CALLEE) {
     await maybeIssueStrike(runner, {
-      professionalUserId: booking.callee_user_id,
+      subjectUserId: booking.callee_user_id,
+      subjectRole: SubjectRole.PROFESSIONAL,
       relatedCallId: call.id,
       relatedBookingId: booking.id,
       reasonCode: StrikeReason.MID_CALL_QUIT,
       description: `Pro disconnected mid-call ${call.id}`,
+    });
+  }
+  // Caller-side strikes (Phase 2.5)
+  else if (status === CallStatus.NO_SHOW_CALLER) {
+    await maybeIssueStrike(runner, {
+      subjectUserId: booking.caller_user_id,
+      subjectRole: SubjectRole.CALLER,
+      relatedCallId: call.id,
+      relatedBookingId: booking.id,
+      reasonCode: StrikeReason.CALLER_NO_SHOW,
+      description: `Caller did not show for call ${call.id}`,
+    });
+  } else if (status === CallStatus.DISCONNECTED_CALLER) {
+    await maybeIssueStrike(runner, {
+      subjectUserId: booking.caller_user_id,
+      subjectRole: SubjectRole.CALLER,
+      relatedCallId: call.id,
+      relatedBookingId: booking.id,
+      reasonCode: StrikeReason.CALLER_DISCONNECT,
+      description: `Caller disconnected mid-call ${call.id}`,
     });
   }
 };

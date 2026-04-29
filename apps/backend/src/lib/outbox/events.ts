@@ -9,6 +9,8 @@ export const OutboxEventType = {
   WITHDRAWAL_REQUESTED: 'withdrawal.requested',
   WITHDRAWAL_COMPLETED: 'withdrawal.completed',
   WITHDRAWAL_REVERSED: 'withdrawal.reversed',
+  REVIEW_POSTED: 'review.posted',
+  REVIEW_HIDDEN: 'review.hidden',
 } as const;
 
 export type OutboxEventType = (typeof OutboxEventType)[keyof typeof OutboxEventType];

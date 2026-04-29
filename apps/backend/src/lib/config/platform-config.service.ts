@@ -77,6 +77,13 @@ export interface ProfessionalConfig {
   strike_dispute_window_days: number;
 }
 
+export interface CallerConfig {
+  strike_on_no_show: boolean;
+  strike_on_disconnect: boolean;
+  strikes_before_ban: number;
+  strike_dispute_window_days: number;
+}
+
 // Compiled-in defaults — used until the first DB load lands AND when an
 // individual key is absent from the DB. Mirror the seeded values.
 const DEFAULT_SNAPSHOT: ConfigSnapshot = {
@@ -137,6 +144,12 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     strikes_before_ban: 3,
     strike_dispute_window_days: 14,
   },
+  caller: {
+    strike_on_no_show: true,
+    strike_on_disconnect: true,
+    strikes_before_ban: 5,
+    strike_dispute_window_days: 14,
+  },
 };
 
 interface ConfigSnapshot {
@@ -149,6 +162,7 @@ interface ConfigSnapshot {
   wallet: WalletConfig;
   bookings: BookingsConfig;
   professional: ProfessionalConfig;
+  caller: CallerConfig;
 }
 
 let snapshot: ConfigSnapshot = DEFAULT_SNAPSHOT;
@@ -359,6 +373,24 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
         d.professional.strike_dispute_window_days,
       ),
     },
+    caller: {
+      strike_on_no_show: bool(
+        get('caller.strike_on_no_show', d.caller.strike_on_no_show),
+        d.caller.strike_on_no_show,
+      ),
+      strike_on_disconnect: bool(
+        get('caller.strike_on_disconnect', d.caller.strike_on_disconnect),
+        d.caller.strike_on_disconnect,
+      ),
+      strikes_before_ban: num(
+        get('caller.strikes_before_ban', d.caller.strikes_before_ban),
+        d.caller.strikes_before_ban,
+      ),
+      strike_dispute_window_days: num(
+        get('caller.strike_dispute_window_days', d.caller.strike_dispute_window_days),
+        d.caller.strike_dispute_window_days,
+      ),
+    },
   };
 };
 
@@ -412,6 +444,7 @@ export const platformConfig = {
   wallet: (): WalletConfig => snapshot.wallet,
   bookings: (): BookingsConfig => snapshot.bookings,
   professional: (): ProfessionalConfig => snapshot.professional,
+  caller: (): CallerConfig => snapshot.caller,
   // For diagnostics — when was the snapshot last refreshed?
   snapshotAge: (): number => Date.now() - lastRefreshAt,
 };

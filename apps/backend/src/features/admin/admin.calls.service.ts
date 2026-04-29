@@ -15,8 +15,6 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { reservePayment } from '@lib/wallet/flows/pay.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
-const STUB_ADMIN_ID = 'adm_stub';
-
 // ── POST /admin/calls/test-init ─────────────────────────────────────────────
 //
 // Skip the booking flow. Create a booking row + call row directly, mint
@@ -33,6 +31,7 @@ export interface AdminTestInitInput {
   calleeUserId: string;
   rateId?: string; // if omitted, uses the callee's first active rate
   startInSeconds?: number; // default 0 (right now)
+  adminId: string;
 }
 
 export const adminTestInitCall = async (input: AdminTestInitInput) => {
@@ -102,7 +101,7 @@ export const adminTestInitCall = async (input: AdminTestInitInput) => {
     await callsRepo.recordEvent(client, {
       callId: call.id,
       eventType: 'admin_test_init',
-      payload: { admin_id: STUB_ADMIN_ID },
+      payload: { admin_id: input.adminId },
     });
     const reserve = await reservePayment(
       {
@@ -286,7 +285,7 @@ export const adminListCalls = async (dto: AdminListCallsDto) => {
 
 // ── POST /admin/calls/:id/force-end ─────────────────────────────────────────
 
-export const adminForceEndCall = async (callId: string) => {
+export const adminForceEndCall = async (callId: string, adminId: string) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -308,7 +307,7 @@ export const adminForceEndCall = async (callId: string) => {
     await callsRepo.recordEvent(client, {
       callId: call.id,
       eventType: 'admin_force_end',
-      payload: { admin_id: STUB_ADMIN_ID, reason, terminal_status: result.status },
+      payload: { admin_id: adminId, reason, terminal_status: result.status },
     });
     await client.query('COMMIT');
     return new ServiceSuccess(
@@ -328,6 +327,144 @@ export const adminForceEndCall = async (callId: string) => {
   } finally {
     client.release();
   }
+};
+
+// ── GET /admin/calls/:id (deep detail) ──────────────────────────────────────
+//
+// Returns the call row + booking + events + any journal entries that
+// reference the call. Used by the admin web UI when a support agent is
+// triaging a specific call. Read-only.
+export const adminGetCallDetail = async (callId: string) => {
+  const call = await pool.query<{
+    id: string;
+    booking_id: string;
+    status: string;
+    agora_channel_name: string;
+    connected_seconds: number;
+    caller_joined_at: Date | null;
+    callee_joined_at: Date | null;
+    caller_left_at: Date | null;
+    callee_left_at: Date | null;
+    ended_at: Date | null;
+    settlement_journal_id: string | null;
+    refund_journal_id: string | null;
+    created_at: Date;
+  }>(
+    `SELECT c.id, c.booking_id, c.status::text AS status, c.agora_channel_name,
+            c.connected_seconds, c.caller_joined_at, c.callee_joined_at,
+            c.caller_left_at, c.callee_left_at, c.ended_at,
+            c.settlement_journal_id, c.refund_journal_id, c.created_at
+       FROM calls c
+       WHERE c.id = $1`,
+    [callId],
+  );
+  if (call.rowCount === 0) {
+    return new ServiceError('call_not_found', MESSAGE_KEYS.ADMIN_CALL_DETAIL_FETCHED, 404);
+  }
+  const callRow = call.rows[0]!;
+
+  const booking = await pool.query<{
+    id: string;
+    status: string;
+    caller_user_id: string;
+    callee_user_id: string;
+    rate_id: string;
+    call_type: string;
+    start_at: Date;
+    duration_minutes: number;
+    total_paid_kobo: string;
+    payee_amount_kobo: string;
+    platform_fee_kobo: string;
+    fee_mode_used: string;
+    reservation_journal_id: string | null;
+    created_at: Date;
+  }>(
+    `SELECT id, status::text AS status, caller_user_id, callee_user_id, rate_id,
+            call_type::text AS call_type, start_at, duration_minutes,
+            total_paid_kobo::text, payee_amount_kobo::text, platform_fee_kobo::text,
+            fee_mode_used::text, reservation_journal_id, created_at
+       FROM bookings WHERE id = $1`,
+    [callRow.booking_id],
+  );
+
+  const events = await pool.query<{
+    id: string;
+    event_type: string;
+    payload: unknown;
+    occurred_at: Date;
+  }>(
+    `SELECT id, event_type, payload, occurred_at
+       FROM call_events
+       WHERE call_id = $1
+       ORDER BY occurred_at ASC, id ASC`,
+    [callId],
+  );
+
+  const journals = await pool.query<{
+    id: string;
+    kind: string;
+    related_call_id: string | null;
+    created_at: Date;
+  }>(
+    `SELECT id, kind::text AS kind, related_call_id, created_at
+       FROM journal_entries
+       WHERE related_call_id = $1
+       ORDER BY created_at ASC, id ASC`,
+    [callId],
+  );
+
+  const bookingRow = booking.rows[0];
+
+  return new ServiceSuccess(
+    {
+      call: {
+        id: callRow.id,
+        booking_id: callRow.booking_id,
+        status: callRow.status,
+        agora_channel_name: callRow.agora_channel_name,
+        connected_seconds: callRow.connected_seconds,
+        caller_joined_at: callRow.caller_joined_at?.toISOString() ?? null,
+        callee_joined_at: callRow.callee_joined_at?.toISOString() ?? null,
+        caller_left_at: callRow.caller_left_at?.toISOString() ?? null,
+        callee_left_at: callRow.callee_left_at?.toISOString() ?? null,
+        ended_at: callRow.ended_at?.toISOString() ?? null,
+        settlement_journal_id: callRow.settlement_journal_id,
+        refund_journal_id: callRow.refund_journal_id,
+        created_at: callRow.created_at.toISOString(),
+      },
+      booking: bookingRow
+        ? {
+            id: bookingRow.id,
+            status: bookingRow.status,
+            caller_user_id: bookingRow.caller_user_id,
+            callee_user_id: bookingRow.callee_user_id,
+            rate_id: bookingRow.rate_id,
+            call_type: bookingRow.call_type,
+            start_at: bookingRow.start_at.toISOString(),
+            duration_minutes: bookingRow.duration_minutes,
+            total_paid_kobo: koboToJson(BigInt(bookingRow.total_paid_kobo)),
+            payee_amount_kobo: koboToJson(BigInt(bookingRow.payee_amount_kobo)),
+            platform_fee_kobo: koboToJson(BigInt(bookingRow.platform_fee_kobo)),
+            fee_mode_used: bookingRow.fee_mode_used,
+            reservation_journal_id: bookingRow.reservation_journal_id,
+            created_at: bookingRow.created_at.toISOString(),
+          }
+        : null,
+      events: events.rows.map((e) => ({
+        id: e.id,
+        event_type: e.event_type,
+        payload: e.payload,
+        occurred_at: e.occurred_at.toISOString(),
+      })),
+      journals: journals.rows.map((j) => ({
+        id: j.id,
+        kind: j.kind,
+        related_call_id: j.related_call_id,
+        created_at: j.created_at.toISOString(),
+      })),
+    },
+    MESSAGE_KEYS.ADMIN_CALL_DETAIL_FETCHED,
+  );
 };
 
 // ── GET /admin/bookings ─────────────────────────────────────────────────────

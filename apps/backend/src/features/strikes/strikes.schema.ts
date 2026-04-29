@@ -1,10 +1,20 @@
 import { z } from 'zod';
 
+const SubjectRoleEnum = z.enum(['professional', 'caller']);
+const ReasonEnum = z.enum([
+  'no_show',
+  'late_cancel',
+  'mid_call_quit',
+  'caller_no_show',
+  'caller_disconnect',
+]);
+
 export const ListStrikesQuerySchema = z
   .object({
     cursor: z.string().min(1).max(2048).optional(),
     limit: z.coerce.number().int().min(1).max(50).optional(),
     status: z.enum(['active', 'disputed', 'upheld', 'voided']).optional(),
+    subject_role: SubjectRoleEnum.optional(),
   })
   .strict();
 
@@ -19,8 +29,9 @@ export const AdminListStrikesQuerySchema = z
     cursor: z.string().min(1).max(2048).optional(),
     limit: z.coerce.number().int().min(1).max(50).optional(),
     status: z.enum(['active', 'disputed', 'upheld', 'voided']).optional(),
-    professional_user_id: z.string().min(1).max(64).optional(),
-    reason_code: z.enum(['no_show', 'late_cancel', 'mid_call_quit']).optional(),
+    subject_user_id: z.string().min(1).max(64).optional(),
+    subject_role: SubjectRoleEnum.optional(),
+    reason_code: ReasonEnum.optional(),
   })
   .strict();
 

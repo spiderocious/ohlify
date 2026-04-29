@@ -23,7 +23,6 @@ import type {
   ProfessionalDetailRow,
   ProfessionalListItem,
   ProfessionalListRow,
-  ReviewView,
 } from './professionals.types.js';
 
 const SHARE_SLUG_SUFFIX_LEN = 6;
@@ -32,7 +31,6 @@ const HOME_CACHE_TTL = 300;
 const LIST_CACHE_TTL = 120;
 const DETAIL_CACHE_TTL = 300;
 const RATES_CACHE_TTL = 300;
-const REVIEWS_CACHE_TTL = 300;
 
 const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -168,22 +166,22 @@ export const rates = async (professionalId: string) => {
 };
 
 // ── GET /professionals/:id/reviews ───────────────────────────────────────────
-
-// Reviews table doesn't ship until §10 (feedback + rating) lands. Return an
-// empty paginated page until then. Endpoint shape is final per spec §7.5.
-export const reviews = async (professionalId: string, _dto: ReviewsQueryDto) => {
+//
+// Delegates to the reviews feature now that §10 (reviews) has shipped. The
+// professional must still be visible (active + KYC-approved) for the page
+// to render — otherwise we'd surface reviews against a delisted pro.
+export const reviews = async (professionalId: string, dto: ReviewsQueryDto) => {
   const visible = await repo.isVisibleProfessional(professionalId);
   if (!visible) {
     return new ServiceError('not_found', MESSAGE_KEYS.PROFESSIONAL_NOT_FOUND, 404);
   }
-  const cacheKey = cacheKeys.reviewsEmpty(professionalId);
-  const page = await getOrCompute(cacheKey, REVIEWS_CACHE_TTL, () =>
-    Promise.resolve({
-      items: [] as ReviewView[],
-      meta: { next_cursor: null, has_more: false },
-    }),
-  );
-  return new ServiceSuccess(page, MESSAGE_KEYS.PROFESSIONAL_REVIEWS_FETCHED);
+  const { reviewsService } = await import('@features/reviews/index.js');
+  return reviewsService.listForProfessional(professionalId, {
+    ...(dto.cursor !== undefined ? { cursor: dto.cursor } : {}),
+    ...(dto.limit !== undefined ? { limit: dto.limit } : {}),
+    ...(dto.rating_min !== undefined ? { rating_min: dto.rating_min } : {}),
+    ...(dto.rating_max !== undefined ? { rating_max: dto.rating_max } : {}),
+  });
 };
 
 // ── GET /professionals/:id/availability ──────────────────────────────────────

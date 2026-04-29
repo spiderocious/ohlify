@@ -4,8 +4,10 @@ import express from 'express';
 import helmet from 'helmet';
 
 import { register as registerAdmin } from '@features/admin/index.js';
+import { register as registerAdminAuth } from '@features/admin-auth/index.js';
 import { register as registerAuth } from '@features/auth/index.js';
 import { register as registerBanks } from '@features/banks/index.js';
+import { register as registerBanners } from '@features/banners/index.js';
 import { register as registerBookings } from '@features/bookings/index.js';
 import { register as registerAgoraWebhook } from '@features/calls/agora.webhook.routes.js';
 import { register as registerCalls } from '@features/calls/index.js';
@@ -20,6 +22,7 @@ import { register as registerProfessionals } from '@features/professionals/index
 import { register as registerProfile } from '@features/profile/index.js';
 import { register as registerRates } from '@features/rates/index.js';
 import { register as registerRefunds } from '@features/refunds/index.js';
+import { register as registerReviews } from '@features/reviews/index.js';
 import { register as registerStrikes } from '@features/strikes/index.js';
 import { register as registerSupport } from '@features/support/index.js';
 import { register as registerWallet } from '@features/wallet/index.js';
@@ -58,16 +61,20 @@ const AGORA_WEBHOOK_PATH = '/api/v1/webhooks/agora';
 // dispute impossible. See QA findings C-NEW-07 (round 2 + round 3).
 //
 // Rule: ANY router under /api/v1/me with relaxed middleware MUST be
-// registered BEFORE both onboarding and profile. Strikes is the only one
-// today; if you add another (e.g. /api/v1/me/notifications-preferences
-// for a partially-active user), it MUST also go before onboarding/profile.
+// registered BEFORE both onboarding and profile. Today: strikes (relaxed —
+// suspended pros need to dispute) and reviews (just earlier-registered to
+// avoid future shadowing if /me/reviews-given ever needs relaxed gating).
+// If you add another (e.g. /api/v1/me/notifications-preferences for a
+// partially-active user), it MUST also go before onboarding/profile.
 const features = [
   registerHealth,
   registerAuth,
   registerStrikes, // /api/v1/me/strikes — must precede registerOnboarding + registerProfile
+  registerReviews, // /api/v1/me/reviews-given — must precede registerOnboarding + registerProfile
   registerOnboarding,
   registerProfile,
   registerBanks,
+  registerBanners,
   registerRates,
   registerCategories,
   registerProfessionals,
@@ -80,6 +87,7 @@ const features = [
   registerBookings,
   registerCalls,
   registerAgoraWebhook,
+  registerAdminAuth, // /api/v1/admin/auth/* — login/refresh/logout (public) + totp/setup,confirm (authed)
   registerAdmin,
   registerDev, // dev-only; no-op in production. Demo Agora token mint at /api/v1/dev/agora-token.
 ];

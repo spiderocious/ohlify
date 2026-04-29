@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Express } from 'express';
 
 import { validate } from '@lib/http/validateRequest.js';
+import { auditAdmin } from '@middlewares/auditAdmin.middleware.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireAdmin } from '@middlewares/requireAdmin.middleware.js';
 
@@ -29,7 +30,17 @@ export const register = (app: Express): void => {
   const admin = Router();
   admin.use(requireAdmin);
   admin.get('/', validate(AdminListStrikesQuerySchema, 'query'), controller.adminList);
-  admin.post('/:id/uphold', validate(AdminUpholdStrikeSchema), controller.adminUphold);
-  admin.post('/:id/void', validate(AdminVoidStrikeSchema), controller.adminVoid);
+  admin.post(
+    '/:id/uphold',
+    validate(AdminUpholdStrikeSchema),
+    auditAdmin({ action: 'strikes.uphold', targetType: 'strike' }),
+    controller.adminUphold,
+  );
+  admin.post(
+    '/:id/void',
+    validate(AdminVoidStrikeSchema),
+    auditAdmin({ action: 'strikes.void', targetType: 'strike' }),
+    controller.adminVoid,
+  );
   app.use('/api/v1/admin/strikes', admin);
 };

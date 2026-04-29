@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "prepare": "husky",
@@ -33,6 +34,18 @@
     "apps/backend/src/**/*.ts": [
       "prettier --write",
       "eslint --fix"
+    ],
+    "apps/customer-web/src/**/*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --config eslint.web.config.mjs --fix"
+    ],
+    "apps/admin-web/src/**/*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --config eslint.web.config.mjs --fix"
+    ],
+    "packages/*/src/**/*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --config eslint.web.config.mjs --fix"
     ]
   }
 }

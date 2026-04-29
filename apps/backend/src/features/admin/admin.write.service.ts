@@ -24,15 +24,12 @@ import type {
   ManualJournalDto,
 } from './admin.write.schema.js';
 
-// Slice B uses a stub admin id for all admin actions — replaced in §21.
-const STUB_ADMIN_ID = 'adm_stub';
-
 // ── POST /admin/wallets/manual-journal ──────────────────────────────────────
 
-export const postManualJournalAction = async (dto: ManualJournalDto) => {
+export const postManualJournalAction = async (dto: ManualJournalDto, adminId: string) => {
   try {
     const result = await postManualJournal({
-      adminId: STUB_ADMIN_ID,
+      adminId,
       note: dto.note,
       lines: dto.lines.map((l) => ({
         accountId: l.account_id,
@@ -69,6 +66,7 @@ interface AdminMoveResult {
 
 export const adminCreditAction = async (
   dto: AdminCreditDto,
+  adminId: string,
 ): Promise<ServiceSuccess<AdminMoveResult> | ServiceError> => {
   const user = await authRepo.findUserById(dto.user_id);
   if (!user) {
@@ -77,7 +75,7 @@ export const adminCreditAction = async (
     });
   }
   const result = await adminCreditUser({
-    adminId: STUB_ADMIN_ID,
+    adminId,
     userId: dto.user_id,
     amountKobo: BigInt(dto.amount_kobo),
     reason: dto.reason,
@@ -98,6 +96,7 @@ export const adminCreditAction = async (
 
 export const adminDebitAction = async (
   dto: AdminDebitDto,
+  adminId: string,
 ): Promise<ServiceSuccess<AdminMoveResult> | ServiceError> => {
   const user = await authRepo.findUserById(dto.user_id);
   if (!user) {
@@ -106,7 +105,7 @@ export const adminDebitAction = async (
     });
   }
   const result = await adminDebitUser({
-    adminId: STUB_ADMIN_ID,
+    adminId,
     userId: dto.user_id,
     amountKobo: BigInt(dto.amount_kobo),
     reason: dto.reason,
@@ -131,20 +130,28 @@ export const listRefunds = async (dto: AdminListRefundsQueryDto) => {
   return new ServiceSuccess(result.data, MESSAGE_KEYS.ADMIN_REFUNDS_LIST_FETCHED);
 };
 
-export const approveRefund = async (refundId: string, dto: AdminApproveRefundDto) => {
+export const approveRefund = async (
+  refundId: string,
+  dto: AdminApproveRefundDto,
+  adminId: string,
+) => {
   const result = await refundsService.approveRefund({
     refundId,
-    adminId: STUB_ADMIN_ID,
+    adminId,
     dto,
   });
   if (!result.success) return result;
   return new ServiceSuccess(result.data, MESSAGE_KEYS.ADMIN_REFUND_APPROVED);
 };
 
-export const rejectRefund = async (refundId: string, dto: AdminRejectRefundDto) => {
+export const rejectRefund = async (
+  refundId: string,
+  dto: AdminRejectRefundDto,
+  adminId: string,
+) => {
   const result = await refundsService.rejectRefund({
     refundId,
-    adminId: STUB_ADMIN_ID,
+    adminId,
     dto,
   });
   if (!result.success) return result;
@@ -231,6 +238,7 @@ export const listWithdrawalsAdmin = async (dto: AdminListWithdrawalsQueryDto) =>
 export const forceFailWithdrawal = async (
   withdrawalId: string,
   dto: AdminForceFailWithdrawalDto,
+  adminId: string,
 ) => {
   const client = await pool.connect();
   try {
@@ -252,7 +260,7 @@ export const forceFailWithdrawal = async (
     await walletRepo.setWithdrawalReversed(client, wd.id, dto.reason);
     await client.query('COMMIT');
     logger.warn(
-      { withdrawalId: wd.id, adminId: STUB_ADMIN_ID, reason: dto.reason },
+      { withdrawalId: wd.id, adminId, reason: dto.reason },
       'admin force-failed withdrawal',
     );
     return new ServiceSuccess(

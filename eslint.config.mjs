@@ -10,7 +10,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', '.nx/', 'apps/admin-web/**', 'apps/customer-web/**'],
+    ignores: [
+      'dist/',
+      'node_modules/',
+      '.nx/',
+      'apps/admin-web/**',
+      'apps/customer-web/**',
+      'packages/**',
+    ],
   },
   {
     files: ['apps/backend/src/**/*.ts'],

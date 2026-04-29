@@ -1,5 +1,4 @@
 import { pool } from '@lib/db/pool.js';
-import { logger } from '@lib/logger.js';
 
 import type {
   ProfessionalDetailRow,
@@ -8,55 +7,26 @@ import type {
   SortField,
 } from './professionals.types.js';
 
-// review_aggregates ships with §10 (feedback + rating). Until then the table
-// may be absent in some environments. We probe for it once on first use and
-// emit different SQL depending on the result. The cache is invalidated only on
-// process restart — when §10 deploys, the new table is picked up after the
-// next deploy. Acceptable for the pre-§10 launch window.
-let reviewAggregatesPresent: boolean | null = null;
+// review_aggregates ships with migration 0050 and is now mandatory. The
+// runtime probe that used to live here is gone — if the table doesn't exist
+// the SQL fails loudly, which is the correct behavior post-launch.
+const baseFieldsSql = (): string => `
+  u.id,
+  u.full_name,
+  u.occupation,
+  u.avatar_url,
+  u.is_available,
+  u.categories,
+  COALESCE(ra.rating, 0)::text AS rating,
+  COALESCE(ra.review_count, 0)::int AS review_count,
+  (
+    SELECT MIN(price_kobo)::text
+      FROM professional_rates pr
+     WHERE pr.user_id = u.id AND pr.deleted_at IS NULL
+  ) AS base_price_kobo
+`;
 
-const detectReviewAggregates = async (): Promise<boolean> => {
-  if (reviewAggregatesPresent !== null) return reviewAggregatesPresent;
-  const res = await pool.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-         FROM information_schema.tables
-        WHERE table_schema = current_schema()
-          AND table_name = 'review_aggregates'
-     ) AS exists`,
-  );
-  reviewAggregatesPresent = res.rows[0]?.exists ?? false;
-  if (!reviewAggregatesPresent) {
-    logger.warn(
-      {},
-      'review_aggregates table absent — professionals queries will return rating=0, review_count=0',
-    );
-  }
-  return reviewAggregatesPresent;
-};
-
-const baseFieldsSql = (hasAggregates: boolean): string => {
-  const ratingExpr = hasAggregates ? 'COALESCE(ra.rating, 0)::text' : `'0'::text`;
-  const countExpr = hasAggregates ? 'COALESCE(ra.review_count, 0)::int' : '0::int';
-  return `
-    u.id,
-    u.full_name,
-    u.occupation,
-    u.avatar_url,
-    u.is_available,
-    u.categories,
-    ${ratingExpr} AS rating,
-    ${countExpr} AS review_count,
-    (
-      SELECT MIN(price_kobo)::text
-        FROM professional_rates pr
-       WHERE pr.user_id = u.id AND pr.deleted_at IS NULL
-    ) AS base_price_kobo
-  `;
-};
-
-const aggregatesJoinSql = (hasAggregates: boolean): string =>
-  hasAggregates ? 'LEFT JOIN review_aggregates ra ON ra.user_id = u.id' : '';
+const aggregatesJoinSql = (): string => 'LEFT JOIN review_aggregates ra ON ra.user_id = u.id';
 
 const PROFESSIONAL_VISIBLE_PREDICATE = `
   u.role = 'professional'
@@ -75,17 +45,11 @@ interface ListInput {
 
 // SQL expression used for ORDER BY + cursor comparison. Numeric for rating /
 // price (so cursor compare is numeric, not lexicographic). Text for name.
-// When review_aggregates is missing, rating sort collapses to a constant
-// expression — the cursor walk still works because tied rows fall through to
-// the u.id ASC tiebreaker.
-const sortExprFor = (
-  sort: SortField,
-  hasAggregates: boolean,
-): { expr: string; cast: 'numeric' | 'text' } => {
+const sortExprFor = (sort: SortField): { expr: string; cast: 'numeric' | 'text' } => {
   switch (sort) {
     case 'rating':
       return {
-        expr: hasAggregates ? 'COALESCE(ra.rating, 0)' : '0::numeric',
+        expr: 'COALESCE(ra.rating, 0)',
         cast: 'numeric',
       };
     case 'price':
@@ -109,16 +73,23 @@ const sortExprFor = (
 // Cursor pagination on (sortExpr, u.id). The id tiebreaker is always ASC so
 // the cursor predicate `u.id > $idParam` walks forward regardless of sort
 // direction. The sort expression's direction follows `input.direction`.
+//
+// Search uses Postgres FTS over (full_name, occupation, interests). Migration
+// 0050 makes review_aggregates mandatory so the aggregates join is always
+// present. When two rows are equal on the primary sort, rating DESC is the
+// secondary tiebreaker (Phase 2 search polish).
 export const list = async (input: ListInput): Promise<ProfessionalListRow[]> => {
-  const hasAggregates = await detectReviewAggregates();
   const params: unknown[] = [];
   const conditions: string[] = [PROFESSIONAL_VISIBLE_PREDICATE];
 
   if (input.q !== undefined) {
     params.push(input.q);
     conditions.push(`
-      to_tsvector('simple', coalesce(u.full_name,'') || ' ' || coalesce(u.occupation,''))
-        @@ plainto_tsquery('simple', $${params.length})
+      to_tsvector('simple',
+        coalesce(u.full_name, '') || ' ' ||
+        coalesce(u.occupation, '') || ' ' ||
+        coalesce(array_to_string(u.interests, ' '), '')
+      ) @@ plainto_tsquery('simple', $${params.length})
     `);
   }
   if (input.category !== undefined) {
@@ -126,7 +97,7 @@ export const list = async (input: ListInput): Promise<ProfessionalListRow[]> => 
     conditions.push(`$${params.length} = ANY(u.categories)`);
   }
 
-  const { expr: sortExpr, cast } = sortExprFor(input.sort, hasAggregates);
+  const { expr: sortExpr, cast } = sortExprFor(input.sort);
   const dir = input.direction === 'asc' ? 'ASC' : 'DESC';
 
   if (input.cursor !== undefined) {
@@ -143,12 +114,17 @@ export const list = async (input: ListInput): Promise<ProfessionalListRow[]> => 
   params.push(input.limit + 1);
   const limitParam = `$${params.length}`;
 
+  // Secondary tiebreaker: rating DESC. Tertiary: u.id ASC (deterministic).
+  // When the primary sort already IS rating, the secondary is a no-op but
+  // harmless.
   const sql = `
-    SELECT ${baseFieldsSql(hasAggregates)}
+    SELECT ${baseFieldsSql()}
       FROM users u
-      ${aggregatesJoinSql(hasAggregates)}
+      ${aggregatesJoinSql()}
      WHERE ${conditions.join(' AND ')}
-     ORDER BY ${sortExpr} ${dir} NULLS LAST, u.id ASC
+     ORDER BY ${sortExpr} ${dir} NULLS LAST,
+              COALESCE(ra.rating, 0) DESC NULLS LAST,
+              u.id ASC
      LIMIT ${limitParam}
   `;
 
@@ -159,15 +135,14 @@ export const list = async (input: ListInput): Promise<ProfessionalListRow[]> => 
 export const findDetailById = async (
   professionalId: string,
 ): Promise<ProfessionalDetailRow | null> => {
-  const hasAggregates = await detectReviewAggregates();
   const sql = `
-    SELECT ${baseFieldsSql(hasAggregates)},
+    SELECT ${baseFieldsSql()},
            u.description,
            u.cover_photo_url,
            u.interests,
            u.handle
       FROM users u
-      ${aggregatesJoinSql(hasAggregates)}
+      ${aggregatesJoinSql()}
      WHERE u.id = $1
        AND ${PROFESSIONAL_VISIBLE_PREDICATE}
      LIMIT 1
