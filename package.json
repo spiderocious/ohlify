@@ -6,7 +6,9 @@
     "apps/*"
   ],
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "qa:spin-call": "node tools/qa/spin-call.mjs",
+    "qa:install": "node tools/qa/install-cli.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

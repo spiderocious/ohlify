@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora · video join · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+    <style>
+      .video-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .video-tile {
+        background: #000;
+        border-radius: 6px;
+        position: relative;
+        min-height: 160px;
+        overflow: hidden;
+      }
+      .video-tile .label {
+        position: absolute;
+        bottom: 4px;
+        left: 6px;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>agora</span> ·
+      <span>join video</span>
+    </nav>
+
+    <h1>Agora · join video channel</h1>
+    <p class="tagline">
+      Single-tab video join. Same as <a href="join-audio.html">join-audio</a>, with a
+      camera. Renders local preview + every remote camera in a grid.
+    </p>
+
+    <div class="panel">
+      <label for="appId">Agora App ID</label>
+      <input id="appId" type="text" placeholder="32-char hex from Agora dashboard" />
+
+      <label for="channel">Channel name</label>
+      <input id="channel" type="text" placeholder="call_c_..." />
+
+      <label for="uid">UID</label>
+      <input id="uid" type="number" placeholder="e.g. 1234567890" />
+
+      <label for="token">RTC token</label>
+      <textarea id="token" spellcheck="false"></textarea>
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button id="join">Join (audio + video)</button>
+        <button class="ghost" id="mute" disabled>Mute mic</button>
+        <button class="ghost" id="camOff" disabled>Camera off</button>
+        <button class="danger" id="leave" disabled>Leave</button>
+      </div>
+    </div>
+
+    <div class="video-grid" id="grid"></div>
+
+    <h3>Event log</h3>
+    <pre id="log">(no events yet)</pre>
+
+    <script type="module">
+      import { createCallSession, createLog, subscribeRemote } from '../shared/agora.js';
+
+      const log = createLog('log');
+      const grid = document.getElementById('grid');
+      const tiles = new Map();
+      let session = null;
+      let micMuted = false;
+      let camOff = false;
+
+      function ensureTile(uid, role) {
+        if (tiles.has(uid)) return tiles.get(uid);
+        const tile = document.createElement('div');
+        tile.className = 'video-tile';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = `${role} · ${uid}`;
+        tile.appendChild(label);
+        grid.appendChild(tile);
+        tiles.set(uid, tile);
+        return tile;
+      }
+
+      function removeTile(uid) {
+        const tile = tiles.get(uid);
+        if (tile) {
+          tile.remove();
+          tiles.delete(uid);
+        }
+      }
+
+      document.getElementById('join').addEventListener('click', async () => {
+        const appId = document.getElementById('appId').value.trim();
+        const channel = document.getElementById('channel').value.trim();
+        const uid = Number(document.getElementById('uid').value);
+        const token = document.getElementById('token').value.trim();
+        if (!appId || !channel || !uid || !token) {
+          alert('appId + channel + uid + token all required');
+          return;
+        }
+        try {
+          session = await createCallSession({
+            appId, channelName: channel, uid, token, withVideo: true, log,
+          });
+          document.getElementById('join').disabled = true;
+          document.getElementById('leave').disabled = false;
+          document.getElementById('mute').disabled = false;
+          document.getElementById('camOff').disabled = false;
+
+          // Local preview.
+          const localTile = ensureTile(uid, 'local');
+          session.localVideo?.play(localTile);
+
+          session.client.on('user-published', async (user, mediaType) => {
+            try {
+              if (mediaType === 'video') {
+                const tile = ensureTile(user.uid, 'remote');
+                await subscribeRemote(session.client, user, mediaType, tile, log);
+              } else {
+                await subscribeRemote(session.client, user, mediaType, null, log);
+              }
+            } catch (err) {
+              log.error('subscribe failed', { uid: user.uid, mediaType, err: String(err) });
+            }
+          });
+          session.client.on('user-unpublished', (user, mediaType) => {
+            log.info('remote unpublished', { uid: user.uid, mediaType });
+            if (mediaType === 'video') {
+              const tile = tiles.get(user.uid);
+              if (tile) {
+                tile.innerHTML = '';
+                const label = document.createElement('span');
+                label.className = 'label';
+                label.textContent = `remote · ${user.uid} (video off)`;
+                tile.appendChild(label);
+              }
+            }
+          });
+          session.client.on('user-left', (user) => removeTile(user.uid));
+        } catch (err) {
+          log.error('join failed', { err: String(err) });
+          alert(`Join failed: ${err.message ?? err}`);
+        }
+      });
+
+      document.getElementById('mute').addEventListener('click', async () => {
+        if (!session?.localAudio) return;
+        micMuted = !micMuted;
+        await session.localAudio.setMuted(micMuted);
+        document.getElementById('mute').textContent = micMuted ? 'Unmute mic' : 'Mute mic';
+        log.info(`mic ${micMuted ? 'muted' : 'unmuted'}`);
+      });
+
+      document.getElementById('camOff').addEventListener('click', async () => {
+        if (!session?.localVideo) return;
+        camOff = !camOff;
+        await session.localVideo.setMuted(camOff);
+        document.getElementById('camOff').textContent = camOff ? 'Camera on' : 'Camera off';
+        log.info(`camera ${camOff ? 'off' : 'on'}`);
+      });
+
+      document.getElementById('leave').addEventListener('click', async () => {
+        if (!session) return;
+        await session.leave();
+        session = null;
+        tiles.forEach((t) => t.remove());
+        tiles.clear();
+        document.getElementById('join').disabled = false;
+        document.getElementById('leave').disabled = true;
+        document.getElementById('mute').disabled = true;
+        document.getElementById('camOff').disabled = true;
+      });
+    </script>
+  </body>
+</html>

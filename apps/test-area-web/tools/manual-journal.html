@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manual journal · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>tools</span> ·
+      <span>manual journal</span>
+    </nav>
+
+    <h1>Admin · manual journal</h1>
+    <p class="tagline">
+      Post a balanced multi-line journal via <code>POST /api/v1/admin/wallets/manual-journal</code>.
+      Lines must sum to zero (the deferred trigger catches mistakes at COMMIT).
+    </p>
+
+    <div class="callout warn">
+      Real money operation. The confirm dialog shows the exact body before sending.
+    </div>
+
+    <div class="panel">
+      <label for="note">Note</label>
+      <input id="note" type="text" placeholder="What is this journal for?" />
+
+      <label for="lines">Lines (JSON array)</label>
+      <textarea id="lines" spellcheck="false">[
+  { "account_id": "acct_xxx", "signed_amount_kobo": 50000 },
+  { "account_id": "acct_yyy", "signed_amount_kobo": -50000 }
+]</textarea>
+
+      <label for="relatedUserId">Related user id (optional)</label>
+      <input id="relatedUserId" type="text" placeholder="u_..." />
+
+      <label for="relatedCallId">Related call id (optional)</label>
+      <input id="relatedCallId" type="text" placeholder="c_..." />
+
+      <label for="idempotencyKey">Idempotency key (optional)</label>
+      <input id="idempotencyKey" type="text" placeholder="manual-journal-2026-04-28-1" />
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button id="submit">Post journal</button>
+      </div>
+    </div>
+
+    <h3>Response</h3>
+    <pre id="result">(no request yet)</pre>
+
+    <h2>Quick-pick recipes</h2>
+    <p>Click to populate the form. Adjust account ids before posting.</p>
+    <div class="grid">
+      <a class="card" href="#" data-recipe="settlement">
+        <h3>call_settlement</h3>
+        <p>Drives the post-settle clawback path during refund testing.</p>
+      </a>
+      <a class="card" href="#" data-recipe="recon">
+        <h3>Reconciliation correction</h3>
+        <p>+/- between two accounts.</p>
+      </a>
+    </div>
+
+    <script type="module">
+      import { api, confirmRequest, renderResult } from '../shared/api.js';
+
+      const recipes = {
+        settlement: {
+          note: 'Test call_settlement (drives post-settle clawback)',
+          lines: [
+            { account_id: 'acct_pool_id_here', signed_amount_kobo: -300000 },
+            { account_id: 'acct_payee_user_id_here', signed_amount_kobo: 255000 },
+            { account_id: 'acct_platform_revenue_id_here', signed_amount_kobo: 45000 },
+          ],
+          related_call_id: 'c_test_1',
+          idempotency_key: 'qa-settle-' + Date.now(),
+        },
+        recon: {
+          note: 'Reconciliation correction',
+          lines: [
+            { account_id: 'acct_xxx', signed_amount_kobo: 1000 },
+            { account_id: 'acct_yyy', signed_amount_kobo: -1000 },
+          ],
+        },
+      };
+
+      document.querySelectorAll('[data-recipe]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          const r = recipes[el.dataset.recipe];
+          document.getElementById('note').value = r.note;
+          document.getElementById('lines').value = JSON.stringify(r.lines, null, 2);
+          document.getElementById('relatedCallId').value = r.related_call_id || '';
+          document.getElementById('idempotencyKey').value = r.idempotency_key || '';
+        });
+      });
+
+      document.getElementById('submit').addEventListener('click', async () => {
+        let lines;
+        try {
+          lines = JSON.parse(document.getElementById('lines').value);
+        } catch (e) {
+          alert('Lines must be valid JSON');
+          return;
+        }
+
+        const body = {
+          note: document.getElementById('note').value,
+          lines,
+        };
+        const ru = document.getElementById('relatedUserId').value.trim();
+        const rc = document.getElementById('relatedCallId').value.trim();
+        const ik = document.getElementById('idempotencyKey').value.trim();
+        if (ru) body.related_user_id = ru;
+        if (rc) body.related_call_id = rc;
+        if (ik) body.idempotency_key = ik;
+
+        if (!confirmRequest('POST', '/api/v1/admin/wallets/manual-journal', body)) return;
+
+        const r = await api('/api/v1/admin/wallets/manual-journal', {
+          method: 'POST',
+          body,
+          admin: true,
+        });
+        renderResult('result', r);
+      });
+    </script>
+  </body>
+</html>

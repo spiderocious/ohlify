@@ -55,6 +55,26 @@ export interface WalletConfig {
   max_funding_kobo: number;
   payout_mode: 'instant' | 'daily_batch' | 'manual_review';
   platform_fee_bps: number;
+  fee_mode: 'deduct_from_payee' | 'add_to_payer';
+  min_billable_seconds: number;
+  caller_no_show_refund_pct_bps: number;
+  caller_no_show_payee_pct_bps: number;
+}
+
+export interface BookingsConfig {
+  no_show_grace_seconds: number;
+  cancel_window_minutes: number;
+  inside_window_penalty_bps: number;
+  network_flap_window_seconds: number;
+  token_expires_seconds: number;
+}
+
+export interface ProfessionalConfig {
+  strike_on_no_show: boolean;
+  strike_on_late_cancel: boolean;
+  strike_on_mid_call_quit: boolean;
+  strikes_before_ban: number;
+  strike_dispute_window_days: number;
 }
 
 // Compiled-in defaults — used until the first DB load lands AND when an
@@ -98,6 +118,24 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     max_funding_kobo: 100_000_000,
     payout_mode: 'instant',
     platform_fee_bps: 1500,
+    fee_mode: 'deduct_from_payee',
+    min_billable_seconds: 30,
+    caller_no_show_refund_pct_bps: 2000,
+    caller_no_show_payee_pct_bps: 8000,
+  },
+  bookings: {
+    no_show_grace_seconds: 300,
+    cancel_window_minutes: 60,
+    inside_window_penalty_bps: 3000,
+    network_flap_window_seconds: 60,
+    token_expires_seconds: 3600,
+  },
+  professional: {
+    strike_on_no_show: true,
+    strike_on_late_cancel: true,
+    strike_on_mid_call_quit: true,
+    strikes_before_ban: 3,
+    strike_dispute_window_days: 14,
   },
 };
 
@@ -109,6 +147,8 @@ interface ConfigSnapshot {
   availability: AvailabilityConfig;
   support: SupportConfig;
   wallet: WalletConfig;
+  bookings: BookingsConfig;
+  professional: ProfessionalConfig;
 }
 
 let snapshot: ConfigSnapshot = DEFAULT_SNAPSHOT;
@@ -254,8 +294,69 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
         return d.wallet.payout_mode;
       })(),
       platform_fee_bps: num(
-        get('platform.fee_bps', d.wallet.platform_fee_bps),
+        get('wallet.platform_fee_bps', d.wallet.platform_fee_bps),
         d.wallet.platform_fee_bps,
+      ),
+      fee_mode: ((): WalletConfig['fee_mode'] => {
+        const v = get('wallet.fee_mode', d.wallet.fee_mode);
+        if (v === 'deduct_from_payee' || v === 'add_to_payer') return v;
+        return d.wallet.fee_mode;
+      })(),
+      min_billable_seconds: num(
+        get('wallet.min_billable_seconds', d.wallet.min_billable_seconds),
+        d.wallet.min_billable_seconds,
+      ),
+      caller_no_show_refund_pct_bps: num(
+        get('wallet.caller_no_show_refund_pct_bps', d.wallet.caller_no_show_refund_pct_bps),
+        d.wallet.caller_no_show_refund_pct_bps,
+      ),
+      caller_no_show_payee_pct_bps: num(
+        get('wallet.caller_no_show_payee_pct_bps', d.wallet.caller_no_show_payee_pct_bps),
+        d.wallet.caller_no_show_payee_pct_bps,
+      ),
+    },
+    bookings: {
+      no_show_grace_seconds: num(
+        get('bookings.no_show_grace_seconds', d.bookings.no_show_grace_seconds),
+        d.bookings.no_show_grace_seconds,
+      ),
+      cancel_window_minutes: num(
+        get('bookings.cancel_window_minutes', d.bookings.cancel_window_minutes),
+        d.bookings.cancel_window_minutes,
+      ),
+      inside_window_penalty_bps: num(
+        get('bookings.inside_window_penalty_bps', d.bookings.inside_window_penalty_bps),
+        d.bookings.inside_window_penalty_bps,
+      ),
+      network_flap_window_seconds: num(
+        get('bookings.network_flap_window_seconds', d.bookings.network_flap_window_seconds),
+        d.bookings.network_flap_window_seconds,
+      ),
+      token_expires_seconds: num(
+        get('bookings.token_expires_seconds', d.bookings.token_expires_seconds),
+        d.bookings.token_expires_seconds,
+      ),
+    },
+    professional: {
+      strike_on_no_show: bool(
+        get('professional.strike_on_no_show', d.professional.strike_on_no_show),
+        d.professional.strike_on_no_show,
+      ),
+      strike_on_late_cancel: bool(
+        get('professional.strike_on_late_cancel', d.professional.strike_on_late_cancel),
+        d.professional.strike_on_late_cancel,
+      ),
+      strike_on_mid_call_quit: bool(
+        get('professional.strike_on_mid_call_quit', d.professional.strike_on_mid_call_quit),
+        d.professional.strike_on_mid_call_quit,
+      ),
+      strikes_before_ban: num(
+        get('professional.strikes_before_ban', d.professional.strikes_before_ban),
+        d.professional.strikes_before_ban,
+      ),
+      strike_dispute_window_days: num(
+        get('professional.strike_dispute_window_days', d.professional.strike_dispute_window_days),
+        d.professional.strike_dispute_window_days,
       ),
     },
   };
@@ -309,6 +410,8 @@ export const platformConfig = {
   availability: (): AvailabilityConfig => snapshot.availability,
   support: (): SupportConfig => snapshot.support,
   wallet: (): WalletConfig => snapshot.wallet,
+  bookings: (): BookingsConfig => snapshot.bookings,
+  professional: (): ProfessionalConfig => snapshot.professional,
   // For diagnostics — when was the snapshot last refreshed?
   snapshotAge: (): number => Date.now() - lastRefreshAt,
 };

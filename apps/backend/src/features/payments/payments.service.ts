@@ -176,14 +176,19 @@ const findWithdrawalForTransfer = async (
   data: TransferEventData,
 ): Promise<walletRepo.WithdrawalRow | null> => {
   // Prefer the transfer_code (stored on the withdrawal row at initiation
-  // time). Fall back to the reference, which we set to `wd_<id>`.
+  // time). Fall back to the reference, which equals the bare withdrawal id
+  // (`wd_*`). Pre-OPS-NEW-01 in-flight withdrawals carry a doubled prefix
+  // (`wd_wd_*`) — we strip the leading `wd_` once so those still resolve
+  // until they drain.
   if (typeof data.transfer_code === 'string') {
     const row = await walletRepo.findWithdrawalByTransferCode(runner, data.transfer_code);
     if (row) return row;
   }
   if (typeof data.reference === 'string' && data.reference.startsWith('wd_')) {
-    const wdId = data.reference.slice(3);
-    const row = await walletRepo.findWithdrawalByIdForUpdate(runner, wdId);
+    const candidate = data.reference.startsWith('wd_wd_')
+      ? data.reference.slice(3)
+      : data.reference;
+    const row = await walletRepo.findWithdrawalByIdForUpdate(runner, candidate);
     if (row) return row;
   }
   return null;

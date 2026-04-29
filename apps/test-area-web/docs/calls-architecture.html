@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calls architecture · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>docs</span> ·
+      <span>calls architecture</span>
+    </nav>
+
+    <h1>Calls + Bookings · architecture</h1>
+    <p class="tagline">
+      Phase 0 doc. Read this before any code lands. Push back on anything that doesn't make
+      sense — every architectural call is reversible at this stage and locked in once we
+      start migrations.
+    </p>
+
+    <div class="callout">
+      <strong>How to use this doc:</strong> read it once top-to-bottom. Disagree with
+      something? Say so before phase 2 (schema). Once tables exist with data in them,
+      changing them costs migrations and downtime.
+    </div>
+
+    <h2>1. What this slice ships</h2>
+    <p>
+      End-to-end booking + calling between a caller (consumer) and a callee (professional).
+      Concretely:
+    </p>
+    <ol>
+      <li>Caller browses a professional's available slots and books one (<code>POST /bookings</code>).</li>
+      <li>Booking creation reserves wallet money for the call price + platform fee.</li>
+      <li>At call time both parties hit <code>POST /calls/:id/join</code> and get an Agora RTC token.</li>
+      <li>They join the channel, talk, hang up.</li>
+      <li>Backend settles the wallet (split between pro + platform), records strikes if a side no-showed, fires outbox events.</li>
+      <li>Cancellations, no-shows, mid-call disconnects, network flaps all have explicit handling.</li>
+    </ol>
+    <p><em>Out of scope:</em> reviews/ratings (fast-follow slice), recording, group calls, scheduled-then-rescheduled flow. Reschedule is cancel-and-rebook for now.</p>
+
+    <h2>2. Components</h2>
+    <pre>
+┌─────────────────┐    ┌─────────────────────────────────────────────────────┐    ┌─────────────┐
+│   Mobile app    │    │                    Backend                          │    │   Agora     │
+│   (caller +     │    │                                                     │    │   (RTC      │
+│    callee)      │    │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │    │   network)  │
+│                 │    │  │ bookings │  │  calls   │  │  wallet engine   │   │    │             │
+└────────┬────────┘    │  │ feature  │  │ feature  │  │  (slice A + B)   │   │    └──────┬──────┘
+         │             │  └──────────┘  └──────────┘  └──────────────────┘   │           │
+         │  HTTPS      │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │           │
+         ├────────────►│  │ strikes  │  │ outbox   │  │ Agora RTC tokens │◄──────────────┤  webhooks
+         │             │  │ feature  │  │ worker   │  │ lib/agora/       │   │   HTTPS   │
+         │             │  └──────────┘  └──────────┘  └──────────────────┘   │           │
+         │             │                                                     │           │
+         │   audio/video over Agora (does not pass through our backend)      │           │
+         └◄════════════════════════════════════════════════════════════════════════════════════►
+                                                                                          │
+    </pre>
+    <p>
+      Audio/video bytes never touch our backend. We mint short-lived RTC tokens that grant
+      clients permission to join a named channel; Agora handles the rest. Our backend
+      tracks "did they join", "for how long", "did one side disconnect", and reacts.
+    </p>
+
+    <h2>3. Two fee modes</h2>
+    <p>
+      The platform fee is configurable via <code>wallet.fee_mode</code> in
+      <code>platform_config</code>. Both modes always pay the platform when the pro is
+      paid — full refund is the only path where platform earns nothing.
+    </p>
+
+    <h3>Mode A — <code>deduct_from_payee</code> (default)</h3>
+    <p>The price the user sees is what they pay. Platform fee comes out of the pro's earnings.</p>
+    <table>
+      <thead><tr><th>Pro's hourly rate</th><th>Caller pays</th><th>Pro receives</th><th>Platform earns</th></tr></thead>
+      <tbody><tr><td>₦400</td><td>₦400</td><td>₦360 (90%)</td><td>₦40 (10%)</td></tr></tbody>
+    </table>
+    <p>
+      Journal at booking (<code>call_payment_reserve</code>): <code>pending_debits_pool +400, user_wallet -400</code>.<br />
+      Journal at settlement (<code>call_settlement</code>): <code>payee_wallet +360, platform_revenue +40, pending_debits_pool -400</code>.
+    </p>
+
+    <h3>Mode B — <code>add_to_payer</code></h3>
+    <p>The pro's rate is what the pro receives. Platform fee is added on top at checkout.</p>
+    <table>
+      <thead><tr><th>Pro's hourly rate</th><th>Caller pays</th><th>Pro receives</th><th>Platform earns</th></tr></thead>
+      <tbody><tr><td>₦400</td><td>₦440</td><td>₦400 (100%)</td><td>₦40 (10%)</td></tr></tbody>
+    </table>
+    <p>
+      Journal at booking (<code>call_payment_reserve</code>): <code>pending_debits_pool +440, user_wallet -440</code>.<br />
+      Journal at settlement (<code>call_settlement</code>): <code>payee_wallet +400, platform_revenue +40, pending_debits_pool -440</code>.
+    </p>
+
+    <h3>How the booking remembers which mode it used</h3>
+    <p>
+      <strong>Critical:</strong> the booking row snapshots <code>fee_mode_used</code> at
+      creation time. A config flip mid-booking-lifecycle does NOT retroactively re-split.
+      The settlement reads the snapshot, not the live config. Same principle as
+      <code>bank_snapshot</code> on withdrawals.
+    </p>
+    <p>The booking row stores three amount fields, derived from the rate + mode at booking time:</p>
+    <ul>
+      <li><code>total_paid_kobo</code> — what the caller's wallet was actually debited.</li>
+      <li><code>payee_amount_kobo</code> — what the pro receives on full settlement.</li>
+      <li><code>platform_fee_kobo</code> — what platform_revenue gets on full settlement.</li>
+    </ul>
+    <p><code>total_paid_kobo = payee_amount_kobo + platform_fee_kobo</code> always holds.</p>
+
+    <h2>4. Bookings vs Calls — separate tables</h2>
+    <p>
+      <strong>Decision: separate.</strong> A booking is "an intent to call at time T"; a call
+      is "an actual session that happened (or didn't)". Reasons:
+    </p>
+    <ul>
+      <li>A booking has a 1:1 with a call only on the happy path. Cancellation removes a booking; no call ever existed. Reschedule (post-launch) creates a new booking from an old one.</li>
+      <li>Different lifecycles: bookings have <code>cancel_window</code> and a single transition. Calls have join events, leave events, status flips, partial settlement.</li>
+      <li>Querying "show my upcoming bookings" vs "show my call history" want different shapes.</li>
+    </ul>
+    <p>
+      A call row is created when the booking confirms (i.e. when wallet reservation succeeds),
+      not at <em>start_at</em>. The call sits in <code>scheduled</code> status until
+      both sides have joined.
+    </p>
+
+    <h2>5. State machines</h2>
+
+    <h3>Booking</h3>
+    <pre>
+                        (cancel before window)
+                ┌──────────────────────────────────────────► cancelled_outside_window
+                │                                                (full refund + fee)
+   pending ◄───┤
+   (briefly)   │   (cancel inside window)
+               ├───────────────────────────────────────────► cancelled_inside_window
+               │                                                (partial refund, penalty kept)
+               │
+               │   (call wraps up successfully or partially)
+               └───────────────────────────────────────────► fulfilled
+                                                                (terminal — see call status for detail)
+
+   pending → confirmed: synchronous, happens during POST /bookings if wallet.pay succeeds.
+   confirmed: terminal for the booking; the call row drives the rest.
+    </pre>
+
+    <h3>Call</h3>
+    <pre>
+   scheduled ──►(start_at + grace) ──► waiting_for_parties
+                                            │
+                              ┌─────────────┼──────────────┐
+                              │             │              │
+                       both join         only caller    only callee     neither
+                              │             │              │              │
+                              ▼             ▼              ▼              ▼
+                       in_progress    no_show_callee  no_show_caller  no_show_both
+                              │       (full refund)   (refund x%,     (full refund,
+                              │       (pro strike)     pro gets y%)    no strikes)
+                              │
+                              │  (both leave normally)
+                              ├─────────────────────────────► completed
+                              │                               (full settle, pro-rated by connected_seconds)
+                              │
+                              │  (one side disconnects, other waits, network flap window expires)
+                              ├─────────────────────────────► disconnected_caller
+                              │                               (partial settle, pro paid for connected time)
+                              │                               (caller strike if config says so)
+                              │
+                              └─────────────────────────────► disconnected_callee
+                                                              (partial settle, pro paid for connected time)
+                                                              (pro strike if config says so)
+    </pre>
+
+    <h2>6. Money flows by terminal state</h2>
+    <p>
+      Reservation amount = <code>total_paid_kobo</code>. Whatever doesn't go to the pro
+      goes back to the caller as a refund. Whatever doesn't go to the caller goes to the
+      pro and to platform_revenue (split per fee_mode + connected fraction).
+    </p>
+    <p>
+      <strong>Platform always gets paid when the pro gets paid.</strong> Platform's share
+      scales with whatever fraction the pro is paid: if the pro receives 100% of their
+      cut, platform gets 100% of the fee; if pro is pro-rated to 50%, platform gets 50%
+      of the fee. Full refund = 0 fee.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Terminal state</th>
+          <th>Caller refund</th>
+          <th>Pro receives</th>
+          <th>Platform receives</th>
+          <th>Strike</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>completed</code> (both stayed)</td>
+          <td>0</td>
+          <td>full <code>payee_amount_kobo</code></td>
+          <td>full <code>platform_fee_kobo</code></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>completed</code> (pro-rated, connected ≥ min_billable)</td>
+          <td><code>(1-frac) × total_paid</code></td>
+          <td><code>frac × payee_amount</code></td>
+          <td><code>frac × platform_fee</code></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>disconnected_caller</code></td>
+          <td><code>(1-frac) × total_paid</code></td>
+          <td><code>frac × payee_amount</code></td>
+          <td><code>frac × platform_fee</code></td>
+          <td>caller (if config on)</td>
+        </tr>
+        <tr>
+          <td><code>disconnected_callee</code></td>
+          <td><code>(1-frac) × total_paid</code></td>
+          <td><code>frac × payee_amount</code></td>
+          <td><code>frac × platform_fee</code></td>
+          <td>pro (if config on)</td>
+        </tr>
+        <tr>
+          <td><code>no_show_caller</code> (pro waited)</td>
+          <td><code>x% × total_paid</code></td>
+          <td><code>y% × payee_amount</code></td>
+          <td><code>y% × platform_fee</code></td>
+          <td>caller (if config on)</td>
+        </tr>
+        <tr>
+          <td><code>no_show_callee</code> (caller waited)</td>
+          <td>full <code>total_paid</code></td>
+          <td>0</td>
+          <td>0</td>
+          <td>pro (if config on)</td>
+        </tr>
+        <tr>
+          <td><code>no_show_both</code></td>
+          <td>full <code>total_paid</code></td>
+          <td>0</td>
+          <td>0</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>cancelled_outside_window</code></td>
+          <td>full <code>total_paid</code></td>
+          <td>0</td>
+          <td>0</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>cancelled_inside_window</code> (caller cancels)</td>
+          <td><code>(1-penalty%) × total_paid</code></td>
+          <td>0</td>
+          <td><code>penalty% × total_paid</code> (cancellation fee → platform_revenue)</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>cancelled_inside_window</code> (pro cancels)</td>
+          <td>full <code>total_paid</code></td>
+          <td>0</td>
+          <td>0</td>
+          <td>pro (if config on)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Where <code>frac = connected_seconds / scheduled_seconds</code>, and the no-show
+      <code>x% + y% = 100%</code> by config constraint.
+    </p>
+
+    <h3>Note on cancellation_inside_window penalty destination</h3>
+    <p>
+      When the caller cancels inside the window, the kept penalty goes to platform_revenue
+      (not the pro), because no service was rendered. The pro is incentivized via the
+      "no-show by caller" path: if they want compensation they need to actually show up
+      and wait. This is a deliberate choice — open to argument, but I think it's right.
+    </p>
+
+    <h2>7. Strikes</h2>
+    <p>
+      A strike is a black mark against a professional that counts toward an automatic ban
+      threshold. Configurable triggers; configurable threshold; configurable dispute
+      window. The pro can dispute, admin reviews.
+    </p>
+
+    <h3>Triggers (each independently toggleable)</h3>
+    <ul>
+      <li><code>professional.strike_on_no_show</code> — pro didn't show at start time + grace.</li>
+      <li><code>professional.strike_on_late_cancel</code> — pro cancelled inside the cancellation window.</li>
+      <li><code>professional.strike_on_mid_call_quit</code> — pro disconnected mid-call and didn't re-join within network-flap window.</li>
+    </ul>
+
+    <h3>Strike lifecycle</h3>
+    <pre>
+   active ─── (pro disputes within strike_dispute_window_days) ───► disputed
+     │                                                                   │
+     │                                                                   │ (admin reviews)
+     │                                                            ┌──────┴──────┐
+     │                                                            ▼             ▼
+     │                                                          upheld        voided
+     │                                                       (counts toward  (does not count)
+     │                                                        ban threshold)
+     │
+     │ (admin manually voids without dispute)
+     └───────────────────────────────────► voided
+    </pre>
+    <p>
+      Only <code>active</code> and <code>upheld</code> strikes count toward the ban
+      threshold. <code>disputed</code> doesn't count until resolved (so a pro under review
+      isn't suddenly auto-banned by the next strike landing).
+    </p>
+
+    <h3>Auto-ban</h3>
+    <p>
+      When a strike lands and total counting strikes ≥
+      <code>professional.strikes_before_ban</code>, the user gets flagged
+      <code>account_status = 'suspended'</code> automatically. Admin can lift via the
+      existing user moderation endpoints (already in <code>profile</code> /
+      <code>admin</code> features). Pro sees a message on profile screen explaining the
+      ban + what to dispute.
+    </p>
+
+    <h3>Endpoints (Calls slice ships these)</h3>
+    <ul>
+      <li><code>GET /me/strikes</code> — pro lists their own strikes (active, disputed, upheld, voided), shows count toward ban + remaining-before-ban.</li>
+      <li><code>POST /strikes/:id/dispute</code> — pro disputes within window, body: <code>{ comment: string }</code>. Sets status <code>disputed</code>.</li>
+      <li><code>GET /admin/strikes</code> — admin lists all strikes, filterable by status / professional / reason.</li>
+      <li><code>POST /admin/strikes/:id/uphold</code> — admin upholds a disputed strike (final).</li>
+      <li><code>POST /admin/strikes/:id/void</code> — admin voids a strike. Body: <code>{ reason: string }</code>. Final.</li>
+    </ul>
+
+    <h2>8. Configurable knobs (all under <code>platform_config</code>)</h2>
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td><code>wallet.fee_mode</code></td><td><code>deduct_from_payee</code></td><td>A or B, see §3</td></tr>
+        <tr><td><code>wallet.platform_fee_bps</code></td><td>1500 (15%)</td><td>existing — basis points of the call price</td></tr>
+        <tr><td><code>wallet.min_billable_seconds</code></td><td>30</td><td>below this, treat as no-show</td></tr>
+        <tr><td><code>wallet.caller_no_show_refund_pct_bps</code></td><td>2000 (20%)</td><td>caller no-show: refund slice</td></tr>
+        <tr><td><code>wallet.caller_no_show_payee_pct_bps</code></td><td>8000 (80%)</td><td>caller no-show: pro slice (must sum 10000 with above)</td></tr>
+        <tr><td><code>bookings.no_show_grace_seconds</code></td><td>300 (5 min)</td><td>after start_at, when do we mark no-show</td></tr>
+        <tr><td><code>bookings.cancel_window_minutes</code></td><td>60</td><td>cancel ≥ this many min before start = "outside window"</td></tr>
+        <tr><td><code>bookings.inside_window_penalty_bps</code></td><td>3000 (30%)</td><td>inside-window cancel: kept as cancellation fee</td></tr>
+        <tr><td><code>bookings.network_flap_window_seconds</code></td><td>60</td><td>how long we wait for a disconnected side to come back</td></tr>
+        <tr><td><code>professional.strike_on_no_show</code></td><td>true</td><td>strike if pro no-shows</td></tr>
+        <tr><td><code>professional.strike_on_late_cancel</code></td><td>true</td><td>strike if pro cancels inside window</td></tr>
+        <tr><td><code>professional.strike_on_mid_call_quit</code></td><td>true</td><td>strike if pro mid-call drops without rejoin</td></tr>
+        <tr><td><code>professional.strikes_before_ban</code></td><td>3</td><td>auto-ban threshold</td></tr>
+        <tr><td><code>professional.strike_dispute_window_days</code></td><td>14</td><td>pro can only dispute within this window</td></tr>
+      </tbody>
+    </table>
+
+    <h2>9. Database schema (draft)</h2>
+    <p>To finalize in phase 2, but the shape is locked here.</p>
+
+    <h3><code>bookings</code></h3>
+    <pre>
+id                    TEXT PRIMARY KEY        -- bk_*
+caller_user_id        TEXT NOT NULL REFERENCES users(id)
+callee_user_id        TEXT NOT NULL REFERENCES users(id)
+rate_id               TEXT NOT NULL REFERENCES professional_rates(id)
+call_type             TEXT NOT NULL CHECK (call_type IN ('audio','video'))
+start_at              TIMESTAMPTZ NOT NULL
+duration_minutes      INT NOT NULL
+status                booking_status NOT NULL DEFAULT 'pending'
+total_paid_kobo       BIGINT NOT NULL              -- caller's wallet debit
+payee_amount_kobo     BIGINT NOT NULL              -- pro receives on full settle
+platform_fee_kobo     BIGINT NOT NULL              -- platform on full settle
+fee_mode_used         TEXT NOT NULL                -- 'deduct_from_payee' | 'add_to_payer' (snapshot)
+reservation_journal_id TEXT REFERENCES journal_entries(id)  -- the call_payment_reserve
+created_at, updated_at, cancelled_at, cancelled_by_user_id
+    </pre>
+
+    <h3><code>calls</code></h3>
+    <pre>
+id                    TEXT PRIMARY KEY        -- c_*
+booking_id            TEXT NOT NULL REFERENCES bookings(id) UNIQUE
+status                call_status NOT NULL DEFAULT 'scheduled'
+agora_channel_name    TEXT NOT NULL UNIQUE          -- always equals 'call_' || id
+caller_joined_at      TIMESTAMPTZ
+callee_joined_at      TIMESTAMPTZ
+caller_left_at        TIMESTAMPTZ
+callee_left_at        TIMESTAMPTZ
+connected_seconds     INT                           -- max overlap of joined intervals
+settlement_journal_id TEXT REFERENCES journal_entries(id)
+refund_journal_id     TEXT REFERENCES journal_entries(id)
+created_at, updated_at, ended_at
+    </pre>
+
+    <h3><code>call_events</code> (append-only audit)</h3>
+    <pre>
+id          TEXT PRIMARY KEY            -- ce_*
+call_id     TEXT NOT NULL REFERENCES calls(id)
+event_type  TEXT NOT NULL               -- 'caller_joined','callee_joined','caller_left','callee_left',
+                                        -- 'token_renewed','agora_webhook_received','status_changed', etc
+payload     JSONB NOT NULL
+occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    </pre>
+
+    <h3><code>professional_strikes</code></h3>
+    <pre>
+id                       TEXT PRIMARY KEY     -- str_*
+professional_user_id     TEXT NOT NULL REFERENCES users(id)
+related_call_id          TEXT REFERENCES calls(id)
+related_booking_id       TEXT REFERENCES bookings(id)
+reason_code              TEXT NOT NULL        -- 'no_show','late_cancel','mid_call_quit'
+description              TEXT
+status                   strike_status NOT NULL DEFAULT 'active'
+                                              -- 'active','disputed','upheld','voided'
+dispute_comment          TEXT
+admin_review_comment     TEXT
+reviewed_by_admin_id     TEXT
+reviewed_at              TIMESTAMPTZ
+disputed_at              TIMESTAMPTZ
+created_at, updated_at
+    </pre>
+
+    <h3>Status enums (new)</h3>
+    <pre>
+booking_status: 'pending','confirmed','cancelled_outside_window','cancelled_inside_window','fulfilled'
+call_status:    'scheduled','waiting_for_parties','in_progress','completed',
+                'no_show_caller','no_show_callee','no_show_both',
+                'disconnected_caller','disconnected_callee'
+strike_status:  'active','disputed','upheld','voided'
+    </pre>
+    <p>
+      Each enum gets a status-transition trigger like the wallet ones — illegal
+      transitions rejected at DB layer. Cheap insurance.
+    </p>
+
+    <h2>10. Endpoints (full surface)</h2>
+
+    <h3>User-facing</h3>
+    <ul>
+      <li><code>POST /api/v1/bookings</code> — create booking, returns booking + call.</li>
+      <li><code>GET  /api/v1/bookings</code> — paginated list of caller's bookings.</li>
+      <li><code>GET  /api/v1/bookings/:id</code> — single booking (caller or callee).</li>
+      <li><code>POST /api/v1/bookings/:id/cancel</code> — cancel before <code>start_at</code>; refund per policy.</li>
+      <li><code>GET  /api/v1/calls</code> — paginated list of user's calls (caller or callee).</li>
+      <li><code>GET  /api/v1/calls/:id</code> — single call.</li>
+      <li><code>POST /api/v1/calls/:id/join</code> — issue Agora RTC token. Records join.</li>
+      <li><code>POST /api/v1/calls/:id/leave</code> — record leave; may trigger settlement if both sides left.</li>
+      <li><code>POST /api/v1/calls/:id/renew-token</code> — pre-expiry token refresh, no state change.</li>
+      <li><code>GET  /api/v1/me/strikes</code> — pro's own strikes.</li>
+      <li><code>POST /api/v1/strikes/:id/dispute</code> — pro disputes a strike.</li>
+    </ul>
+
+    <h3>Admin</h3>
+    <ul>
+      <li><code>POST /api/v1/admin/calls/test-init</code> — phase 4: skip booking, mint a call + tokens directly. <em>(test area helper)</em></li>
+      <li><code>GET  /api/v1/admin/bookings</code> — filterable list.</li>
+      <li><code>GET  /api/v1/admin/calls</code> — filterable list (status / user / date).</li>
+      <li><code>POST /api/v1/admin/calls/:id/force-end</code> — operator escape hatch. Settles or refunds per state.</li>
+      <li><code>GET  /api/v1/admin/strikes</code> — filterable list.</li>
+      <li><code>POST /api/v1/admin/strikes/:id/uphold</code></li>
+      <li><code>POST /api/v1/admin/strikes/:id/void</code></li>
+    </ul>
+
+    <h3>Webhooks</h3>
+    <ul>
+      <li><code>POST /api/v1/webhooks/agora</code> — Agora notifications. Listening for: channel created, user joined, user left, channel destroyed. Verifies HMAC. Records into <code>call_events</code>.</li>
+    </ul>
+
+    <h2>11. Agora — what we use, what we choose</h2>
+    <ul>
+      <li><strong>RTC.</strong> Yes. Audio + video.</li>
+      <li><strong>Tokens.</strong> Server-issued, short-lived (~1 hour), scoped to (channel, uid, role=publisher). Backend mints via the App Certificate. Mobile never sees the certificate.</li>
+      <li><strong>RTM (signaling).</strong> No. We don't need it — call lifecycle is driven by our backend's join/leave endpoints + Agora's webhooks for ground truth.</li>
+      <li><strong>Cloud recording.</strong> No, deferred. Adds cost + legal complexity. Revisit when reviews/disputes demand it.</li>
+      <li><strong>Webhooks (Agora notifications).</strong> Yes — for ground-truth "did they actually join the channel?" Backed up by client-reported join/leave so we have two sources.</li>
+      <li><strong>Channel naming.</strong> <code>call_&lt;call_id&gt;</code>. UUID-shaped, globally unique. Caller UID = stable hash of caller_user_id, callee UID = stable hash of callee_user_id (Agora UIDs are 32-bit ints).</li>
+      <li><strong>Token expiration.</strong> 1 hour from issuance. Mobile renews via <code>POST /calls/:id/renew-token</code> 5 min before expiry.</li>
+    </ul>
+
+    <h2>12. Lifecycle — who decides "the call is over"?</h2>
+    <p>
+      <strong>Three sources of truth, in priority order:</strong>
+    </p>
+    <ol>
+      <li><strong>Both sides explicitly leave</strong> via <code>POST /calls/:id/leave</code>. Cleanest.</li>
+      <li><strong>Agora webhook says channel is empty</strong> — both sides disconnected (clean leave or network drop). Triggered after Agora's own ~30s grace.</li>
+      <li><strong>Scheduled end + grace</strong> — if duration ran out and we haven't heard from anyone, we end it ourselves.</li>
+    </ol>
+    <p>
+      The settlement fires once, idempotently, the moment the call is determined to have
+      ended. Idempotency key on the settlement journal is <code>call:&lt;call_id&gt;:settle</code>.
+      Whichever signal arrives first wins; the others are no-ops.
+    </p>
+
+    <h2>13. Time tracking — connected_seconds</h2>
+    <p>
+      <code>connected_seconds = max(0, min(caller_left_at, callee_left_at) - max(caller_joined_at, callee_joined_at))</code>
+    </p>
+    <p>
+      i.e. the window where both were in the channel simultaneously. If one party joins,
+      sits alone for 30s, the other joins for 5 min, then both leave: connected = 5 min.
+      The lonely 30s isn't billable.
+    </p>
+    <p>
+      Network flaps are tricky. If a side disconnects and rejoins within
+      <code>network_flap_window_seconds</code>, we treat it as continuous (no gap deducted).
+      If beyond, it's a disconnect — we settle as <code>disconnected_X</code> with
+      whatever connected time we recorded.
+    </p>
+
+    <h2>14. Idempotency keys</h2>
+    <ul>
+      <li>Booking creation: <code>POST /bookings</code> accepts <code>Idempotency-Key</code> header. Same key → same booking.</li>
+      <li>Reservation journal: <code>call:&lt;call_id&gt;:reserve</code> (existing wallet flow convention).</li>
+      <li>Settlement journal: <code>call:&lt;call_id&gt;:settle</code>.</li>
+      <li>Refund journal: <code>call:&lt;call_id&gt;:refund:&lt;reason&gt;</code> where reason is e.g. <code>cancel</code>, <code>no_show_callee</code>, etc.</li>
+      <li>Strike creation: <code>strike:&lt;call_id&gt;:&lt;reason_code&gt;</code> — same call + same reason can't double-strike.</li>
+    </ul>
+
+    <h2>15. Outbox events</h2>
+    <p>New event types to add to <code>OutboxEventType</code>:</p>
+    <ul>
+      <li><code>booking.created</code></li>
+      <li><code>booking.cancelled</code></li>
+      <li><code>call.scheduled</code> — fired at booking time so mobile can subscribe.</li>
+      <li><code>call.starting_soon</code> — fired by a cron N min before <code>start_at</code>.</li>
+      <li><code>call.completed</code> — fired on final settlement.</li>
+      <li><code>call.no_show</code> — fired on no-show terminal state.</li>
+      <li><code>strike.issued</code> — pro gets an email.</li>
+      <li><code>strike.disputed</code> — admin gets an email.</li>
+      <li><code>strike.resolved</code> — pro gets the outcome.</li>
+    </ul>
+    <p>The outbox worker email branch handles each. Push notification dispatch comes with §9 (notifications slice).</p>
+
+    <h2>16. Cron / background jobs (new)</h2>
+    <ul>
+      <li><strong>Call starter cron.</strong> Every 30s, find calls with <code>start_at &lt;= now() &amp;&amp; status='scheduled'</code>, flip to <code>waiting_for_parties</code>, fire <code>call.starting_soon</code> outbox event.</li>
+      <li><strong>No-show resolver cron.</strong> Every 30s, find calls with <code>status='waiting_for_parties' &amp;&amp; start_at + grace &lt; now()</code>, evaluate join state, transition to terminal.</li>
+      <li><strong>Stuck-call resolver cron.</strong> Every minute, find calls with <code>status='in_progress'</code> where neither side has reported activity in N minutes; force-end via flow 12.3.</li>
+    </ul>
+
+    <h2>17. Reverse-engineering checklist (read this when something breaks)</h2>
+    <ol>
+      <li>Look up the booking. <code>fee_mode_used</code>, <code>total_paid_kobo</code>, <code>payee_amount_kobo</code>, <code>platform_fee_kobo</code>.</li>
+      <li>Look up the call. Status, joined/left timestamps, connected_seconds, <code>settlement_journal_id</code>, <code>refund_journal_id</code>.</li>
+      <li>Read <code>call_events</code> top-down. The lifecycle is here.</li>
+      <li>Pull the journals: reservation, settlement, refund. Sum to caller_paid - pro_received - platform_received - caller_refunded = 0.</li>
+      <li>Outbox: did the side-effect emails fire?</li>
+      <li>Agora dashboard: channel logs match our records?</li>
+    </ol>
+
+    <h2>18. What I'm choosing and why — push back here</h2>
+    <p>The decisions you should disagree with before phase 2 if they're wrong:</p>
+    <ul>
+      <li><strong>Bookings + calls as separate tables.</strong> Could be one table with nullable join columns. Separate is cleaner; "one big row per intent" gets ugly when reschedule lands later.</li>
+      <li><strong>Snapshot fee_mode + amounts on bookings.</strong> Mid-flight config flip risk is real. Worth the storage.</li>
+      <li><strong>Connected_seconds as the billable basis.</strong> Alternative: scheduled duration. Connected is more honest but punishes bad luck (network).</li>
+      <li><strong>Cancellation penalty → platform_revenue, not pro.</strong> Argument for pro: they cleared their slot. I'm choosing platform because no service was rendered. Reversible.</li>
+      <li><strong>Auto-ban on threshold without admin review.</strong> Strict. Alternative: queue for admin review. I think auto-ban + easy admin lift is right.</li>
+      <li><strong>Server-side Agora token issuance.</strong> Industry standard. Could be App-ID-only (no token), but that's prod-unsafe.</li>
+      <li><strong>Duration locked at booking, not extendable.</strong> If users want a longer call they hang up and rebook. Simpler.</li>
+      <li><strong>No reschedule in this slice.</strong> Cancel + rebook covers it. Reschedule = future feature.</li>
+    </ul>
+
+    <h2>19. Cost model (filled in phase 1)</h2>
+    <p>Agora pricing × expected call volume. To compute against real Agora dashboard numbers in phase 1.</p>
+
+    <h2>20. Phases</h2>
+    <ol>
+      <li><strong>Phase 0 (now).</strong> This doc. You read it, push back, we settle. No code.</li>
+      <li><strong>Phase 1.</strong> Agora account walkthrough (<a href="agora-setup.html">agora-setup.html</a>). You set up the dashboard. I add <code>AGORA_APP_ID</code> + <code>AGORA_APP_CERTIFICATE</code> to <code>.env.example</code> and write <code>lib/agora/</code> with token issuance only — no integration into features yet. We test it via the Agora harness pages before any feature touches it.</li>
+      <li><strong>Phase 2.</strong> Migrations + state machines + status-transition triggers. Strict review line-by-line.</li>
+      <li><strong>Phase 3.</strong> Bookings feature only. Create/list/cancel. No calls yet — bookings sit on a call_id placeholder.</li>
+      <li><strong>Phase 4.</strong> Calls feature. Join/leave/token. Wire the Agora webhook handler. Implement the test-init admin endpoint. Two-party harness page goes live.</li>
+      <li><strong>Phase 5.</strong> Cron jobs + settlement. The whole money flow becomes real.</li>
+      <li><strong>Phase 6.</strong> Strikes feature. Including auto-ban.</li>
+      <li><strong>Phase 7.</strong> Polish, runbook, full QA pass.</li>
+    </ol>
+    <p>
+      Each phase ends with a checkpoint quiz. If you can't answer the quiz, the doc /
+      code is wrong, not you. We don't move forward until you can.
+    </p>
+
+    <footer>
+      Phase 0 doc · last updated <span id="updated"></span>
+    </footer>
+    <script>
+      document.getElementById('updated').textContent = new Date().toISOString().slice(0, 10);
+    </script>
+  </body>
+</html>

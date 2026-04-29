@@ -20,3 +20,6 @@ dist
 /apps/backend/build
 /apps/backend/.env
 /apps/backend/.env.local
+
+# QA CLI state (per-target user/JWT cache)
+/tools/qa/.spin-call-state.json

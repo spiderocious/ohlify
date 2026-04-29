@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Webhook replay · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>tools</span> ·
+      <span>replay webhook</span>
+    </nav>
+
+    <h1>Admin · replay webhook</h1>
+    <p class="tagline">
+      Re-runs business processing for a stored Paystack envelope. Increments
+      <code>replay_count</code>; journal idempotency keys keep the ledger safe
+      against double-posting.
+    </p>
+
+    <div class="panel">
+      <label for="webhookId">Paystack webhook id (<code>pwh_...</code>)</label>
+      <input id="webhookId" type="text" placeholder="pwh_..." />
+
+      <div style="height: 12px"></div>
+      <button id="submit">Replay</button>
+    </div>
+
+    <h3>Response</h3>
+    <pre id="result">(no request yet)</pre>
+
+    <div class="callout">
+      Tip: list recent envelopes via <a href="webhook-list.html">webhook-list.html</a>
+      (TBD) or query <code>SELECT id, event_type, processed_at, processing_error
+      FROM paystack_webhooks ORDER BY received_at DESC LIMIT 20</code>.
+    </div>
+
+    <script type="module">
+      import { api, confirmRequest, renderResult } from '../shared/api.js';
+
+      document.getElementById('submit').addEventListener('click', async () => {
+        const webhook_id = document.getElementById('webhookId').value.trim();
+        if (!webhook_id) return;
+        const body = { webhook_id };
+        if (!confirmRequest('POST', '/api/v1/admin/wallets/replay-webhook', body)) return;
+        const r = await api('/api/v1/admin/wallets/replay-webhook', {
+          method: 'POST',
+          body,
+          admin: true,
+        });
+        renderResult('result', r);
+      });
+    </script>
+  </body>
+</html>

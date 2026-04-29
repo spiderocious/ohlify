@@ -18,7 +18,10 @@ import {
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
 import { reservePayment } from '@lib/wallet/flows/pay.js';
-import { postWithdrawalRequestedJournal } from '@lib/wallet/flows/withdrawal.js';
+import {
+  postWithdrawalRequestedJournal,
+  postWithdrawalReversedJournal,
+} from '@lib/wallet/flows/withdrawal.js';
 import { accountFor, readUserAvailableBalance, readUserPendingBalance } from '@lib/wallet/index.js';
 
 import { WALLET_MESSAGES } from './wallet.messages.js';
@@ -626,6 +629,43 @@ const setProcessing = async (
   }
 };
 
+// On synchronous Paystack rejection (recipient invalid, account closed, etc),
+// the withdrawal must NOT stay pending — the user's funds would sit in
+// pending_debits_pool indefinitely. Mark the row failed and post the reversal
+// journal so the wallet is restored. See QA finding OPS-NEW-02.
+const handleSyncTransferRejection = async (
+  withdrawalRow: repo.WithdrawalRow,
+  amount: bigint,
+  reason: string,
+): Promise<repo.WithdrawalRow> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await postWithdrawalReversedJournal(client, {
+      withdrawalId: withdrawalRow.id,
+      userId: withdrawalRow.user_id,
+      amountKobo: amount,
+    });
+    await repo.setWithdrawalFailed(client, withdrawalRow.id, reason);
+    await client.query('COMMIT');
+    logger.warn(
+      { withdrawalId: withdrawalRow.id, reason },
+      'paystack rejected /transfer synchronously; withdrawal marked failed + reversed',
+    );
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error(
+      { err, withdrawalId: withdrawalRow.id },
+      'sync-rejection cleanup tx failed; row stays pending — manual intervention required',
+    );
+    return withdrawalRow;
+  } finally {
+    client.release();
+  }
+  const refreshed = await repo.findWithdrawalById(withdrawalRow.id);
+  return refreshed ?? withdrawalRow;
+};
+
 const fireTransferAndUpdate = async (
   withdrawalRow: repo.WithdrawalRow,
   recipientCode: string,
@@ -635,7 +675,10 @@ const fireTransferAndUpdate = async (
     const transfer = await initiateTransfer({
       recipientCode,
       amountKobo: Number(amount),
-      reference: `wd_${withdrawalRow.id}`,
+      // Use the bare withdrawal id — it already carries the `wd_` prefix.
+      // See QA finding OPS-NEW-01: doubling the prefix made the wire format
+      // diverge from our row id, breaking ops/support lookups.
+      reference: withdrawalRow.id,
       reason: 'Ohlify withdrawal',
     });
     await setProcessing(withdrawalRow.id, transfer.transfer_code, transfer.paystack_id);
@@ -643,11 +686,11 @@ const fireTransferAndUpdate = async (
     return refreshed ?? withdrawalRow;
   } catch (err) {
     if (err instanceof PaystackUpstreamError) {
-      logger.warn(
-        { err, withdrawalId: withdrawalRow.id },
-        'paystack transfer initiation failed; leaving withdrawal pending',
+      return handleSyncTransferRejection(
+        withdrawalRow,
+        amount,
+        `paystack rejected transfer: ${err.message}`,
       );
-      return withdrawalRow;
     }
     throw err;
   }

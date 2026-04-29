@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calls runbook · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>docs</span> ·
+      <span>runbook</span>
+    </nav>
+
+    <h1>Calls · runbook</h1>
+    <p class="tagline">
+      "If X breaks, do Y." Reads like an oncall guide. You write the first draft from your
+      understanding of the system; I correct it. Forces the model into your head.
+    </p>
+
+    <div class="callout warn">
+      <strong>Status:</strong> structure only. Each entry filled in as we ship the matching
+      part of the system.
+    </div>
+
+    <h2>Observability map</h2>
+    <p>What to check first, in order, when something looks off.</p>
+    <ol>
+      <li><strong>The call row.</strong> <code>SELECT * FROM calls WHERE id = ...</code>. Status, timestamps, related_booking_id, related_journal_id.</li>
+      <li><strong>The call_events table.</strong> Every state transition is recorded here. Read top-down to see the lifecycle.</li>
+      <li><strong>Wallet journals related to the call.</strong> <code>SELECT * FROM journal_entries WHERE related_call_id = '...'</code>.</li>
+      <li><strong>Outbox events.</strong> <code>SELECT * FROM outbox WHERE aggregate_id = '&lt;call_id&gt;'</code>. Were the side-effects fired?</li>
+      <li><strong>Server logs.</strong> Search for the call id. Pino logs are JSON; <code>jq</code> filters.</li>
+      <li><strong>Agora dashboard.</strong> Channel logs for the matching channel name.</li>
+    </ol>
+
+    <h2>Common scenarios</h2>
+
+    <h3>Caller says "I joined but no one was there"</h3>
+    <p>To fill in. Check: callee join event in call_events, Agora channel logs.</p>
+
+    <h3>Callee says "the call ended on its own"</h3>
+    <p>To fill in. Token expiration? Network drop? Server-side hangup?</p>
+
+    <h3>Wallet says they were charged but call never happened</h3>
+    <p>To fill in. Reservation posted but no settlement. Refund eligible.</p>
+
+    <h3>"Call shows completed but money never moved to my wallet"</h3>
+    <p>To fill in. Settlement journal posted? Outbox event published? Withdrawable balance refresh.</p>
+
+    <h3>Reconciliation worker fired ERROR (drift detected)</h3>
+    <p>
+      <strong>Hard stop.</strong> Halt all wallet writes. Don't approve refunds, don't
+      process withdrawals, don't run admin journal endpoints. Investigate before
+      anything else moves. Likely cause: someone bypassed the journal API and ran a
+      raw <code>UPDATE</code> on <code>account_balances</code>.
+    </p>
+
+    <h3>Agora bill spike</h3>
+    <p>To fill in during phase 1. Check Agora dashboard usage chart by channel; identify the runaway. Rotate App Certificate if compromised.</p>
+
+    <h2>Useful queries</h2>
+    <p>Drop-in SQL for ops. Filled in alongside the schema in phase 2.</p>
+
+    <footer>
+      Living document. Append new scenarios as they happen for real.
+    </footer>
+  </body>
+</html>

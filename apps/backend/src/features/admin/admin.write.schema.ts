@@ -72,6 +72,53 @@ export const AdminReplayWebhookSchema = z
   })
   .strict();
 
+export const AdminTestInitCallSchema = z
+  .object({
+    caller_user_id: z.string().min(1).max(64),
+    callee_user_id: z.string().min(1).max(64),
+    rate_id: z.string().min(1).max(64).optional(),
+    start_in_seconds: z.number().int().min(0).max(86400).optional(),
+  })
+  .strict();
+
+export const AdminListCallsQuerySchema = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+    status: z
+      .enum([
+        'scheduled',
+        'waiting_for_parties',
+        'in_progress',
+        'completed',
+        'no_show_caller',
+        'no_show_callee',
+        'no_show_both',
+        'disconnected_caller',
+        'disconnected_callee',
+      ])
+      .optional(),
+    user_id: z.string().min(1).max(64).optional(),
+  })
+  .strict();
+
+export const AdminListBookingsQuerySchema = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+    status: z
+      .enum([
+        'pending',
+        'confirmed',
+        'cancelled_outside_window',
+        'cancelled_inside_window',
+        'fulfilled',
+      ])
+      .optional(),
+    user_id: z.string().min(1).max(64).optional(),
+  })
+  .strict();
+
 export type ManualJournalDto = z.infer<typeof ManualJournalSchema>;
 export type AdminCreditDto = z.infer<typeof AdminCreditSchema>;
 export type AdminDebitDto = z.infer<typeof AdminDebitSchema>;
@@ -81,3 +128,6 @@ export type AdminListRefundsQueryDto = z.infer<typeof AdminListRefundsQuerySchem
 export type AdminListWithdrawalsQueryDto = z.infer<typeof AdminListWithdrawalsQuerySchema>;
 export type AdminForceFailWithdrawalDto = z.infer<typeof AdminForceFailWithdrawalSchema>;
 export type AdminReplayWebhookDto = z.infer<typeof AdminReplayWebhookSchema>;
+export type AdminTestInitCallDto = z.infer<typeof AdminTestInitCallSchema>;
+export type AdminListCallsQueryDto = z.infer<typeof AdminListCallsQuerySchema>;
+export type AdminListBookingsQueryDto = z.infer<typeof AdminListBookingsQuerySchema>;

@@ -22,6 +22,15 @@ export const ERROR_CODES = {
   // Wallet
   INSUFFICIENT_BALANCE: 'insufficient_balance',
   NO_BANK_ACCOUNT: 'no_bank_account',
+  // Calls + bookings
+  RATE_NOT_FOUND: 'rate_not_found',
+  PROFESSIONAL_UNAVAILABLE: 'professional_unavailable',
+  BOOKING_NOT_FOUND: 'booking_not_found',
+  CALL_NOT_FOUND: 'call_not_found',
+  CALL_NOT_JOINABLE: 'call_not_joinable',
+  STRIKE_NOT_FOUND: 'strike_not_found',
+  STRIKE_DISPUTE_WINDOW_CLOSED: 'strike_dispute_window_closed',
+  STRIKE_NOT_DISPUTABLE: 'strike_not_disputable',
   // Handles
   HANDLE_TAKEN: 'handle_taken',
   HANDLE_INVALID_FORMAT: 'handle_invalid_format',

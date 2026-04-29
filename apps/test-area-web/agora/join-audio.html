@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora · audio join · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+    <style>
+      .roster {
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px;
+        min-height: 60px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 12px;
+      }
+      .roster .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        border-bottom: 1px dashed var(--line);
+      }
+      .roster .row:last-child { border-bottom: none; }
+      .meter {
+        width: 60px;
+        height: 6px;
+        background: var(--line);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .meter > span {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+        width: 0;
+        transition: width 80ms linear;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>agora</span> ·
+      <span>join audio</span>
+    </nav>
+
+    <h1>Agora · join audio channel</h1>
+    <p class="tagline">
+      Single-tab audio join. Paste an App ID + channel + UID + token (mint via
+      <code>POST /admin/calls/test-init</code> or <code>POST /calls/:id/join</code>) and
+      click Join. Stay open, then open another tab on the same channel — you'll hear it.
+    </p>
+
+    <div class="panel">
+      <label for="appId">Agora App ID</label>
+      <input id="appId" type="text" placeholder="32-char hex from Agora dashboard" />
+
+      <label for="channel">Channel name</label>
+      <input id="channel" type="text" placeholder="call_c_..." />
+
+      <label for="uid">UID (32-bit unsigned int — backend hashes the user id)</label>
+      <input id="uid" type="number" placeholder="e.g. 1234567890" />
+
+      <label for="token">RTC token (starts with <code>007</code>)</label>
+      <textarea id="token" spellcheck="false"></textarea>
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button id="join">Join</button>
+        <button class="ghost" id="mute" disabled>Mute mic</button>
+        <button class="danger" id="leave" disabled>Leave</button>
+      </div>
+    </div>
+
+    <h3>Roster (local + remotes)</h3>
+    <div class="roster" id="roster">(no participants yet)</div>
+
+    <h3>Event log</h3>
+    <pre id="log">(no events yet)</pre>
+
+    <script type="module">
+      import { createCallSession, createLog, subscribeRemote } from '../shared/agora.js';
+
+      const log = createLog('log');
+      const roster = document.getElementById('roster');
+      const rosterRows = new Map(); // uid → { row, meter }
+      let session = null;
+      let muted = false;
+      let levelInterval = null;
+
+      function renderRoster() {
+        if (rosterRows.size === 0) {
+          roster.textContent = '(no participants yet)';
+          return;
+        }
+        roster.innerHTML = '';
+        for (const { row } of rosterRows.values()) roster.appendChild(row);
+      }
+
+      function ensureRow(uid, label) {
+        if (rosterRows.has(uid)) return rosterRows.get(uid);
+        const row = document.createElement('div');
+        row.className = 'row';
+        const name = document.createElement('span');
+        name.textContent = label;
+        name.style.flex = '1';
+        const meterWrap = document.createElement('div');
+        meterWrap.className = 'meter';
+        const fill = document.createElement('span');
+        meterWrap.appendChild(fill);
+        row.appendChild(name);
+        row.appendChild(meterWrap);
+        rosterRows.set(uid, { row, meter: fill, label: name });
+        renderRoster();
+        return rosterRows.get(uid);
+      }
+
+      function removeRow(uid) {
+        rosterRows.delete(uid);
+        renderRoster();
+      }
+
+      document.getElementById('join').addEventListener('click', async () => {
+        const appId = document.getElementById('appId').value.trim();
+        const channel = document.getElementById('channel').value.trim();
+        const uid = Number(document.getElementById('uid').value);
+        const token = document.getElementById('token').value.trim();
+        if (!appId || !channel || !uid || !token) {
+          alert('appId + channel + uid + token all required');
+          return;
+        }
+        try {
+          session = await createCallSession({
+            appId, channelName: channel, uid, token, withVideo: false, log,
+          });
+          document.getElementById('join').disabled = true;
+          document.getElementById('leave').disabled = false;
+          document.getElementById('mute').disabled = false;
+
+          ensureRow(uid, `local · uid ${uid}`);
+
+          session.client.on('user-published', async (user, mediaType) => {
+            try {
+              await subscribeRemote(session.client, user, mediaType, null, log);
+              ensureRow(user.uid, `remote · uid ${user.uid}`);
+            } catch (err) {
+              log.error('subscribe failed', { uid: user.uid, err: String(err) });
+            }
+          });
+          session.client.on('user-unpublished', (user) => {
+            removeRow(user.uid);
+          });
+
+          // Live volume meter — polls all tracks every 80ms.
+          levelInterval = setInterval(() => {
+            const localLevel = session.localAudio?.getVolumeLevel() ?? 0;
+            const localRow = rosterRows.get(uid);
+            if (localRow) localRow.meter.style.width = `${Math.min(100, localLevel * 100)}%`;
+            for (const remoteUser of session.client.remoteUsers) {
+              const lvl = remoteUser.audioTrack?.getVolumeLevel() ?? 0;
+              const r = rosterRows.get(remoteUser.uid);
+              if (r) r.meter.style.width = `${Math.min(100, lvl * 100)}%`;
+            }
+          }, 80);
+        } catch (err) {
+          log.error('join failed', { err: String(err) });
+          alert(`Join failed: ${err.message ?? err}`);
+        }
+      });
+
+      document.getElementById('mute').addEventListener('click', async () => {
+        if (!session?.localAudio) return;
+        muted = !muted;
+        await session.localAudio.setMuted(muted);
+        document.getElementById('mute').textContent = muted ? 'Unmute mic' : 'Mute mic';
+        log.info(`mic ${muted ? 'muted' : 'unmuted'}`);
+      });
+
+      document.getElementById('leave').addEventListener('click', async () => {
+        if (!session) return;
+        await session.leave();
+        session = null;
+        if (levelInterval) clearInterval(levelInterval);
+        levelInterval = null;
+        rosterRows.clear();
+        renderRoster();
+        document.getElementById('join').disabled = false;
+        document.getElementById('leave').disabled = true;
+        document.getElementById('mute').disabled = true;
+      });
+    </script>
+  </body>
+</html>

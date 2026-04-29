@@ -50,22 +50,42 @@ export const readUserAvailableBalance = async (userId: string): Promise<bigint> 
   return bal.balance_kobo;
 };
 
-// Pending = how much money is currently parked in the pending_debits_pool
-// against this specific user (across all their open call payments).
+// Pending = how much money the user has currently reserved in the
+// pending_debits_pool for in-flight bookings.
 //
-// Implemented by joining wallet_entries → journal_entries on related_user_id
-// and summing only the lines that hit the pending_debits_pool account. A
-// reserve adds positive to the pool, a settle/refund subtracts. Net per-user
-// is exactly the user's currently-parked pending money.
+// We compute this from `bookings` directly — sum of total_paid_kobo over
+// bookings where the user is the caller, the booking is `confirmed`, and
+// the matching call is not yet in a terminal state. This is the per-user
+// view of what the engine has parked on their behalf.
+//
+// We don't compute it from `wallet_entries` joined on related_user_id
+// because settlement journals attribute the offsetting pool decrease to
+// the PAYEE (the user receiving the money), not the original payer. So a
+// completed call leaves a phantom +amount attributed to the caller until
+// further bookings rebalance them. The ledger as a whole is correct
+// (sum-to-zero invariant holds; pool's cached balance equals the sum
+// across all entries) — only the per-caller attribution is brittle.
+//
+// Authoritative: bookings.total_paid_kobo is the snapshot of what was
+// actually moved into the pool for that booking.
+const TERMINAL_CALL_STATUSES = [
+  'completed',
+  'no_show_caller',
+  'no_show_callee',
+  'no_show_both',
+  'disconnected_caller',
+  'disconnected_callee',
+];
+
 export const readUserPendingBalance = async (userId: string): Promise<bigint> => {
-  const poolAccount = await accountFor.system('pending_debits_pool');
   const res = await pool.query<{ pending: string }>(
-    `SELECT COALESCE(SUM(we.signed_amount_kobo), 0)::text AS pending
-       FROM wallet_entries we
-       JOIN journal_entries je ON je.id = we.journal_id
-      WHERE we.account_id = $1
-        AND je.related_user_id = $2`,
-    [poolAccount.id, userId],
+    `SELECT COALESCE(SUM(b.total_paid_kobo), 0)::text AS pending
+       FROM bookings b
+       JOIN calls c ON c.booking_id = b.id
+      WHERE b.caller_user_id = $1
+        AND b.status = 'confirmed'
+        AND c.status <> ALL($2::call_status[])`,
+    [userId, TERMINAL_CALL_STATUSES],
   );
   return BigInt(res.rows[0]?.pending ?? '0');
 };

@@ -20,6 +20,28 @@ Helpers used by the [.claude/agents/qa-runner.md](../../.claude/agents/qa-runner
 | [`reset-payments.mjs`](reset-payments.mjs) | Wipe payments + journals + wallet_entries + system balances for a user, for clean state between funding tests. **Bypasses append-only triggers via `session_replication_role` — dev DB only.** CLI: `<user_id>`. |
 | [`inject-balanced-journal.mjs`](inject-balanced-journal.mjs) | Direct DB-level poster for arbitrary balanced multi-line journals. Relies on the deferred sum-to-zero trigger to catch mistakes. CLI: `'<json-of-{kind,idempotency_key,lines[],...}>'`. |
 | [`inject-call-settlement.mjs`](inject-call-settlement.mjs) | Posts a `call_settlement` journal (`pending_debits_pool -gross, payee +(gross-fee), platform_revenue +fee`) so QA can drive the post-settle clawback refund branch without §8 (calls). CLI: `<payer_user_id> <payee_user_id> <gross_kobo> <fee_kobo> <call_id>`. |
+| [`spin-call.mjs`](spin-call.mjs) | Spin a ready-to-test call end-to-end. Reuses cached caller+callee users (or registers fresh), tops up wallet, books, backdates, waits for `waiting_for_parties`. Emits `{ caller_jwt, callee_jwt, call_id, channel, ... }`. CLI: `ohlify-spin-call [--base URL] [--pretty] [--new-users]`. |
+| [`install-cli.mjs`](install-cli.mjs) | One-time installer. Symlinks `spin-call.mjs` → `~/.local/bin/ohlify-spin-call` (or `--to <dir>`). Run via `pnpm qa:install` once. |
+
+## CLI: `ohlify-spin-call`
+
+The `spin-call.mjs` helper is the fastest way to get a ready-to-test call. After `pnpm qa:install` (one-time) it's available globally:
+
+```bash
+# local dev (default), full JSON output
+ohlify-spin-call
+
+# pretty mode (just the 3 things you usually need)
+ohlify-spin-call --pretty
+
+# point at a different env (uses cached users per-target)
+ohlify-spin-call --base https://api.staging.ohlify.dev --pretty
+
+# force-register fresh users (don't reuse cache)
+ohlify-spin-call --new-users --pretty
+```
+
+User identity is cached in `tools/qa/.spin-call-state.json` (gitignored), keyed by base URL — so two consecutive runs reuse the same caller/callee. Each run also auto-cleans stale bookings between the cached caller+callee so the GiST exclusion has a clear slot.
 
 ## Conventions
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calls sequences · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>docs</span> ·
+      <span>sequences</span>
+    </nav>
+
+    <h1>Calls · sequence walkthroughs</h1>
+    <p class="tagline">
+      One scenario per section. Each annotated with what runs where so you can trace any
+      production incident back to a specific step.
+    </p>
+
+    <div class="callout warn">
+      <strong>Status:</strong> outline only. Filled in during phase 0.
+    </div>
+
+    <h2>Scenarios to cover</h2>
+    <ol>
+      <li><strong>Happy call.</strong> Booked, paid, both join, both leave, settled.</li>
+      <li><strong>Caller no-show.</strong> Callee waits, no-show window expires, full refund.</li>
+      <li><strong>Callee no-show.</strong> Caller waits, full refund, professional gets a strike.</li>
+      <li><strong>Both no-show.</strong> Money back, no strike for callee.</li>
+      <li><strong>Mid-call disconnect — caller side.</strong> Pro-rate, settle the partial.</li>
+      <li><strong>Mid-call disconnect — callee side.</strong> Same logic, mirrored.</li>
+      <li><strong>Cancellation outside window.</strong> Refund per cancellation policy.</li>
+      <li><strong>Cancellation inside window.</strong> Partial refund or none, per policy.</li>
+      <li><strong>Network flap during call.</strong> Re-join window allowed; settle includes the gap.</li>
+      <li><strong>Pro-rate edge: 0 minutes connected.</strong> Treat as no-show.</li>
+    </ol>
+
+    <h2>Each scenario will include</h2>
+    <ul>
+      <li>Sequence diagram (mobile · backend · Agora · wallet · outbox).</li>
+      <li>Database state at each step (booking row, call row, journal entries).</li>
+      <li>Outbox events fired and which emails/pushes go out.</li>
+      <li>Failure modes and what we do about them.</li>
+      <li>Where in the code each step lives — file paths and function names.</li>
+    </ul>
+
+    <footer>
+      Phase 0 doc
+    </footer>
+  </body>
+</html>

@@ -4,6 +4,7 @@ import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
 
+import * as callsService from './admin.calls.service.js';
 import type {
   AdminApproveRefundDto,
   AdminCreditDto,
@@ -11,6 +12,7 @@ import type {
   AdminForceFailWithdrawalDto,
   AdminRejectRefundDto,
   AdminReplayWebhookDto,
+  AdminTestInitCallDto,
   ManualJournalDto,
 } from './admin.write.schema.js';
 import * as service from './admin.write.service.js';
@@ -77,4 +79,36 @@ export const replayWebhook: RequestHandler = asyncHandler(async (req: Request, r
   const r = await service.replayWebhook(req.body as AdminReplayWebhookDto);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
+});
+
+// ── Calls + bookings (admin) ────────────────────────────────────────────────
+
+export const testInitCall: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const dto = req.body as AdminTestInitCallDto;
+  const r = await callsService.adminTestInitCall({
+    callerUserId: dto.caller_user_id,
+    calleeUserId: dto.callee_user_id,
+    ...(dto.rate_id !== undefined ? { rateId: dto.rate_id } : {}),
+    ...(dto.start_in_seconds !== undefined ? { startInSeconds: dto.start_in_seconds } : {}),
+  });
+  if (!r.success) bail(r);
+  else ResponseUtil.created(res, r.data);
+});
+
+export const listCalls: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await callsService.adminListCalls(req.query);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data.items, r.data.meta);
+});
+
+export const forceEndCall: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await callsService.adminForceEndCall(String(req.params['id']));
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const listBookings: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await callsService.adminListBookings(req.query);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data.items, r.data.meta);
 });

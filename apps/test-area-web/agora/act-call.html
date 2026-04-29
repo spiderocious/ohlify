@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora · act on call · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+    <style>
+      .layout {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+      .stage {
+        background: #000;
+        border-radius: 8px;
+        min-height: 280px;
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+      }
+      .tile {
+        background: #0a0c12;
+        position: relative;
+        min-height: 140px;
+      }
+      .tile .label {
+        position: absolute; bottom: 6px; left: 8px;
+        background: rgba(0,0,0,0.65); color: #fff;
+        font-size: 11px; padding: 2px 6px; border-radius: 3px;
+      }
+      .audio-only-stage {
+        min-height: 140px;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--muted); font-size: 13px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+
+      .actions {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        margin-top: 10px;
+      }
+      .actions button { padding: 8px 12px; font-size: 12px; }
+
+      .scenarios {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 10px;
+      }
+      .scenarios h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+      .scenario-row { display: flex; gap: 6px; flex-wrap: wrap; }
+      .scenario-row button { font-size: 12px; padding: 6px 10px; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); }
+      .scenario-row button:hover { background: var(--accent); color: #0a0c12; }
+
+      .sidebar {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+      }
+      .sidebar h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+      .sidebar dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+      .sidebar dt { color: var(--muted); }
+      .sidebar dd { margin: 0; font-family: ui-monospace, 'SF Mono', Menlo, monospace; word-break: break-all; }
+      .sidebar .block { margin-bottom: 16px; }
+      .sidebar pre { font-size: 11px; max-height: 160px; overflow-y: auto; margin: 0; }
+
+      .pill {
+        display: inline-block; padding: 2px 8px; border-radius: 999px;
+        background: var(--panel-2); color: var(--muted);
+        font-size: 11px; margin-right: 4px;
+      }
+      .pill.live { background: rgba(107, 212, 154, 0.15); color: var(--ok); }
+      .pill.warn { background: rgba(255, 194, 102, 0.15); color: var(--warn); }
+      .pill.danger { background: rgba(255, 107, 107, 0.15); color: var(--danger); }
+
+      details { margin-top: 12px; }
+      summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>agora</span> ·
+      <span>act on call</span>
+    </nav>
+
+    <h1>Act on a real call</h1>
+    <p class="tagline">
+      Drive a real call (one tab = one user). Paste a call_id + your bearer JWT,
+      click Join, then run the scenario buttons. Backend sees your real
+      <code>/calls/:id/join</code> and <code>/calls/:id/leave</code>; Agora delivers
+      webhooks to <code>/webhooks/agora</code>; <code>call_events</code> rows accumulate.
+      Open in two tabs (caller JWT + callee JWT) for two-party scenarios.
+    </p>
+
+    <div class="panel">
+      <div class="row">
+        <div style="flex: 1">
+          <label for="callId">Call id</label>
+          <input id="callId" type="text" placeholder="c_..." />
+        </div>
+        <div style="flex: 1">
+          <label for="role">Role hint (display only — backend auto-detects from JWT)</label>
+          <select id="role">
+            <option value="auto">auto-detect</option>
+            <option value="caller">caller</option>
+            <option value="callee">callee</option>
+          </select>
+        </div>
+      </div>
+      <label for="bearer">Bearer JWT (paste once, persists in localStorage)</label>
+      <textarea id="bearer" rows="3" spellcheck="false"></textarea>
+      <div style="height: 8px"></div>
+      <div class="row">
+        <button id="loadCall" class="ghost">Load call (GET /calls/:id)</button>
+        <button id="join">Join (POST /calls/:id/join)</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div>
+        <div class="row" style="margin-bottom: 8px">
+          <span class="pill" id="statusPill">idle</span>
+          <span class="pill" id="callTypePill" style="display:none">audio</span>
+          <span class="pill" id="myUidPill" style="display:none">uid: —</span>
+          <span class="pill" id="callIdPill" style="display:none">call: —</span>
+        </div>
+
+        <div class="stage" id="stage"></div>
+
+        <div class="actions">
+          <button id="leaveBtn" disabled>Leave (POST /leave)</button>
+          <button id="muteBtn" disabled>Mute mic</button>
+          <button id="camBtn" disabled style="display:none">Camera off</button>
+          <button id="renewBtn" disabled class="ghost">Renew token (POST /renew-token)</button>
+          <button id="closeTabSimBtn" disabled class="danger">Simulate disconnect (close SDK without /leave)</button>
+        </div>
+
+        <div class="scenarios">
+          <h3>Scenario shortcuts (run these for QA capture)</h3>
+          <div class="scenario-row">
+            <button data-scenario="join-wait-leave">S1. Join → wait 30s → /leave</button>
+            <button data-scenario="join-mute-leave">S2. Join → mute 10s → /leave</button>
+            <button data-scenario="join-disconnect">S3. Join → disconnect (no /leave)</button>
+            <button data-scenario="rejoin">S4. Rejoin (call leave then re-join)</button>
+            <button data-scenario="renew-mid">S5. Join → renew token mid-call → /leave</button>
+          </div>
+          <div style="margin-top: 8px; color: var(--muted); font-size: 11px;">
+            Each scenario logs its phases in the event log. Run them in sequence with
+            both tabs joined for two-party traces.
+          </div>
+        </div>
+
+        <details>
+          <summary>Event log (SDK + backend responses)</summary>
+          <pre id="log" style="margin-top: 6px; font-size: 11px; max-height: 320px; overflow-y: auto;"></pre>
+        </details>
+      </div>
+
+      <aside class="sidebar">
+        <div class="block">
+          <h3>GET /calls/:id (auto-polls)</h3>
+          <dl id="callMeta">
+            <dt>status</dt><dd id="m-status">—</dd>
+            <dt>connected_s</dt><dd id="m-connected">—</dd>
+            <dt>caller_joined_at</dt><dd id="m-cj">—</dd>
+            <dt>callee_joined_at</dt><dd id="m-pj">—</dd>
+            <dt>caller_left_at</dt><dd id="m-cl">—</dd>
+            <dt>callee_left_at</dt><dd id="m-pl">—</dd>
+            <dt>settle_je</dt><dd id="m-sj">—</dd>
+            <dt>refund_je</dt><dd id="m-rj">—</dd>
+          </dl>
+        </div>
+        <div class="block">
+          <h3>Last join/leave response</h3>
+          <pre id="lastResponse">(none)</pre>
+        </div>
+        <div class="block">
+          <h3>Token expiry</h3>
+          <dl>
+            <dt>issued_at</dt><dd id="t-issued">—</dd>
+            <dt>expires_at</dt><dd id="t-expires">—</dd>
+            <dt>seconds left</dt><dd id="t-left">—</dd>
+          </dl>
+        </div>
+      </aside>
+    </div>
+
+    <script type="module">
+      import { api, getSettings, setSettings } from '../shared/api.js';
+      import { createCallSession, createLog, subscribeRemote } from '../shared/agora.js';
+
+      const log = createLog('log');
+      const stage = document.getElementById('stage');
+      const tiles = new Map();
+
+      let session = null;
+      let micMuted = false;
+      let camOff = false;
+      let withVideo = false;
+      let pollInterval = null;
+      let tokenExpiresAt = null;
+      let tokenIssuedAt = null;
+
+      // Persist bearer JWT across reloads via the shared settings store.
+      const settings = getSettings();
+      if (settings.bearerToken) document.getElementById('bearer').value = settings.bearerToken;
+      // Also remember last call_id per browser
+      const lastCallId = localStorage.getItem('act-call:lastCallId');
+      if (lastCallId) document.getElementById('callId').value = lastCallId;
+
+      const setStatus = (label, kind) => {
+        const el = document.getElementById('statusPill');
+        el.textContent = label;
+        el.className = 'pill' + (kind ? ` ${kind}` : '');
+      };
+
+      function persistInputs() {
+        const t = document.getElementById('bearer').value.trim();
+        if (t) setSettings({ bearerToken: t });
+        const c = document.getElementById('callId').value.trim();
+        if (c) localStorage.setItem('act-call:lastCallId', c);
+      }
+      document.getElementById('bearer').addEventListener('change', persistInputs);
+      document.getElementById('callId').addEventListener('change', persistInputs);
+
+      function ensureTile(uid, label, kind) {
+        if (tiles.has(uid)) return tiles.get(uid);
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'label';
+        labelEl.textContent = label;
+        tile.appendChild(labelEl);
+        if (!withVideo) {
+          tile.classList.add('audio-only-stage');
+          const txt = document.createElement('div');
+          txt.textContent = `🔊 ${kind} audio`;
+          tile.appendChild(txt);
+        }
+        stage.appendChild(tile);
+        tiles.set(uid, tile);
+        return tile;
+      }
+
+      function clearTiles() {
+        tiles.forEach((t) => t.remove());
+        tiles.clear();
+      }
+
+      // ── Backend wrappers ─────────────────────────────────────────────────────
+      async function loadCall() {
+        persistInputs();
+        const callId = document.getElementById('callId').value.trim();
+        if (!callId) { alert('callId required'); return; }
+        const r = await api(`/api/v1/calls/${encodeURIComponent(callId)}`, { bearer: true });
+        if (!r.ok) {
+          log.error(`GET /calls/${callId} failed`, { status: r.status, body: r.body });
+          alert(`Load failed (${r.status}). Check JWT + call_id.`);
+          return null;
+        }
+        const data = r.body?.data;
+        log.info('GET /calls/:id', data);
+        renderMeta(data);
+        return data;
+      }
+
+      function renderMeta(data) {
+        if (!data) return;
+        document.getElementById('m-status').textContent = data.status ?? '—';
+        document.getElementById('m-connected').textContent = data.connected_seconds ?? '—';
+        document.getElementById('m-cj').textContent = data.caller_joined_at ?? '—';
+        document.getElementById('m-pj').textContent = data.callee_joined_at ?? '—';
+        document.getElementById('m-cl').textContent = data.caller_left_at ?? '—';
+        document.getElementById('m-pl').textContent = data.callee_left_at ?? '—';
+        document.getElementById('m-sj').textContent = data.settlement_journal_id ?? '—';
+        document.getElementById('m-rj').textContent = data.refund_journal_id ?? '—';
+        document.getElementById('callIdPill').textContent = `call: ${data.id}`;
+        document.getElementById('callIdPill').style.display = '';
+      }
+
+      async function startPolling() {
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(async () => {
+          const callId = document.getElementById('callId').value.trim();
+          if (!callId) return;
+          const r = await api(`/api/v1/calls/${encodeURIComponent(callId)}`, { bearer: true });
+          if (r.ok && r.body?.data) renderMeta(r.body.data);
+        }, 3000);
+      }
+
+      function showLastResponse(body) {
+        document.getElementById('lastResponse').textContent = JSON.stringify(body, null, 2);
+      }
+
+      function setTokenExpiry(expiresAtIso) {
+        tokenIssuedAt = new Date();
+        tokenExpiresAt = new Date(expiresAtIso);
+        document.getElementById('t-issued').textContent = tokenIssuedAt.toISOString();
+        document.getElementById('t-expires').textContent = tokenExpiresAt.toISOString();
+      }
+      setInterval(() => {
+        if (!tokenExpiresAt) return;
+        const left = Math.max(0, Math.round((tokenExpiresAt - Date.now()) / 1000));
+        document.getElementById('t-left').textContent = `${left}s`;
+      }, 1000);
+
+      // ── Join / Leave / Renew ──────────────────────────────────────────────────
+      document.getElementById('loadCall').addEventListener('click', async () => {
+        await loadCall();
+      });
+
+      document.getElementById('join').addEventListener('click', async () => {
+        persistInputs();
+        const callId = document.getElementById('callId').value.trim();
+        if (!callId) { alert('callId required'); return; }
+
+        // GET /calls/:id first to know the call_type — drives audio vs video tracks.
+        const meta = await loadCall();
+        if (!meta) return;
+
+        // Fetch the booking too? No — call_type isn't on the call response. Use
+        // a simple heuristic: ask. Or pull booking. Cleaner: ask for callType
+        // hint via the join response — backend returns it. So just trust /join's
+        // response and create video track based on that.
+        setStatus('joining…', 'warn');
+        const r = await api(`/api/v1/calls/${encodeURIComponent(callId)}/join`, {
+          method: 'POST',
+          bearer: true,
+        });
+        showLastResponse(r.body);
+        if (!r.ok) {
+          log.error(`POST /calls/${callId}/join failed`, { status: r.status, body: r.body });
+          setStatus('failed', 'danger');
+          alert(`Join failed (${r.status}): ${r.body?.error?.code ?? 'unknown'}`);
+          return;
+        }
+        const data = r.body.data;
+        log.info('POST /calls/:id/join OK', { uid: data.agora_uid, channel: data.agora_channel_name, expires_at: data.expires_at });
+        setTokenExpiry(data.expires_at);
+        document.getElementById('myUidPill').textContent = `uid: ${data.agora_uid}`;
+        document.getElementById('myUidPill').style.display = '';
+        document.getElementById('callTypePill').textContent = data.call_type;
+        document.getElementById('callTypePill').style.display = '';
+        withVideo = data.call_type === 'video';
+
+        try {
+          session = await createCallSession({
+            appId: data.agora_app_id,
+            channelName: data.agora_channel_name,
+            uid: data.agora_uid,
+            token: data.agora_token,
+            withVideo,
+            log,
+          });
+          setStatus('live', 'live');
+          document.getElementById('leaveBtn').disabled = false;
+          document.getElementById('muteBtn').disabled = false;
+          document.getElementById('renewBtn').disabled = false;
+          document.getElementById('closeTabSimBtn').disabled = false;
+          if (withVideo) {
+            document.getElementById('camBtn').disabled = false;
+            document.getElementById('camBtn').style.display = '';
+          }
+
+          // Local tile.
+          const localTile = ensureTile(data.agora_uid, `local · uid ${data.agora_uid} (you)`, 'local');
+          if (withVideo && session.localVideo) session.localVideo.play(localTile);
+
+          session.client.on('user-published', async (user, mediaType) => {
+            try {
+              const tile = withVideo
+                ? ensureTile(user.uid, `remote · uid ${user.uid}`, 'remote')
+                : ensureTile(user.uid, `remote · uid ${user.uid}`, 'remote');
+              await subscribeRemote(session.client, user, mediaType, withVideo ? tile : null, log);
+            } catch (err) {
+              log.error('subscribe failed', { uid: user.uid, mediaType, err: String(err) });
+            }
+          });
+          session.client.on('user-unpublished', (user, mediaType) => {
+            log.info('remote unpublished', { uid: user.uid, mediaType });
+          });
+          session.client.on('user-left', (user, reason) => {
+            log.info('remote user-left', { uid: user.uid, reason });
+            const tile = tiles.get(user.uid);
+            if (tile) { tile.remove(); tiles.delete(user.uid); }
+          });
+
+          await startPolling();
+        } catch (err) {
+          log.error('SDK join failed', { err: String(err) });
+          setStatus('SDK failed', 'danger');
+          alert(`Agora join failed: ${err.message ?? err}`);
+        }
+      });
+
+      async function leaveBackend() {
+        const callId = document.getElementById('callId').value.trim();
+        if (!callId) return;
+        const r = await api(`/api/v1/calls/${encodeURIComponent(callId)}/leave`, {
+          method: 'POST',
+          bearer: true,
+        });
+        showLastResponse(r.body);
+        log.info(`POST /calls/${callId}/leave → ${r.status}`, r.body?.data);
+      }
+
+      document.getElementById('leaveBtn').addEventListener('click', async () => {
+        if (session) {
+          await session.leave();
+          session = null;
+        }
+        await leaveBackend();
+        clearTiles();
+        setStatus('left');
+        document.getElementById('leaveBtn').disabled = true;
+        document.getElementById('muteBtn').disabled = true;
+        document.getElementById('camBtn').disabled = true;
+        document.getElementById('renewBtn').disabled = true;
+        document.getElementById('closeTabSimBtn').disabled = true;
+      });
+
+      document.getElementById('muteBtn').addEventListener('click', async () => {
+        if (!session?.localAudio) return;
+        micMuted = !micMuted;
+        await session.localAudio.setMuted(micMuted);
+        document.getElementById('muteBtn').textContent = micMuted ? 'Unmute mic' : 'Mute mic';
+        log.info(`mic ${micMuted ? 'muted' : 'unmuted'}`);
+      });
+
+      document.getElementById('camBtn').addEventListener('click', async () => {
+        if (!session?.localVideo) return;
+        camOff = !camOff;
+        await session.localVideo.setMuted(camOff);
+        document.getElementById('camBtn').textContent = camOff ? 'Camera on' : 'Camera off';
+        log.info(`camera ${camOff ? 'off' : 'on'}`);
+      });
+
+      document.getElementById('renewBtn').addEventListener('click', async () => {
+        const callId = document.getElementById('callId').value.trim();
+        const r = await api(`/api/v1/calls/${encodeURIComponent(callId)}/renew-token`, {
+          method: 'POST', bearer: true,
+        });
+        showLastResponse(r.body);
+        if (!r.ok) {
+          log.error('renew-token failed', { status: r.status, body: r.body });
+          return;
+        }
+        const data = r.body.data;
+        try {
+          await session.client.renewToken(data.agora_token);
+          setTokenExpiry(data.expires_at);
+          log.info('renewed token', { expires_at: data.expires_at });
+        } catch (err) {
+          log.error('SDK renewToken threw', { err: String(err) });
+        }
+      });
+
+      // Simulate "user closed the tab without /leave" — kills the SDK client
+      // without touching backend. The backend's stuck-call resolver / Agora's
+      // channel_destroy will eventually clean up.
+      document.getElementById('closeTabSimBtn').addEventListener('click', async () => {
+        if (!session) return;
+        if (!confirm('Disconnect the SDK without calling /leave? Backend will not know you left until cron / Agora webhook.')) return;
+        await session.leave(); // closes SDK client only
+        session = null;
+        clearTiles();
+        setStatus('SDK disconnected (no /leave sent)', 'warn');
+        document.getElementById('leaveBtn').disabled = true;
+        document.getElementById('muteBtn').disabled = true;
+        document.getElementById('camBtn').disabled = true;
+        document.getElementById('renewBtn').disabled = true;
+        document.getElementById('closeTabSimBtn').disabled = true;
+        log.warn('simulated disconnect — no POST /leave issued; awaiting backend resolver / Agora webhook');
+      });
+
+      // ── Scenario shortcuts ──────────────────────────────────────────────────
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      document.querySelectorAll('[data-scenario]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const s = btn.dataset.scenario;
+          log.info(`▶ scenario ${s}: start`);
+          if (s === 'join-wait-leave') {
+            document.getElementById('join').click();
+            await wait(30_000);
+            document.getElementById('leaveBtn').click();
+          } else if (s === 'join-mute-leave') {
+            document.getElementById('join').click();
+            await wait(3_000);
+            document.getElementById('muteBtn').click();
+            await wait(10_000);
+            document.getElementById('muteBtn').click();
+            await wait(3_000);
+            document.getElementById('leaveBtn').click();
+          } else if (s === 'join-disconnect') {
+            document.getElementById('join').click();
+            await wait(8_000);
+            document.getElementById('closeTabSimBtn').click();
+          } else if (s === 'rejoin') {
+            document.getElementById('join').click();
+            await wait(5_000);
+            document.getElementById('leaveBtn').click();
+            await wait(2_000);
+            document.getElementById('join').click();
+            await wait(5_000);
+            document.getElementById('leaveBtn').click();
+          } else if (s === 'renew-mid') {
+            document.getElementById('join').click();
+            await wait(5_000);
+            document.getElementById('renewBtn').click();
+            await wait(5_000);
+            document.getElementById('leaveBtn').click();
+          }
+          log.info(`■ scenario ${s}: end`);
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora setup · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>docs</span> ·
+      <span>agora setup</span>
+    </nav>
+
+    <h1>Agora · account &amp; key setup</h1>
+    <p class="tagline">
+      Phase 1 walkthrough. Backend integration is wired (token issuance + webhook handler);
+      this page is what you do on the Agora dashboard side. Notes from the doc you'll
+      revisit when something breaks.
+    </p>
+
+    <h2>1. Concepts (lock these before clicking around)</h2>
+    <dl class="kv">
+      <dt>App ID</dt>
+      <dd>Public identifier for the Agora project. Mobile sees this. Goes in <code>AGORA_APP_ID</code> env var.</dd>
+      <dt>App Certificate</dt>
+      <dd>Secret used to sign tokens (HMAC-SHA256). Backend ONLY. Treat like a database password. Goes in <code>AGORA_APP_CERTIFICATE</code>.</dd>
+      <dt>Channel</dt>
+      <dd>A named room. Two clients with the same channel name + valid tokens can talk. We name channels <code>call_&lt;call_id&gt;</code>.</dd>
+      <dt>UID</dt>
+      <dd>32-bit unsigned int per user inside a channel. Our backend hashes the user id to derive a stable UID via <code>agoraUidForUserId</code>.</dd>
+      <dt>RTC token</dt>
+      <dd>Signed blob, time-limited (1 hour). Required to join in secured mode. Backend mints via <code>issueAgoraRtcToken</code>.</dd>
+      <dt>Role</dt>
+      <dd>Publisher (can send media) or audience (receive only). Both caller + callee are publishers.</dd>
+      <dt>AccessToken2 ("007")</dt>
+      <dd>The token format we mint. Implemented from scratch in <code>lib/agora/token.ts</code>; no Agora SDK install required.</dd>
+    </dl>
+
+    <h2>2. Account creation walkthrough</h2>
+    <ol>
+      <li>Sign up at <a href="https://www.agora.io" target="_blank" rel="noopener">agora.io</a>. Use a work email if possible — billing is per-org.</li>
+      <li>From the Agora Console, create a new <strong>Project</strong>. Name it something like <em>ohlify-dev</em>.</li>
+      <li><strong>Choose authentication mode: "Secured mode (App ID + App Certificate)"</strong>. Never pick App-ID-only mode — that's prod-unsafe and won't work with our backend (we always sign tokens).</li>
+      <li>The project page shows the <strong>App ID</strong>. Copy it. Paste into <code>apps/backend/.env</code> as <code>AGORA_APP_ID=&lt;...&gt;</code>.</li>
+      <li>Find the <strong>App Certificate</strong> section. Click <em>Show</em>. Copy. Paste as <code>AGORA_APP_CERTIFICATE=&lt;...&gt;</code>. <strong>Never commit this. Never log this.</strong></li>
+      <li>Restart the backend so the new env vars are picked up. <code>pnpm dev</code> in <code>apps/backend</code>.</li>
+    </ol>
+
+    <h2>3. Services to enable</h2>
+    <ul>
+      <li><strong>RTC.</strong> ✅ On (default). This is the audio/video.</li>
+      <li><strong>RTM.</strong> ❌ Off. We don't use it — call lifecycle is driven by our backend's join/leave endpoints + Agora's notification webhooks.</li>
+      <li><strong>Cloud Recording.</strong> ❌ Off. Deferred until reviews/disputes need it. Adds cost + legal complexity.</li>
+    </ul>
+
+    <h2>4. Webhooks (Agora "Notifications V2")</h2>
+    <ol>
+      <li>In Agora Console, go to <em>Project</em> → <em>Notifications</em>. Enable.</li>
+      <li>Set the webhook URL to <code>https://&lt;your-backend&gt;/api/v1/webhooks/agora</code>. For local dev, use a tunnel (ngrok / cloudflared).</li>
+      <li>Generate a webhook secret. Copy. Paste into <code>apps/backend/.env</code> as <code>AGORA_WEBHOOK_SECRET=&lt;...&gt;</code>.</li>
+      <li>Subscribe to events: <em>channel-create (101)</em>, <em>channel-destroy (102)</em>, <em>user-join (103)</em>, <em>user-leave (104)</em>. Skip the rest — they're noisy.</li>
+      <li>Without <code>AGORA_WEBHOOK_SECRET</code> set, the handler accepts unsigned events (dev convenience). Set it before staging.</li>
+    </ol>
+
+    <h2>5. Pricing snapshot (check current rates on the dashboard)</h2>
+    <ul>
+      <li>Free tier: <strong>10,000 minutes/month</strong> across all media. Easily covers dev + early QA.</li>
+      <li>Pay-as-you-go after that, billed per "channel-minute" per user:
+        <ul>
+          <li>Audio: ~$0.99 / 1000 min</li>
+          <li>HD video: ~$3.99 / 1000 min</li>
+          <li>Full HD: ~$8.99 / 1000 min</li>
+        </ul>
+        <em>(Numbers from current published rates — verify against your account before launch.)</em>
+      </li>
+      <li><strong>Two-party call cost:</strong> A 30-min HD video call between caller + callee = 2 × 30 = 60 channel-minutes ≈ $0.24 in raw Agora cost. Our 15% platform fee on a ₦400 (~$0.30 with 1300 NGN/USD) call has zero margin if we go HD video; ₦1000+ rates work.</li>
+    </ul>
+
+    <h2>6. What's already wired in our backend</h2>
+    <ul>
+      <li><a href="../../../apps/backend/src/lib/agora/token.ts"><code>lib/agora/token.ts</code></a> — RTC AccessToken2 implementation. Mints publisher tokens scoped to (channel, uid, expires).</li>
+      <li><a href="../../../apps/backend/src/lib/agora/webhook.ts"><code>lib/agora/webhook.ts</code></a> — HMAC verifier + event-type constants.</li>
+      <li>Env: <code>AGORA_APP_ID</code> (required), <code>AGORA_APP_CERTIFICATE</code> (required), <code>AGORA_WEBHOOK_SECRET</code> (optional in dev).</li>
+      <li>Webhook route: <code>POST /api/v1/webhooks/agora</code> — wired in phase 4.</li>
+      <li>Token issuance from features happens via <code>POST /api/v1/calls/:id/join</code> — ships in phase 4.</li>
+    </ul>
+
+    <h2>7. Sandbox vs production</h2>
+    <p>
+      Plan: dev + staging share one Agora project (with a low spend cap), production gets
+      a separate project with separate App ID + App Certificate. Channel naming
+      (<code>call_&lt;call_id&gt;</code>) already namespaces by environment because call IDs
+      are unique per-environment database.
+    </p>
+
+    <h2>8. Operational checklist</h2>
+    <p>You should be able to do all of these from the Agora dashboard:</p>
+    <ol>
+      <li>Set a per-day spend cap so a runaway loop can't burn $1000.</li>
+      <li>Rotate the App Certificate. (After rotation, restart backend — old in-flight tokens stay valid until expiry, ~1h.)</li>
+      <li>See connected-minute usage by day, by channel, by user.</li>
+      <li>Read channel logs for a specific channel name to debug a complaint.</li>
+      <li>Generate test tokens from the dashboard "Token builder" tool to compare against ones our backend mints.</li>
+    </ol>
+
+    <h2>9. Useful Agora docs</h2>
+    <ul>
+      <li><a href="https://docs.agora.io/en/video-calling/develop/authentication-workflow" target="_blank" rel="noopener">Authentication workflow</a> — token issuance reference.</li>
+      <li><a href="https://docs.agora.io/en/video-calling/get-started/get-started-sdk" target="_blank" rel="noopener">Web SDK quickstart</a> — used by our test-area-web Agora pages.</li>
+      <li><a href="https://docs.agora.io/en/agora-platform/reference/notifications/overview" target="_blank" rel="noopener">Notifications V2 overview</a> — the webhook system.</li>
+      <li><a href="https://docs.agora.io/en/agora-platform/reference/manage-agora-account/billing" target="_blank" rel="noopener">Billing reference</a> — verify pricing for your tier.</li>
+    </ul>
+
+    <h2>10. Questions you should be able to answer after setup</h2>
+    <ol>
+      <li>Where do I edit the per-day spend cap?</li>
+      <li>How do I rotate the App Certificate if it leaks?</li>
+      <li>Where do I see today's connected-minute usage?</li>
+      <li>How do I find the logs for channel <code>call_c_xxx</code>?</li>
+      <li>What's the difference between Agora's RTM and our backend signaling?</li>
+    </ol>
+    <p>If any of these are blocked, the doc is wrong. Tell me and I'll fix it.</p>
+
+    <footer>
+      Phase 1 doc · last updated <span id="updated"></span>
+    </footer>
+    <script>
+      document.getElementById('updated').textContent = new Date().toISOString().slice(0, 10);
+    </script>
+  </body>
+</html>

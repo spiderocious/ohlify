@@ -24,7 +24,10 @@ type Prefix =
   | 'je' // journal entry
   | 'out' // outbox event
   | 'pwh' // paystack webhook envelope
-  | 'rfd'; // refund request
+  | 'rfd' // refund request
+  | 'bk' // booking
+  | 'ce' // call event
+  | 'str'; // professional strike
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;
 

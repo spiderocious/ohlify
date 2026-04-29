@@ -8,12 +8,21 @@ import { redis } from '@lib/redis/client.js';
 
 import { buildApp } from './app.js';
 import { env } from './env.js';
+import { startCallWorkers } from './workers/calls.worker.js';
 import { startOutboxWorker } from './workers/outbox.worker.js';
 import { startReconciliationWorker } from './workers/reconciliation.worker.js';
+
+// Production safety: webhook secrets are required so unsigned envelopes
+// can't be accepted. Dev allows missing secrets for convenience.
+// See QA finding N-CALLS-04 + leftovers.md §9.
+if (env.NODE_ENV === 'production' && !env.AGORA_WEBHOOK_SECRET) {
+  throw new Error('AGORA_WEBHOOK_SECRET is required in production');
+}
 
 const emailWorker = createEmailWorker(env.REDIS_URL);
 const outboxWorker = startOutboxWorker();
 const reconciliationWorker = startReconciliationWorker();
+const callWorkers = startCallWorkers();
 
 const shutdown = async (signal: string): Promise<void> => {
   logger.info({ signal }, 'shutting down gracefully');
@@ -21,6 +30,7 @@ const shutdown = async (signal: string): Promise<void> => {
     new Promise<void>((resolve) => server.close(() => resolve())),
     outboxWorker.stop(),
     reconciliationWorker.stop(),
+    callWorkers.stop(),
     pool.end(),
     redis.quit(),
     emailWorker.close(),

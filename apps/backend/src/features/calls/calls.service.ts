@@ -1,0 +1,282 @@
+import * as bookingsRepo from '@features/bookings/bookings.repo.js';
+import { agoraUidForUserId, issueAgoraRtcToken } from '@lib/agora/index.js';
+import { platformConfig } from '@lib/config/platform-config.service.js';
+import { pool } from '@lib/db/pool.js';
+import { logger } from '@lib/logger.js';
+import { koboToJson } from '@lib/money.js';
+import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
+import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
+
+import { CALL_MESSAGES } from './calls.messages.js';
+import * as repo from './calls.repo.js';
+import { resolveCall } from './calls.resolver.js';
+import type { ListCallsQueryDto } from './calls.schema.js';
+import { CallStatus, type CallJoinView, type CallRow, type CallView } from './calls.types.js';
+
+const toView = (row: CallRow): CallView => ({
+  id: row.id,
+  booking_id: row.booking_id,
+  status: row.status,
+  agora_channel_name: row.agora_channel_name,
+  connected_seconds: row.connected_seconds,
+  caller_joined_at: row.caller_joined_at?.toISOString() ?? null,
+  callee_joined_at: row.callee_joined_at?.toISOString() ?? null,
+  caller_left_at: row.caller_left_at?.toISOString() ?? null,
+  callee_left_at: row.callee_left_at?.toISOString() ?? null,
+  ended_at: row.ended_at?.toISOString() ?? null,
+  settlement_journal_id: row.settlement_journal_id,
+  refund_journal_id: row.refund_journal_id,
+  created_at: row.created_at.toISOString(),
+});
+
+// ── GET /calls ──────────────────────────────────────────────────────────────
+
+export const listCalls = async (dto: ListCallsQueryDto, userId: string) => {
+  const limit = resolveLimit(dto.limit);
+  let cursor: { last_id: string; last_sort_key: string } | undefined;
+  if (dto.cursor !== undefined) {
+    try {
+      cursor = decodeCursor(dto.cursor);
+    } catch {
+      return new ServiceError('validation_error', CALL_MESSAGES.LIST_FETCHED, 400, {
+        cursor: ['Invalid cursor'],
+      });
+    }
+  }
+  const rows = await repo.listForUser({
+    userId,
+    limit,
+    ...(cursor ? { cursor } : {}),
+    ...(dto.status ? { status: dto.status } : {}),
+  });
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeCursor({ last_id: last.id, last_sort_key: last.created_at.toISOString() })
+      : null;
+  return new ServiceSuccess(
+    {
+      items: page.map(toView),
+      meta: { next_cursor: nextCursor, has_more: hasMore },
+    },
+    CALL_MESSAGES.LIST_FETCHED,
+  );
+};
+
+// ── GET /calls/:id ──────────────────────────────────────────────────────────
+
+export const getCall = async (callId: string, userId: string) => {
+  const row = await repo.findById(callId);
+  if (!row) return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+  const booking = await bookingsRepo.findById(row.booking_id);
+  if (!booking || (booking.caller_user_id !== userId && booking.callee_user_id !== userId)) {
+    return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+  }
+  return new ServiceSuccess(toView(row), CALL_MESSAGES.FETCHED);
+};
+
+// ── POST /calls/:id/join ────────────────────────────────────────────────────
+
+const issueJoinToken = (
+  call: CallRow,
+  userId: string,
+  _isCaller: boolean,
+  remoteUserId: string,
+  callType: 'audio' | 'video',
+  durationMinutes: number,
+  totalPaidKobo: bigint,
+): CallJoinView => {
+  const cfg = platformConfig.bookings();
+  const tokenResult = issueAgoraRtcToken({
+    channelName: call.agora_channel_name,
+    uid: agoraUidForUserId(userId),
+    role: 'publisher',
+    expiresInSeconds: cfg.token_expires_seconds,
+  });
+
+  return {
+    call_id: call.id,
+    agora_app_id: tokenResult.appId,
+    agora_channel_name: call.agora_channel_name,
+    agora_uid: tokenResult.uid,
+    agora_token: tokenResult.token,
+    expires_at: tokenResult.expiresAt.toISOString(),
+    call_type: callType,
+    duration_minutes: durationMinutes,
+    remote_user_id: remoteUserId,
+    total_paid_kobo: koboToJson(totalPaidKobo),
+  };
+};
+
+export const joinCall = async (callId: string, userId: string) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const call = await repo.findByIdForUpdate(client, callId);
+    if (!call) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    const booking = await bookingsRepo.findByIdForUpdate(client, call.booking_id);
+    if (!booking) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    const isCaller = booking.caller_user_id === userId;
+    const isCallee = booking.callee_user_id === userId;
+    if (!isCaller && !isCallee) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+
+    // Joinable while scheduled/waiting/in_progress. Terminal states reject.
+    const joinableStatuses: readonly CallStatus[] = [
+      CallStatus.SCHEDULED,
+      CallStatus.WAITING_FOR_PARTIES,
+      CallStatus.IN_PROGRESS,
+    ];
+    if (!joinableStatuses.includes(call.status)) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_joinable', CALL_MESSAGES.NOT_JOINABLE, 409);
+    }
+
+    // Record the join (idempotent: if already joined, COALESCE keeps the
+    // earlier timestamp).
+    if (isCaller) {
+      await repo.setCallerJoined(client, call.id);
+    } else {
+      await repo.setCalleeJoined(client, call.id);
+    }
+    await repo.recordEvent(client, {
+      callId: call.id,
+      eventType: isCaller ? 'caller_joined' : 'callee_joined',
+      payload: { user_id: userId, source: 'api' },
+    });
+
+    // Determine if we should flip status. If both have joined now, → in_progress.
+    const refreshed = await repo.findByIdForUpdate(client, call.id);
+    const bothJoined = !!refreshed!.caller_joined_at && !!refreshed!.callee_joined_at;
+    if (bothJoined && refreshed!.status !== CallStatus.IN_PROGRESS) {
+      await repo.setStatus(client, call.id, CallStatus.IN_PROGRESS);
+    } else if (refreshed!.status === CallStatus.SCHEDULED) {
+      // First joiner pulls the call from scheduled → waiting (so the no-show
+      // resolver doesn't grace-fail something that's actually being joined).
+      await repo.setStatus(client, call.id, CallStatus.WAITING_FOR_PARTIES);
+    }
+
+    await client.query('COMMIT');
+
+    const remoteUserId = isCaller ? booking.callee_user_id : booking.caller_user_id;
+    const view = issueJoinToken(
+      call,
+      userId,
+      isCaller,
+      remoteUserId,
+      booking.call_type,
+      booking.duration_minutes,
+      BigInt(booking.total_paid_kobo),
+    );
+    logger.info(
+      { callId: call.id, userId, role: isCaller ? 'caller' : 'callee' },
+      'call join token issued',
+    );
+    return new ServiceSuccess(view, CALL_MESSAGES.JOIN_OK);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, callId }, 'joinCall tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ── POST /calls/:id/renew-token ─────────────────────────────────────────────
+
+export const renewToken = async (callId: string, userId: string) => {
+  const call = await repo.findById(callId);
+  if (!call) return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+  const booking = await bookingsRepo.findById(call.booking_id);
+  if (!booking || (booking.caller_user_id !== userId && booking.callee_user_id !== userId)) {
+    return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+  }
+  const joinableStatuses: readonly CallStatus[] = [
+    CallStatus.SCHEDULED,
+    CallStatus.WAITING_FOR_PARTIES,
+    CallStatus.IN_PROGRESS,
+  ];
+  if (!joinableStatuses.includes(call.status)) {
+    return new ServiceError('call_not_joinable', CALL_MESSAGES.NOT_JOINABLE, 409);
+  }
+  const isCaller = booking.caller_user_id === userId;
+  const remoteUserId = isCaller ? booking.callee_user_id : booking.caller_user_id;
+  const view = issueJoinToken(
+    call,
+    userId,
+    isCaller,
+    remoteUserId,
+    booking.call_type,
+    booking.duration_minutes,
+    BigInt(booking.total_paid_kobo),
+  );
+  return new ServiceSuccess(view, CALL_MESSAGES.TOKEN_RENEWED);
+};
+
+// ── POST /calls/:id/leave ───────────────────────────────────────────────────
+
+export const leaveCall = async (callId: string, userId: string) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const call = await repo.findByIdForUpdate(client, callId);
+    if (!call) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    const booking = await bookingsRepo.findByIdForUpdate(client, call.booking_id);
+    if (!booking || (booking.caller_user_id !== userId && booking.callee_user_id !== userId)) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    const isCaller = booking.caller_user_id === userId;
+
+    if (isCaller) {
+      await repo.setCallerLeft(client, call.id);
+    } else {
+      await repo.setCalleeLeft(client, call.id);
+    }
+    await repo.recordEvent(client, {
+      callId: call.id,
+      eventType: isCaller ? 'caller_left' : 'callee_left',
+      payload: { user_id: userId, source: 'api' },
+    });
+
+    // If both have now left, resolve the call atomically.
+    const refreshed = await repo.findByIdForUpdate(client, call.id);
+    if (
+      refreshed!.status !== CallStatus.IN_PROGRESS &&
+      refreshed!.status !== CallStatus.WAITING_FOR_PARTIES
+    ) {
+      // Already terminal — no-op.
+      await client.query('COMMIT');
+      const fresh = await repo.findById(call.id);
+      return new ServiceSuccess(toView(fresh!), CALL_MESSAGES.LEAVE_OK);
+    }
+
+    const bothLeft = !!refreshed!.caller_left_at && !!refreshed!.callee_left_at;
+    if (bothLeft && refreshed!.status === CallStatus.IN_PROGRESS) {
+      await resolveCall(client, call.id, 'both_left');
+    }
+
+    await client.query('COMMIT');
+    const fresh = await repo.findById(call.id);
+    return new ServiceSuccess(toView(fresh!), CALL_MESSAGES.LEAVE_OK);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, callId }, 'leaveCall tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};

@@ -4,8 +4,8 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']),
   PORT: z.coerce.number().default(8080),
 
-  APP_BASE_URL: z.string().url(),
-  WEB_BASE_URL: z.string().url(),
+  APP_BASE_URL: z.string(),
+  WEB_BASE_URL: z.string(),
 
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
@@ -26,6 +26,15 @@ const EnvSchema = z.object({
   // Production deployment must set this to a long random secret.
   // Tracked as a §21 follow-up — see middlewares/requireAdmin.middleware.ts.
   ADMIN_STUB_TOKEN: z.string().min(32),
+
+  // Agora — RTC tokens are minted server-side using App ID + App Certificate.
+  // App Certificate must NEVER ship to mobile. App ID is public.
+  AGORA_APP_ID: z.string().min(1),
+  AGORA_APP_CERTIFICATE: z.string().min(1),
+  // Optional: Agora notification webhook secret. When set, the webhook
+  // handler verifies HMAC; when unset, webhooks are accepted without
+  // verification (dev only).
+  AGORA_WEBHOOK_SECRET: z.string().optional(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });

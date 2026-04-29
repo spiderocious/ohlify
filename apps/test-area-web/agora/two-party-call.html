@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora · two-party call · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+    <style>
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+      .pane {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .pane.caller { border-color: #5a6fb0; }
+      .pane.callee { border-color: #6f9a5e; }
+      .pane h3 { margin: 0 0 4px; font-size: 14px; }
+      .pane .role { color: var(--muted); font-size: 12px; }
+      .pane .stage {
+        background: #000;
+        border-radius: 6px;
+        min-height: 220px;
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+      }
+      .pane .slot {
+        background: #0a0c12;
+        position: relative;
+        min-height: 100px;
+      }
+      .pane .slot .label {
+        position: absolute;
+        bottom: 4px;
+        left: 6px;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 3px;
+      }
+      .pane.audio-only .stage {
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+      .controls button { padding: 6px 10px; font-size: 12px; }
+      .pane pre {
+        max-height: 180px;
+        overflow-y: auto;
+        font-size: 11px;
+        margin: 0;
+      }
+      .summary { font-size: 12px; }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--muted);
+        font-size: 11px;
+        margin-right: 4px;
+      }
+      .pill.live { background: rgba(107, 212, 154, 0.15); color: var(--ok); }
+      .pill.dead { background: rgba(255, 107, 107, 0.15); color: var(--danger); }
+    </style>
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>agora</span> ·
+      <span>two-party call</span>
+    </nav>
+
+    <h1>Agora · two-party call</h1>
+    <p class="tagline">
+      End-to-end live harness. Calls <code>POST /admin/calls/test-init</code>, then joins
+      the channel on both sides so audio (and optionally video) flows. Same browser tab —
+      no need for two devices.
+    </p>
+
+    <div class="callout warn">
+      <strong>Permissions:</strong> the browser will prompt for mic (and camera if video
+      is selected). Both panes share the same physical hardware, so expect light echo
+      unless you wear headphones.
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">1. Init the call</h3>
+      <div class="row">
+        <div style="flex: 1">
+          <label for="callerId">Caller user id</label>
+          <input id="callerId" type="text" placeholder="u_..." />
+        </div>
+        <div style="flex: 1">
+          <label for="calleeId">Callee user id (pro)</label>
+          <input id="calleeId" type="text" placeholder="u_..." />
+        </div>
+      </div>
+      <label for="rateId">Rate id (optional — defaults to callee's first active)</label>
+      <input id="rateId" type="text" placeholder="rate_..." />
+
+      <div style="height: 10px"></div>
+      <div class="row">
+        <label style="display: flex; align-items: center; gap: 6px; margin: 0;">
+          <input id="withVideo" type="checkbox" style="width: auto" />
+          <span>Video call (uncheck for audio-only)</span>
+        </label>
+        <button id="initBtn">Init call → join both sides</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">Init response</h3>
+      <pre id="initResult">(no request yet)</pre>
+    </div>
+
+    <div class="split" id="splitPanes" style="display: none">
+      <!-- Caller pane -->
+      <div class="pane caller" id="paneCaller">
+        <div>
+          <h3>Caller <span class="pill" id="callerStatusPill">idle</span></h3>
+          <div class="role" id="callerRole">—</div>
+        </div>
+        <div class="stage" id="callerStage"></div>
+        <div class="summary" id="callerSummary">—</div>
+        <div class="controls">
+          <button id="callerLeave" disabled>Leave</button>
+          <button id="callerMute" class="ghost" disabled>Mute mic</button>
+          <button id="callerCamOff" class="ghost" disabled>Camera off</button>
+        </div>
+        <pre id="callerLog">caller log</pre>
+      </div>
+
+      <!-- Callee pane -->
+      <div class="pane callee" id="paneCallee">
+        <div>
+          <h3>Callee (pro) <span class="pill" id="calleeStatusPill">idle</span></h3>
+          <div class="role" id="calleeRole">—</div>
+        </div>
+        <div class="stage" id="calleeStage"></div>
+        <div class="summary" id="calleeSummary">—</div>
+        <div class="controls">
+          <button id="calleeLeave" disabled>Leave</button>
+          <button id="calleeMute" class="ghost" disabled>Mute mic</button>
+          <button id="calleeCamOff" class="ghost" disabled>Camera off</button>
+        </div>
+        <pre id="calleeLog">callee log</pre>
+      </div>
+    </div>
+
+    <script type="module">
+      import { api, confirmRequest, renderResult } from '../shared/api.js';
+      import { createCallSession, createLog, subscribeRemote } from '../shared/agora.js';
+
+      const callerLog = createLog('callerLog');
+      const calleeLog = createLog('calleeLog');
+
+      // Per-pane state. Each is independent: { session, stage, log, statusPill, role, summary, leave, mute, camOff }.
+      const panes = {
+        caller: bindPane('caller', callerLog),
+        callee: bindPane('callee', calleeLog),
+      };
+
+      function bindPane(side, log) {
+        return {
+          side,
+          log,
+          stage: document.getElementById(`${side}Stage`),
+          statusPill: document.getElementById(`${side}StatusPill`),
+          role: document.getElementById(`${side}Role`),
+          summary: document.getElementById(`${side}Summary`),
+          leaveBtn: document.getElementById(`${side}Leave`),
+          muteBtn: document.getElementById(`${side}Mute`),
+          camOffBtn: document.getElementById(`${side}CamOff`),
+          session: null,
+          remoteSlots: new Map(),
+          micMuted: false,
+          camOff: false,
+        };
+      }
+
+      function setPill(pane, label, kind) {
+        pane.statusPill.textContent = label;
+        pane.statusPill.className = 'pill' + (kind ? ` ${kind}` : '');
+      }
+
+      function ensureRemoteSlot(pane, uid) {
+        if (pane.remoteSlots.has(uid)) return pane.remoteSlots.get(uid);
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = `remote ${uid}`;
+        slot.appendChild(label);
+        pane.stage.appendChild(slot);
+        pane.remoteSlots.set(uid, slot);
+        return slot;
+      }
+
+      function ensureLocalSlot(pane, uid) {
+        let slot = pane.remoteSlots.get(`local-${uid}`);
+        if (slot) return slot;
+        slot = document.createElement('div');
+        slot.className = 'slot';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = `local ${uid}`;
+        slot.appendChild(label);
+        pane.stage.appendChild(slot);
+        pane.remoteSlots.set(`local-${uid}`, slot);
+        return slot;
+      }
+
+      async function joinPane(pane, payload, withVideo) {
+        setPill(pane, 'connecting…');
+        pane.role.textContent = `${pane.side} · uid ${payload.agora_uid}`;
+        pane.summary.innerHTML =
+          `<span class="pill">channel</span> <code>${payload.agora_channel_name}</code>` +
+          ` <span class="pill">uid</span> <code>${payload.agora_uid}</code>` +
+          ` <span class="pill">${withVideo ? 'video' : 'audio'}</span>`;
+
+        try {
+          const session = await createCallSession({
+            appId: payload.agora_app_id,
+            channelName: payload.agora_channel_name,
+            uid: payload.agora_uid,
+            token: payload.agora_token,
+            withVideo,
+            log: pane.log,
+          });
+          pane.session = session;
+          setPill(pane, 'live', 'live');
+          pane.leaveBtn.disabled = false;
+          pane.muteBtn.disabled = false;
+          if (withVideo && session.localVideo) {
+            const slot = ensureLocalSlot(pane, payload.agora_uid);
+            session.localVideo.play(slot);
+            pane.camOffBtn.disabled = false;
+          }
+          // Subscribe to the other side as it publishes.
+          session.client.on('user-published', async (user, mediaType) => {
+            const slot = mediaType === 'video' ? ensureRemoteSlot(pane, user.uid) : null;
+            try {
+              await subscribeRemote(session.client, user, mediaType, slot, pane.log);
+            } catch (err) {
+              pane.log.error('subscribe failed', { uid: user.uid, mediaType, err: String(err) });
+            }
+          });
+          session.client.on('user-unpublished', (user, mediaType) => {
+            pane.log.info('remote user-unpublished', { uid: user.uid, mediaType });
+            if (mediaType === 'video') {
+              const slot = pane.remoteSlots.get(user.uid);
+              if (slot) {
+                slot.innerHTML = '';
+                const label = document.createElement('span');
+                label.className = 'label';
+                label.textContent = `remote ${user.uid} (video off)`;
+                slot.appendChild(label);
+              }
+            }
+          });
+        } catch (err) {
+          pane.log.error('join failed', { err: String(err) });
+          setPill(pane, 'failed', 'dead');
+        }
+      }
+
+      async function leavePane(pane) {
+        if (!pane.session) return;
+        await pane.session.leave();
+        pane.session = null;
+        setPill(pane, 'left');
+        pane.leaveBtn.disabled = true;
+        pane.muteBtn.disabled = true;
+        pane.camOffBtn.disabled = true;
+        pane.stage.innerHTML = '';
+        pane.remoteSlots.clear();
+      }
+
+      function bindControls(pane) {
+        pane.leaveBtn.addEventListener('click', () => leavePane(pane));
+        pane.muteBtn.addEventListener('click', async () => {
+          if (!pane.session?.localAudio) return;
+          pane.micMuted = !pane.micMuted;
+          await pane.session.localAudio.setMuted(pane.micMuted);
+          pane.muteBtn.textContent = pane.micMuted ? 'Unmute mic' : 'Mute mic';
+          pane.log.info(`mic ${pane.micMuted ? 'muted' : 'unmuted'}`);
+        });
+        pane.camOffBtn.addEventListener('click', async () => {
+          if (!pane.session?.localVideo) return;
+          pane.camOff = !pane.camOff;
+          await pane.session.localVideo.setMuted(pane.camOff);
+          pane.camOffBtn.textContent = pane.camOff ? 'Camera on' : 'Camera off';
+          pane.log.info(`camera ${pane.camOff ? 'off' : 'on'}`);
+        });
+      }
+      bindControls(panes.caller);
+      bindControls(panes.callee);
+
+      document.getElementById('initBtn').addEventListener('click', async () => {
+        const callerId = document.getElementById('callerId').value.trim();
+        const calleeId = document.getElementById('calleeId').value.trim();
+        const rateId = document.getElementById('rateId').value.trim();
+        const withVideo = document.getElementById('withVideo').checked;
+        if (!callerId || !calleeId) {
+          alert('Caller user id + callee user id required');
+          return;
+        }
+        const body = { caller_user_id: callerId, callee_user_id: calleeId };
+        if (rateId) body.rate_id = rateId;
+        if (!confirmRequest('POST', '/api/v1/admin/calls/test-init', body)) return;
+
+        // Tear down any previous session before re-initing.
+        await leavePane(panes.caller);
+        await leavePane(panes.callee);
+
+        const r = await api('/api/v1/admin/calls/test-init', { method: 'POST', body, admin: true });
+        renderResult('initResult', r);
+        if (!r.ok || !r.body?.data) return;
+
+        const data = r.body.data;
+        document.getElementById('splitPanes').style.display = 'grid';
+
+        // Mark panes as audio-only when video is off.
+        document.getElementById('paneCaller').classList.toggle('audio-only', !withVideo);
+        document.getElementById('paneCallee').classList.toggle('audio-only', !withVideo);
+
+        // Join both sides in parallel. They're independent SDK clients so
+        // joining at the same time is fine.
+        await Promise.all([
+          joinPane(panes.caller, { ...data.caller, agora_app_id: data.agora_app_id, agora_channel_name: data.agora_channel_name }, withVideo),
+          joinPane(panes.callee, { ...data.callee, agora_app_id: data.agora_app_id, agora_channel_name: data.agora_channel_name }, withVideo),
+        ]);
+      });
+    </script>
+  </body>
+</html>

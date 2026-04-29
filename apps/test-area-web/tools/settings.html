@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settings · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>tools</span> ·
+      <span>settings</span>
+    </nav>
+
+    <h1>Settings</h1>
+    <p class="tagline">
+      Saved to <code>localStorage</code> under <code>ohlify-test-area-settings</code>.
+      Used by every page that talks to the backend.
+    </p>
+
+    <div class="panel">
+      <label for="apiBase">API base URL</label>
+      <input id="apiBase" type="text" placeholder="http://localhost:8080" />
+
+      <label for="adminToken">X-Admin-Token (stub admin auth)</label>
+      <input id="adminToken" type="password" placeholder="see apps/backend/.env ADMIN_STUB_TOKEN" />
+
+      <label for="bearerToken">Bearer token (user JWT, optional)</label>
+      <input id="bearerToken" type="password" placeholder="paste a logged-in user JWT here" />
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button id="save">Save</button>
+        <button class="ghost" id="clear">Clear all</button>
+        <span id="status" style="color: var(--muted); font-size: 12px"></span>
+      </div>
+    </div>
+
+    <div class="callout">
+      Tip: get a bearer token by hitting <code>POST /api/v1/auth/login</code> and copying
+      the access token from the response. Or use the auth flow from your dev mobile build.
+    </div>
+
+    <script type="module">
+      import { getSettings, setSettings } from '../shared/api.js';
+
+      const s = getSettings();
+      document.getElementById('apiBase').value = s.apiBase;
+      document.getElementById('adminToken').value = s.adminToken;
+      document.getElementById('bearerToken').value = s.bearerToken;
+
+      const status = document.getElementById('status');
+      const flash = (msg) => {
+        status.textContent = msg;
+        setTimeout(() => (status.textContent = ''), 1800);
+      };
+
+      document.getElementById('save').addEventListener('click', () => {
+        setSettings({
+          apiBase: document.getElementById('apiBase').value.trim(),
+          adminToken: document.getElementById('adminToken').value.trim(),
+          bearerToken: document.getElementById('bearerToken').value.trim(),
+        });
+        flash('saved');
+      });
+
+      document.getElementById('clear').addEventListener('click', () => {
+        if (!confirm('Clear all settings?')) return;
+        localStorage.removeItem('ohlify-test-area-settings');
+        location.reload();
+      });
+    </script>
+  </body>
+</html>

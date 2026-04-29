@@ -17,10 +17,13 @@ import {
   AdminCreditSchema,
   AdminDebitSchema,
   AdminForceFailWithdrawalSchema,
+  AdminListBookingsQuerySchema,
+  AdminListCallsQuerySchema,
   AdminListRefundsQuerySchema,
   AdminListWithdrawalsQuerySchema,
   AdminRejectRefundSchema,
   AdminReplayWebhookSchema,
+  AdminTestInitCallSchema,
   ManualJournalSchema,
 } from './admin.write.schema.js';
 
@@ -111,6 +114,16 @@ export const register = (app: Express): void => {
     '/wallets/replay-webhook',
     validate(AdminReplayWebhookSchema),
     writeController.replayWebhook,
+  );
+
+  // ── Calls + bookings (admin) ─────────────────────────────────────────────
+  router.post('/calls/test-init', validate(AdminTestInitCallSchema), writeController.testInitCall);
+  router.get('/calls', validate(AdminListCallsQuerySchema, 'query'), writeController.listCalls);
+  router.post('/calls/:id/force-end', writeController.forceEndCall);
+  router.get(
+    '/bookings',
+    validate(AdminListBookingsQuerySchema, 'query'),
+    writeController.listBookings,
   );
 
   app.use('/api/v1/admin', router);

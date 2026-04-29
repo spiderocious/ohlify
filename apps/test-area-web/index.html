@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ohlify · test area</title>
+    <link rel="stylesheet" href="shared/styles.css" />
+  </head>
+  <body>
+    <h1>Ohlify · test area</h1>
+    <p class="tagline">
+      Interactive docs, backend prodding tools, and Agora test harnesses. Localhost only.
+      See <a href="README.md">README</a>.
+    </p>
+
+    <h2>Architecture &amp; setup docs</h2>
+    <div class="grid">
+      <a class="card" href="docs/calls-architecture.html">
+        <h3>Calls + Bookings architecture <span class="badge ready">live</span></h3>
+        <p>System diagram, components, decisions. Read this before reading code.</p>
+      </a>
+      <a class="card" href="docs/calls-sequences.html">
+        <h3>Calls — sequence walkthroughs <span class="badge stub">outline</span></h3>
+        <p>Happy call, no-show, mid-call disconnect, refund. Annotated.</p>
+      </a>
+      <a class="card" href="docs/agora-setup.html">
+        <h3>Agora account setup <span class="badge ready">live</span></h3>
+        <p>Dashboard walkthrough. App ID vs Certificate vs Token Server. Pricing.</p>
+      </a>
+      <a class="card" href="docs/runbook.html">
+        <h3>Calls runbook <span class="badge stub">outline</span></h3>
+        <p>If X breaks, do Y. Observability map.</p>
+      </a>
+    </div>
+
+    <h2>Backend prodding tools</h2>
+    <div class="grid">
+      <a class="card" href="tools/admin-init-call.html">
+        <h3>Admin · init test call <span class="badge ready">live</span></h3>
+        <p>Skip the booking flow — directly create a call row, get tokens, join.</p>
+      </a>
+      <a class="card" href="tools/manual-journal.html">
+        <h3>Admin · manual journal <span class="badge ready">live</span></h3>
+        <p>Post a balanced multi-line journal. Useful for QA scenarios.</p>
+      </a>
+      <a class="card" href="tools/webhook-replay.html">
+        <h3>Admin · replay webhook <span class="badge ready">live</span></h3>
+        <p>Re-run business processing for a stored Paystack envelope.</p>
+      </a>
+      <a class="card" href="tools/wallet-inspect.html">
+        <h3>Wallet inspector <span class="badge ready">live</span></h3>
+        <p>Look up a user's wallet, balances, recent journals.</p>
+      </a>
+      <a class="card" href="tools/settings.html">
+        <h3>Settings</h3>
+        <p>API base URL, admin token, bearer token. Saved to localStorage.</p>
+      </a>
+    </div>
+
+    <h2>Agora test harnesses</h2>
+    <div class="grid">
+      <a class="card" href="agora/act-call.html">
+        <h3>Act on a real call <span class="badge ready">QA harness</span></h3>
+        <p>One tab = one user. Paste call_id + JWT, drive the real backend (join/leave/renew).
+        Open in two tabs for two-party traces.</p>
+      </a>
+      <a class="card" href="agora/demo.html">
+        <h3>Live call demo (no auth) <span class="badge ready">live</span></h3>
+        <p>No login. No booking. Pick host or join, type a name. Bypasses bookings/calls — Agora-only smoke test.</p>
+      </a>
+      <a class="card" href="agora/two-party-call.html">
+        <h3>Two-party call (admin-wired) <span class="badge ready">live</span></h3>
+        <p>Hits admin test-init. Needs admin token + real user ids + funded wallet.</p>
+      </a>
+      <a class="card" href="agora/join-audio.html">
+        <h3>Join audio channel <span class="badge ready">live</span></h3>
+        <p>Bring-your-own-token single-side join. Volume meters per participant.</p>
+      </a>
+      <a class="card" href="agora/join-video.html">
+        <h3>Join video channel <span class="badge ready">live</span></h3>
+        <p>Same, with camera grid.</p>
+      </a>
+    </div>
+
+    <footer>
+      Plain HTML on purpose · no build step · do not deploy
+    </footer>
+  </body>
+</html>
