@@ -29,6 +29,10 @@ export default defineConfig({
         find: /^@ohlify\/api$/,
         replacement: path.resolve(__dirname, '../../packages/api/src/index.ts'),
       },
+      {
+        find: /^@icons$/,
+        replacement: path.resolve(__dirname, '../../packages/ui/src/icons/index.ts'),
+      },
     ],
   },
   server: {

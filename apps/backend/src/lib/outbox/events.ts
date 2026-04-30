@@ -11,6 +11,10 @@ export const OutboxEventType = {
   WITHDRAWAL_REVERSED: 'withdrawal.reversed',
   REVIEW_POSTED: 'review.posted',
   REVIEW_HIDDEN: 'review.hidden',
+  KYC_APPROVED: 'kyc.approved',
+  KYC_REJECTED: 'kyc.rejected',
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- event type, not a credential
+  PASSWORD_RESET_REQUESTED_BY_ADMIN: 'auth.password_reset.requested_by_admin',
 } as const;
 
 export type OutboxEventType = (typeof OutboxEventType)[keyof typeof OutboxEventType];

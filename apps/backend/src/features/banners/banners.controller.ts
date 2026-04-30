@@ -25,6 +25,18 @@ export const adminDelete: RequestHandler = asyncHandler(async (req: Request, res
   else ResponseUtil.ok(res, r.data);
 });
 
+export const adminLaunch: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.launchBanner(String(req.params['id']));
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const adminPause: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.pauseBanner(String(req.params['id']));
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
 export const adminList: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.listAdmin(req.query);
   if (!r.success) bail(r);

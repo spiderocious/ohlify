@@ -89,20 +89,42 @@ export const overview = async () => {
   );
 };
 
-// Revenue snapshot — platform fee income + total processed volume,
-// grouped by 7d / 30d / 90d windows. Reads from journal_entries with
-// kind = 'call_settlement'. Money is denominated in kobo.
-export const revenue = async () => {
+// Revenue time-series. Reads from journal_entries with kind =
+// 'call_settlement'. Buckets by date_trunc(granularity). Money is
+// denominated in kobo.
+//
+// Defaults: granularity=day, from=now-30d, to=now (matches the spec).
+// Buckets are server-time (UTC). The mobile UI is responsible for
+// rendering in the user's locale.
+//
+// Why a generate_series() outer join: ensures a row exists for every
+// bucket in the requested range, even buckets with zero settlements.
+// Lets the chart show a flat-line gap instead of skipping x-axis ticks.
+export interface RevenueQuery {
+  from?: Date;
+  to?: Date;
+  granularity?: 'day' | 'week' | 'month';
+}
+
+const DEFAULT_LOOKBACK_DAYS = 30;
+
+export const revenue = async (q: RevenueQuery = {}) => {
+  const granularity = q.granularity ?? 'day';
+  const to = q.to ?? new Date();
+  const from = q.from ?? new Date(to.getTime() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
   const result = await pool.query<{
-    window: string;
+    bucket_start: Date;
     total_volume_kobo: string;
     total_fee_kobo: string;
     settlement_count: string;
   }>(
-    `WITH windows AS (
-       SELECT '7d' AS w, now() - INTERVAL '7 days' AS since
-       UNION ALL SELECT '30d', now() - INTERVAL '30 days'
-       UNION ALL SELECT '90d', now() - INTERVAL '90 days'
+    `WITH buckets AS (
+       SELECT generate_series(
+         date_trunc($3, $1::timestamptz),
+         date_trunc($3, $2::timestamptz),
+         ('1 ' || $3)::interval
+       ) AS bucket_start
      ),
      settlement_lines AS (
        SELECT j.id, j.created_at,
@@ -114,22 +136,29 @@ export const revenue = async () => {
          JOIN wallet_entries we ON we.journal_id = j.id
          JOIN accounts acct ON acct.id = we.account_id
         WHERE j.kind = 'call_settlement'
+          AND j.created_at >= $1::timestamptz
+          AND j.created_at <  $2::timestamptz
         GROUP BY j.id, j.created_at
      )
-     SELECT w.w AS window,
+     SELECT b.bucket_start,
             COALESCE(SUM(sl.volume_kobo), 0)::text AS total_volume_kobo,
             COALESCE(SUM(sl.fee_kobo), 0)::text AS total_fee_kobo,
             COUNT(sl.id)::text AS settlement_count
-       FROM windows w
-       LEFT JOIN settlement_lines sl ON sl.created_at >= w.since
-       GROUP BY w.w
-       ORDER BY w.w`,
+       FROM buckets b
+       LEFT JOIN settlement_lines sl
+         ON date_trunc($3, sl.created_at) = b.bucket_start
+       GROUP BY b.bucket_start
+       ORDER BY b.bucket_start ASC`,
+    [from, to, granularity],
   );
 
   return new ServiceSuccess(
     {
-      windows: result.rows.map((r) => ({
-        window: r.window,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      granularity,
+      series: result.rows.map((r) => ({
+        bucket_start: r.bucket_start.toISOString(),
         total_volume_kobo: koboToJson(BigInt(r.total_volume_kobo)),
         total_fee_kobo: koboToJson(BigInt(r.total_fee_kobo)),
         settlement_count: Number(r.settlement_count),

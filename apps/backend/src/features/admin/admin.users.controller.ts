@@ -56,6 +56,7 @@ export const resetPassword: RequestHandler = asyncHandler(async (req: Request, r
   const r = await service.resetPassword(
     String(req.params['id']),
     req.body as AdminResetPasswordDto,
+    req.adminId!,
   );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);

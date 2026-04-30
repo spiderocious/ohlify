@@ -4,11 +4,15 @@ import { id as newId } from '@lib/ids.js';
 export interface BannerRow {
   id: string;
   title: string;
+  subtitle: string | null;
   body: string | null;
+  body_blocks: unknown;
   image_url: string | null;
   cta_label: string | null;
   cta_url: string | null;
+  deeplink: string | null;
   audience: string;
+  placement: string;
   priority: number;
   is_active: boolean;
   starts_at: Date | null;
@@ -20,11 +24,15 @@ export interface BannerRow {
 
 export interface CreateBannerInput {
   title: string;
+  subtitle: string | null;
   body: string | null;
+  bodyBlocks: unknown;
   imageUrl: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
+  deeplink: string | null;
   audience: string;
+  placement: string;
   priority: number;
   isActive: boolean;
   startsAt: Date | null;
@@ -36,18 +44,23 @@ export const create = async (input: CreateBannerInput): Promise<BannerRow> => {
   const bannerId = newId('ban');
   const res = await pool.query<BannerRow>(
     `INSERT INTO banners
-       (id, title, body, image_url, cta_label, cta_url, audience, priority,
-        is_active, starts_at, ends_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::banner_audience, $8, $9, $10, $11, $12)
+       (id, title, subtitle, body, body_blocks, image_url, cta_label, cta_url, deeplink,
+        audience, placement, priority, is_active, starts_at, ends_at, created_by)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
+             $10::banner_audience, $11::banner_placement, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
       bannerId,
       input.title,
+      input.subtitle,
       input.body,
+      JSON.stringify(input.bodyBlocks ?? []),
       input.imageUrl,
       input.ctaLabel,
       input.ctaUrl,
+      input.deeplink,
       input.audience,
+      input.placement,
       input.priority,
       input.isActive,
       input.startsAt,
@@ -65,11 +78,15 @@ export const findById = async (bannerId: string): Promise<BannerRow | null> => {
 
 export interface UpdateBannerInput {
   title?: string;
+  subtitle?: string | null;
   body?: string | null;
+  bodyBlocks?: unknown;
   imageUrl?: string | null;
   ctaLabel?: string | null;
   ctaUrl?: string | null;
+  deeplink?: string | null;
   audience?: string;
+  placement?: string;
   priority?: number;
   isActive?: boolean;
   startsAt?: Date | null;
@@ -91,13 +108,23 @@ export const update = async (
   };
 
   if (input.title !== undefined) push('title', input.title);
+  if (input.subtitle !== undefined) push('subtitle', input.subtitle);
   if (input.body !== undefined) push('body', input.body);
+  if (input.bodyBlocks !== undefined) {
+    params.push(JSON.stringify(input.bodyBlocks ?? []));
+    sets.push(`body_blocks = $${params.length}::jsonb`);
+  }
   if (input.imageUrl !== undefined) push('image_url', input.imageUrl);
   if (input.ctaLabel !== undefined) push('cta_label', input.ctaLabel);
   if (input.ctaUrl !== undefined) push('cta_url', input.ctaUrl);
+  if (input.deeplink !== undefined) push('deeplink', input.deeplink);
   if (input.audience !== undefined) {
     params.push(input.audience);
     sets.push(`audience = $${params.length}::banner_audience`);
+  }
+  if (input.placement !== undefined) {
+    params.push(input.placement);
+    sets.push(`placement = $${params.length}::banner_placement`);
   }
   if (input.priority !== undefined) push('priority', input.priority);
   if (input.isActive !== undefined) push('is_active', input.isActive);
@@ -126,6 +153,7 @@ export interface ListAdminQuery {
   limit: number;
   cursor?: { last_id: string; last_sort_key: string } | undefined;
   audience?: string | undefined;
+  placement?: string | undefined;
   isActive?: boolean | undefined;
 }
 
@@ -135,6 +163,10 @@ export const listAdmin = async (q: ListAdminQuery): Promise<BannerRow[]> => {
   if (q.audience) {
     params.push(q.audience);
     filters.push(`audience = $${params.length}::banner_audience`);
+  }
+  if (q.placement) {
+    params.push(q.placement);
+    filters.push(`placement = $${params.length}::banner_placement`);
   }
   if (q.isActive !== undefined) {
     params.push(q.isActive);
@@ -159,24 +191,34 @@ export const listAdmin = async (q: ListAdminQuery): Promise<BannerRow[]> => {
   return res.rows;
 };
 
+export interface ListPublicQuery {
+  audience?: 'clients' | 'professionals' | 'all' | undefined;
+  placement?: 'home_top' | 'home_inline' | 'web_landing' | undefined;
+}
+
 // Public list: only banners that are active AND inside their schedule
 // window (starts_at <= now AND (ends_at IS NULL OR ends_at > now)).
 // `audience='all'` is always returned alongside the requested audience.
-export const listPublic = async (
-  audience: 'clients' | 'professionals' | 'all' | undefined,
-): Promise<BannerRow[]> => {
+// Optional `placement` narrows to one slot.
+export const listPublic = async (q: ListPublicQuery): Promise<BannerRow[]> => {
   const params: unknown[] = [];
   let audienceFilter: string;
-  if (audience && audience !== 'all') {
-    params.push(audience);
+  if (q.audience && q.audience !== 'all') {
+    params.push(q.audience);
     audienceFilter = `(audience = 'all'::banner_audience OR audience = $${params.length}::banner_audience)`;
   } else {
     audienceFilter = `audience = 'all'::banner_audience`;
+  }
+  let placementFilter = 'TRUE';
+  if (q.placement) {
+    params.push(q.placement);
+    placementFilter = `placement = $${params.length}::banner_placement`;
   }
   const res = await pool.query<BannerRow>(
     `SELECT * FROM banners
        WHERE is_active = TRUE
          AND ${audienceFilter}
+         AND ${placementFilter}
          AND (starts_at IS NULL OR starts_at <= now())
          AND (ends_at IS NULL OR ends_at > now())
        ORDER BY priority DESC, created_at DESC`,

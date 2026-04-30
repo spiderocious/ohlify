@@ -6,7 +6,9 @@ import { rateLimitMiddleware } from '@lib/redis/rateLimit.js';
 import { auditAdmin } from '@middlewares/auditAdmin.middleware.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
-import { requireAdmin } from '@middlewares/requireAdmin.middleware.js';
+import { requireAdmin, requireAdminRole } from '@middlewares/requireAdmin.middleware.js';
+
+const STAFF = ['admin', 'support'] as const;
 
 import * as controller from './reviews.controller.js';
 import {
@@ -42,9 +44,9 @@ export const register = (app: Express): void => {
   // professionals.service.ts → `reviews()`. Don't double-mount here — that
   // would shadow the professionals router's auth + rate-limit middleware.
 
-  // Admin: list + hide.
+  // Admin: list + hide. STAFF moderation; admin or support.
   const adminRouter = Router();
-  adminRouter.use(requireAdmin);
+  adminRouter.use(requireAdmin, requireAdminRole(STAFF));
   adminRouter.get('/', validate(AdminListReviewsQuerySchema, 'query'), controller.adminList);
   adminRouter.post(
     '/:id/hide',

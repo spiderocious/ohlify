@@ -1,7 +1,8 @@
+import { IconSparkles } from '@icons';
 import { Link } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
-import { AppText, IconSparkles } from '@ohlify/ui';
+import { AppText } from '@ohlify/ui';
 
 export function WelcomeScreen() {
   return (
@@ -11,11 +12,11 @@ export function WelcomeScreen() {
           <IconSparkles size={22} />
         </div>
 
-        <AppText as="h1" variant="titleLarge">
+        <AppText as="h1" variant="title">
           Hello Ohlify
         </AppText>
 
-        <AppText as="p" variant="bodyLarge" className="max-w-md text-text-muted">
+        <AppText as="p" variant="subheader" align="start" className="max-w-md text-text-muted">
           The customer web app shell is alive. MonaSans is loaded, the canonical palette is wired
           through CSS variables, and React Router v6 is mounted with typed routes.
         </AppText>

@@ -56,6 +56,27 @@
   --ohl-nav-icon-inactive: #5c5a8a;
 }
 
+@keyframes ohlFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ohlPopIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ohlSlideDown {
+  from { opacity: 0; transform: translateY(-15%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ohlSlideUp {
+  from { opacity: 0; transform: translateY(15%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ohlSlideUpFull {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 html,
 body {
   height: 100%;

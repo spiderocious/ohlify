@@ -1,4 +1,6 @@
-import { AppText, IconSparkles } from '@ohlify/ui';
+import { IconSparkles } from '@icons';
+
+import { AppText } from '@ohlify/ui';
 
 export function WelcomeScreen() {
   return (
@@ -8,11 +10,11 @@ export function WelcomeScreen() {
           <IconSparkles size={22} />
         </div>
 
-        <AppText as="h1" variant="titleLarge">
+        <AppText as="h1" variant="title">
           Welcome to Ohlify Admin
         </AppText>
 
-        <AppText as="p" variant="bodyLarge" className="max-w-md text-text-muted">
+        <AppText as="p" variant="subheader" align="start" className="max-w-md text-text-muted">
           Admin shell is wired against the same design system. Real screens land in a later phase —
           for now the router is mounted, MonaSans is loaded, and theme tokens are available.
         </AppText>

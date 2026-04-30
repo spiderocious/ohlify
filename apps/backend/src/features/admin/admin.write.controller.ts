@@ -10,6 +10,7 @@ import type {
   AdminCreditDto,
   AdminDebitDto,
   AdminForceFailWithdrawalDto,
+  AdminRefundCallDto,
   AdminRejectRefundDto,
   AdminReplayWebhookDto,
   AdminTestInitCallDto,
@@ -112,6 +113,19 @@ export const getCallDetail: RequestHandler = asyncHandler(async (req: Request, r
   const r = await callsService.adminGetCallDetail(String(req.params['id']));
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
+});
+
+export const refundCall: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const dto = req.body as AdminRefundCallDto;
+  const r = await callsService.adminRefundCall({
+    callId: String(req.params['id']),
+    amountKobo: BigInt(dto.amount_kobo),
+    reason: dto.reason,
+    requestId: dto.request_id,
+    adminId: req.adminId!,
+  });
+  if (!r.success) bail(r);
+  else ResponseUtil.created(res, r.data);
 });
 
 export const forceEndCall: RequestHandler = asyncHandler(async (req: Request, res: Response) => {

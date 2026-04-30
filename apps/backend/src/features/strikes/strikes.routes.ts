@@ -4,7 +4,9 @@ import type { Express } from 'express';
 import { validate } from '@lib/http/validateRequest.js';
 import { auditAdmin } from '@middlewares/auditAdmin.middleware.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
-import { requireAdmin } from '@middlewares/requireAdmin.middleware.js';
+import { requireAdmin, requireAdminRole } from '@middlewares/requireAdmin.middleware.js';
+
+const STAFF = ['admin', 'support'] as const;
 
 import * as controller from './strikes.controller.js';
 import {
@@ -26,9 +28,10 @@ export const register = (app: Express): void => {
   me.post('/:id/dispute', validate(DisputeStrikeSchema), controller.dispute);
   app.use('/api/v1/me/strikes', me);
 
-  // Admin — list / uphold / void.
+  // Admin — list / uphold / void. STAFF (admin or support) can moderate
+  // strikes; this is moderation work, not money-moving.
   const admin = Router();
-  admin.use(requireAdmin);
+  admin.use(requireAdmin, requireAdminRole(STAFF));
   admin.get('/', validate(AdminListStrikesQuerySchema, 'query'), controller.adminList);
   admin.post(
     '/:id/uphold',

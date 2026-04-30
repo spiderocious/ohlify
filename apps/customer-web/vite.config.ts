@@ -30,6 +30,11 @@ export default defineConfig({
         find: /^@ohlify\/api$/,
         replacement: path.resolve(__dirname, '../../packages/api/src/index.ts'),
       },
+      // Icon proxy — used by lib internals AND app feature code.
+      {
+        find: /^@icons$/,
+        replacement: path.resolve(__dirname, '../../packages/ui/src/icons/index.ts'),
+      },
     ],
   },
   server: {

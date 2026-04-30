@@ -9,7 +9,11 @@
     "rootDir": "src",
     "outDir": "dist",
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@icons": ["./src/icons/index.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

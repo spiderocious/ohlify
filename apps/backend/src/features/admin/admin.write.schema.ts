@@ -81,6 +81,21 @@ export const AdminTestInitCallSchema = z
   })
   .strict();
 
+// Manual admin-initiated refund on a call. Posts a `call_refund` (pre-settle)
+// or `call_refund_post_settle` (post-settle clawback) journal depending on
+// the call's current state. amount_kobo is in user-facing kobo, not the
+// internal bigint form. request_id is the idempotency anchor so retries
+// collapse.
+export const AdminRefundCallSchema = z
+  .object({
+    amount_kobo: z.number().int().positive(),
+    reason: z.string().min(1).max(2000),
+    request_id: z.string().min(1).max(120),
+  })
+  .strict();
+
+export type AdminRefundCallDto = z.infer<typeof AdminRefundCallSchema>;
+
 export const AdminListCallsQuerySchema = z
   .object({
     cursor: z.string().min(1).max(2048).optional(),
@@ -320,3 +335,53 @@ export const AdminUpdateFaqSchema = AdminCreateFaqSchema.partial();
 export type AdminPublishLegalDto = z.infer<typeof AdminPublishLegalSchema>;
 export type AdminCreateFaqDto = z.infer<typeof AdminCreateFaqSchema>;
 export type AdminUpdateFaqDto = z.infer<typeof AdminUpdateFaqSchema>;
+
+// ── Admin payments / transactions ────────────────────────────────────────
+
+export const AdminListTransactionsQuerySchema = z
+  .object({
+    cursor: z.string().min(1).max(2048).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    source: z.enum(['payment', 'journal']).optional(),
+    status: z.enum(['pending', 'success', 'failed', 'abandoned', 'reversed']).optional(),
+    user_id: z.string().min(1).max(64).optional(),
+    reference: z.string().min(1).max(120).optional(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const AdminApproveWithdrawalSchema = z
+  .object({
+    note: z.string().max(2000).optional(),
+  })
+  .strict();
+
+export const AdminRejectWithdrawalSchema = z
+  .object({
+    reason: z.string().min(1).max(2000),
+  })
+  .strict();
+
+export type AdminListTransactionsQueryDto = z.infer<typeof AdminListTransactionsQuerySchema>;
+export type AdminApproveWithdrawalDto = z.infer<typeof AdminApproveWithdrawalSchema>;
+export type AdminRejectWithdrawalDto = z.infer<typeof AdminRejectWithdrawalSchema>;
+
+// ── Admin metrics ──────────────────────────────────────────────────────────
+
+export const AdminMetricsRevenueQuerySchema = z
+  .object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    granularity: z.enum(['day', 'week', 'month']).optional(),
+  })
+  .strict()
+  .refine(
+    (v) => {
+      if (v.from && v.to) return new Date(v.from) < new Date(v.to);
+      return true;
+    },
+    { message: 'from must be before to', path: ['from'] },
+  );
+
+export type AdminMetricsRevenueQueryDto = z.infer<typeof AdminMetricsRevenueQuerySchema>;

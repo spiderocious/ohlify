@@ -13,11 +13,15 @@ import type {
 const toView = (row: repo.BannerRow) => ({
   id: row.id,
   title: row.title,
+  subtitle: row.subtitle,
   body: row.body,
+  body_blocks: row.body_blocks,
   image_url: row.image_url,
   cta_label: row.cta_label,
   cta_url: row.cta_url,
+  deeplink: row.deeplink,
   audience: row.audience,
+  placement: row.placement,
   priority: row.priority,
   is_active: row.is_active,
   starts_at: row.starts_at?.toISOString() ?? null,
@@ -27,15 +31,21 @@ const toView = (row: repo.BannerRow) => ({
   updated_at: row.updated_at.toISOString(),
 });
 
-// Public-safe view: strips internal fields the mobile app shouldn't see.
+// Public-safe view: strips internal fields the mobile app shouldn't see
+// (created_by admin id, created_at/updated_at server-side bookkeeping,
+// is_active — already true by definition for anything in this list).
 const toPublicView = (row: repo.BannerRow) => ({
   id: row.id,
   title: row.title,
+  subtitle: row.subtitle,
   body: row.body,
+  body_blocks: row.body_blocks,
   image_url: row.image_url,
   cta_label: row.cta_label,
   cta_url: row.cta_url,
+  deeplink: row.deeplink,
   audience: row.audience,
+  placement: row.placement,
   priority: row.priority,
   starts_at: row.starts_at?.toISOString() ?? null,
   ends_at: row.ends_at?.toISOString() ?? null,
@@ -64,6 +74,33 @@ const validateWindow = (
 const resolveTimestampPatch = (incoming: string | undefined, current: Date | null): Date | null =>
   incoming === undefined ? current : new Date(incoming);
 
+// Build the snake_case → camelCase update payload from a partial DTO.
+// Pulled out of updateBanner so cognitive complexity stays under the
+// sonarjs threshold; the field-by-field mapping is the same shape as
+// createBanner.
+const buildUpdatePayload = (
+  dto: UpdateBannerDto,
+  nextStarts: Date | null,
+  nextEnds: Date | null,
+): repo.UpdateBannerInput => {
+  const payload: repo.UpdateBannerInput = {};
+  if (dto.title !== undefined) payload.title = dto.title;
+  if (dto.subtitle !== undefined) payload.subtitle = dto.subtitle;
+  if (dto.body !== undefined) payload.body = dto.body;
+  if (dto.body_blocks !== undefined) payload.bodyBlocks = dto.body_blocks;
+  if (dto.image_url !== undefined) payload.imageUrl = dto.image_url;
+  if (dto.cta_label !== undefined) payload.ctaLabel = dto.cta_label;
+  if (dto.cta_url !== undefined) payload.ctaUrl = dto.cta_url;
+  if (dto.deeplink !== undefined) payload.deeplink = dto.deeplink;
+  if (dto.audience !== undefined) payload.audience = dto.audience;
+  if (dto.placement !== undefined) payload.placement = dto.placement;
+  if (dto.priority !== undefined) payload.priority = dto.priority;
+  if (dto.is_active !== undefined) payload.isActive = dto.is_active;
+  if (dto.starts_at !== undefined) payload.startsAt = nextStarts;
+  if (dto.ends_at !== undefined) payload.endsAt = nextEnds;
+  return payload;
+};
+
 export const createBanner = async (dto: CreateBannerDto, adminId: string) => {
   const createdBy = adminId === 'adm_stub' ? null : adminId;
   const startsAt = dto.starts_at ? new Date(dto.starts_at) : null;
@@ -74,11 +111,15 @@ export const createBanner = async (dto: CreateBannerDto, adminId: string) => {
   }
   const row = await repo.create({
     title: dto.title,
+    subtitle: dto.subtitle ?? null,
     body: dto.body ?? null,
+    bodyBlocks: dto.body_blocks ?? [],
     imageUrl: dto.image_url ?? null,
     ctaLabel: dto.cta_label ?? null,
     ctaUrl: dto.cta_url ?? null,
+    deeplink: dto.deeplink ?? null,
     audience: dto.audience ?? 'all',
+    placement: dto.placement,
     priority: dto.priority ?? 0,
     isActive: dto.is_active ?? false,
     startsAt,
@@ -101,18 +142,7 @@ export const updateBanner = async (bannerId: string, dto: UpdateBannerDto) => {
   if (windowErr) {
     return new ServiceError('validation_error', MESSAGE_KEYS.ADMIN_BANNER_UPDATED, 422, windowErr);
   }
-  const row = await repo.update(bannerId, {
-    ...(dto.title !== undefined ? { title: dto.title } : {}),
-    ...(dto.body !== undefined ? { body: dto.body } : {}),
-    ...(dto.image_url !== undefined ? { imageUrl: dto.image_url } : {}),
-    ...(dto.cta_label !== undefined ? { ctaLabel: dto.cta_label } : {}),
-    ...(dto.cta_url !== undefined ? { ctaUrl: dto.cta_url } : {}),
-    ...(dto.audience !== undefined ? { audience: dto.audience } : {}),
-    ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
-    ...(dto.is_active !== undefined ? { isActive: dto.is_active } : {}),
-    ...(dto.starts_at !== undefined ? { startsAt: nextStarts } : {}),
-    ...(dto.ends_at !== undefined ? { endsAt: nextEnds } : {}),
-  });
+  const row = await repo.update(bannerId, buildUpdatePayload(dto, nextStarts, nextEnds));
   return new ServiceSuccess(toView(row!), MESSAGE_KEYS.ADMIN_BANNER_UPDATED);
 };
 
@@ -122,6 +152,36 @@ export const deleteBanner = async (bannerId: string) => {
     return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_BANNER_DELETED, 404);
   }
   return new ServiceSuccess({ id: bannerId }, MESSAGE_KEYS.ADMIN_BANNER_DELETED);
+};
+
+// Short-circuit: flip is_active=true. If the banner is scheduled in the
+// future (starts_at > now), also reset starts_at to now so it's
+// immediately visible — matches the spec ("sets is_active: true,
+// starts_at: now() if scheduled in the future"). ends_at unchanged.
+export const launchBanner = async (bannerId: string) => {
+  const existing = await repo.findById(bannerId);
+  if (!existing) {
+    return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_BANNER_LAUNCHED, 404);
+  }
+  const now = new Date();
+  const nextStarts =
+    existing.starts_at !== null && existing.starts_at > now ? now : existing.starts_at;
+  const row = await repo.update(bannerId, {
+    isActive: true,
+    ...(nextStarts !== existing.starts_at ? { startsAt: nextStarts } : {}),
+  });
+  return new ServiceSuccess(toView(row!), MESSAGE_KEYS.ADMIN_BANNER_LAUNCHED);
+};
+
+// Short-circuit: flip is_active=false. Schedule unchanged so the banner
+// can be re-launched without re-editing the window.
+export const pauseBanner = async (bannerId: string) => {
+  const existing = await repo.findById(bannerId);
+  if (!existing) {
+    return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_BANNER_PAUSED, 404);
+  }
+  const row = await repo.update(bannerId, { isActive: false });
+  return new ServiceSuccess(toView(row!), MESSAGE_KEYS.ADMIN_BANNER_PAUSED);
 };
 
 export const listAdmin = async (dto: ListBannersAdminQueryDto) => {
@@ -140,6 +200,7 @@ export const listAdmin = async (dto: ListBannersAdminQueryDto) => {
     limit,
     ...(cursor ? { cursor } : {}),
     ...(dto.audience ? { audience: dto.audience } : {}),
+    ...(dto.placement ? { placement: dto.placement } : {}),
     ...(dto.is_active !== undefined ? { isActive: dto.is_active } : {}),
   });
   const hasMore = rows.length > limit;
@@ -167,6 +228,9 @@ export const getAdmin = async (bannerId: string) => {
 };
 
 export const listPublic = async (dto: ListBannersPublicQueryDto) => {
-  const rows = await repo.listPublic(dto.audience);
+  const rows = await repo.listPublic({
+    ...(dto.audience ? { audience: dto.audience } : {}),
+    ...(dto.placement ? { placement: dto.placement } : {}),
+  });
   return new ServiceSuccess({ items: rows.map(toPublicView) }, MESSAGE_KEYS.BANNERS_FETCHED);
 };

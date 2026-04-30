@@ -1,5 +1,6 @@
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
@@ -79,15 +80,33 @@ export const approve = async (submissionId: string, _dto: AdminApproveKycDto, ad
       });
     }
     await repo.setApproved(client, submission.id, reviewedBy);
+    // Approve flips kyc_status AND promotes the user to `professional`.
+    // Spec: "user role flips to professional, kyc_status: approved, profile
+    // goes live in search". We don't downgrade an already-professional user
+    // (re-approval is a no-op on the role column).
     await client.query(
       `UPDATE users
          SET kyc_status = 'approved'::kyc_status,
              kyc_reviewed_at = now(),
              kyc_reject_reason = NULL,
+             role = CASE WHEN role = 'professional' THEN role ELSE 'professional'::user_role END,
              updated_at = now()
          WHERE id = $1`,
       [submission.user_id],
     );
+    // Outbox: kyc.approved — picked up by the notification fanout worker
+    // (push + email per the spec). Inside the same tx so the event only
+    // fires iff the role flip commits.
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.USER,
+      aggregateId: submission.user_id,
+      eventType: OutboxEventType.KYC_APPROVED,
+      payload: {
+        user_id: submission.user_id,
+        submission_id: submission.id,
+        reviewed_by: reviewedBy,
+      },
+    });
     await client.query('COMMIT');
     logger.info({ submissionId, userId: submission.user_id }, 'admin approved KYC');
     const fresh = await repo.findByIdForUpdate(client, submission.id);
@@ -127,6 +146,19 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
          WHERE id = $1`,
       [submission.user_id, dto.reason_code],
     );
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.USER,
+      aggregateId: submission.user_id,
+      eventType: OutboxEventType.KYC_REJECTED,
+      payload: {
+        user_id: submission.user_id,
+        submission_id: submission.id,
+        reason_code: dto.reason_code,
+        // note intentionally omitted — admin-internal explanation, not
+        // for the user-facing notification template.
+        reviewed_by: reviewedBy,
+      },
+    });
     await client.query('COMMIT');
     logger.info(
       { submissionId, userId: submission.user_id, reasonCode: dto.reason_code },

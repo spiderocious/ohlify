@@ -13,6 +13,7 @@ import { koboToJson } from '@lib/money.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { reservePayment } from '@lib/wallet/flows/pay.js';
+import { refundPostSettle, refundReserve } from '@lib/wallet/flows/refund.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
 // ── POST /admin/calls/test-init ─────────────────────────────────────────────
@@ -323,6 +324,129 @@ export const adminForceEndCall = async (callId: string, adminId: string) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     logger.error({ err, callId }, 'adminForceEndCall failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ── POST /admin/calls/:id/refund (manual refund tool) ─────────────────────
+//
+// Posts a refund journal against a call, regardless of the call's current
+// state. Two paths:
+//
+//   - Pre-settle (no settlement_journal_id yet): refundReserve releases
+//     funds from the pending pool back to the caller. Same primitive the
+//     resolver uses for cancellations.
+//   - Post-settle (settlement_journal_id present): refundPostSettle does
+//     a clawback — pulls back from the payee + platform_revenue, returns
+//     to the caller.
+//
+// Idempotency anchor is `request_id` from the body, combined with the
+// call id by the lib. Retries with the same id collapse to the original
+// journal (`alreadyPosted=true`).
+//
+// Validation: amount cannot exceed what was actually paid (booking.total_paid_kobo).
+//
+// Audit: a `call_events` row tagged `admin_refund` records who/what/why.
+export interface AdminRefundCallInput {
+  callId: string;
+  amountKobo: bigint;
+  reason: string;
+  requestId: string;
+  adminId: string;
+}
+
+export const adminRefundCall = async (input: AdminRefundCallInput) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const call = await callsRepo.findByIdForUpdate(client, input.callId);
+    if (!call) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', MESSAGE_KEYS.ADMIN_CALL_REFUNDED, 404);
+    }
+    const booking = await bookingsRepo.findByIdForUpdate(client, call.booking_id);
+    if (!booking) {
+      await client.query('ROLLBACK');
+      return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_CALL_REFUNDED, 404);
+    }
+
+    const totalPaid = BigInt(booking.total_paid_kobo);
+    if (input.amountKobo > totalPaid) {
+      await client.query('ROLLBACK');
+      return new ServiceError('validation_error', MESSAGE_KEYS.ADMIN_CALL_REFUNDED, 422, {
+        amount_kobo: [`Cannot refund more than total_paid_kobo (${totalPaid.toString()})`],
+      });
+    }
+
+    const isPostSettle = call.settlement_journal_id !== null;
+    let journalId: string;
+    let phase: 'pre_settle' | 'post_settle';
+
+    if (isPostSettle) {
+      // Post-settle clawback uses the booking's snapshotted fee_bps so the
+      // platform's share is reversed correctly. For Mode A
+      // (deduct_from_payee) the snapshot is wallet.platform_fee_bps; for
+      // Mode B (add_to_payer) the platform fee was added on top, so we
+      // back it out using the same snapshot.
+      const cfg = platformConfig.wallet();
+      const result = await refundPostSettle(client, {
+        callId: call.id,
+        payerUserId: booking.caller_user_id,
+        payeeUserId: booking.callee_user_id,
+        amountKobo: input.amountKobo,
+        feeBps: cfg.platform_fee_bps,
+        refundRequestId: input.requestId,
+      });
+      journalId = result.journalId;
+      phase = 'post_settle';
+    } else {
+      const result = await refundReserve(client, {
+        callId: call.id,
+        payerUserId: booking.caller_user_id,
+        amountKobo: input.amountKobo,
+        refundRequestId: input.requestId,
+      });
+      journalId = result.journalId;
+      phase = 'pre_settle';
+    }
+
+    await callsRepo.recordEvent(client, {
+      callId: call.id,
+      eventType: 'admin_refund',
+      payload: {
+        admin_id: input.adminId,
+        amount_kobo: input.amountKobo.toString(),
+        reason: input.reason,
+        request_id: input.requestId,
+        phase,
+        journal_id: journalId,
+      },
+    });
+    await client.query('COMMIT');
+    logger.warn(
+      {
+        callId: call.id,
+        adminId: input.adminId,
+        amountKobo: input.amountKobo.toString(),
+        phase,
+        journalId,
+      },
+      'admin manual refund posted',
+    );
+    return new ServiceSuccess(
+      {
+        call_id: call.id,
+        journal_id: journalId,
+        phase,
+        amount_kobo: koboToJson(input.amountKobo),
+      },
+      MESSAGE_KEYS.ADMIN_CALL_REFUNDED,
+    );
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, callId: input.callId }, 'adminRefundCall tx failed');
     throw err;
   } finally {
     client.release();

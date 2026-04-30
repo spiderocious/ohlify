@@ -13,14 +13,14 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "baseUrl": ".",
     "paths": {
-      "@ohlify/ui": ["packages/ui/src/index.ts"],
-      "@ohlify/ui/*": ["packages/ui/src/*"],
-      "@ohlify/core": ["packages/core/src/index.ts"],
-      "@ohlify/core/*": ["packages/core/src/*"],
-      "@ohlify/api": ["packages/api/src/index.ts"],
-      "@ohlify/api/*": ["packages/api/src/*"]
+      "@ohlify/ui": ["./packages/ui/src/index.ts"],
+      "@ohlify/ui/*": ["./packages/ui/src/*"],
+      "@ohlify/core": ["./packages/core/src/index.ts"],
+      "@ohlify/core/*": ["./packages/core/src/*"],
+      "@ohlify/api": ["./packages/api/src/index.ts"],
+      "@ohlify/api/*": ["./packages/api/src/*"],
+      "@icons": ["./packages/ui/src/icons/index.ts"]
     }
   }
 }
