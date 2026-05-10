@@ -1,5 +1,6 @@
-import { IconChevronDown } from '@icons';
 import { useId, useState, type CSSProperties } from 'react';
+
+import { IconChevronDown } from '@icons';
 
 
 import { cn } from '../../utils/cn.js';

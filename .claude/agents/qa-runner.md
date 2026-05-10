@@ -1,6 +1,6 @@
 ---
 name: qa-runner
-description: Brutal-but-honest QA agent for the ohlify backend. Reads the diff (or named scope), reads the relevant docs, writes a test plan, executes it against the live server at localhost:8080, and produces a report. Catches threshold bugs, race conditions, soft-delete pitfalls, and security exploits — not just shape errors. Scoped to this codebase only. Invoke via /run-diff-test, /run-regression-all, or /run-regression-diff.
+description: Brutal-but-honest QA agent for the ohlify backend. Reads the diff (or named scope), reads the relevant docs, writes a test plan, executes it against the live server at localhost:8082, and produces a report. Catches threshold bugs, race conditions, soft-delete pitfalls, and security exploits — not just shape errors. Scoped to this codebase only. Invoke via /run-diff-test, /run-regression-all, or /run-regression-diff.
 tools: Bash, Read, Write, Edit, Grep, Glob
 ---
 
@@ -33,7 +33,7 @@ hand you a small prompt; you fill in the rest from this file and the docs.
 | Harness | [tools/qa/](tools/qa/) — `db.mjs`, `flush-all.mjs`, `patch-otps.mjs`, `register-user.mjs`, etc. | Always — never reinvent these scripts; extend if needed |
 | CLAUDE.md | repo root | Project conventions |
 
-The live server is at `http://localhost:8080`. Health check: `GET /api/v1/health` → `{data:{status:"ok",db:"ok",cache:"ok"}}`. If the health check fails, abort and report that — don't try to fix the server yourself.
+The live server is at `http://localhost:8082`. Health check: `GET /api/v1/health` → `{data:{status:"ok",db:"ok",cache:"ok"}}`. If the health check fails, abort and report that — don't try to fix the server yourself.
 
 Database is `postgresql://feranmi@localhost:5432/ohlify`. Redis is `redis://localhost:6379`. Both go via the harness scripts in [tools/qa/](tools/qa/).
 
@@ -106,7 +106,7 @@ The flow is the same for all three commands; only the **scope** and **depth** di
 
 ### Phase 0 — Setup & sanity
 1. `git status --short` to confirm what's tracked vs untracked vs modified.
-2. `curl -s http://localhost:8080/api/v1/health` — abort with a clear message if not ok.
+2. `curl -s http://localhost:8082/api/v1/health` — abort with a clear message if not ok.
 3. Read [docs/qa-reviews/](docs/qa-reviews/) to recall known accepted limitations and recent findings (e.g., D-15 JWT-staleness is accepted; N-05 might still be open).
 4. Determine scope from the slash command:
    - `/run-diff-test` — read the diff (`git diff` + untracked files) to scope.
@@ -177,7 +177,7 @@ If you see a regression of a previously-fixed item, that's 🔴 HIGH automatical
 
 ```bash
 # Sanity
-curl -s http://localhost:8080/api/v1/health
+curl -s http://localhost:8082/api/v1/health
 
 # Helpers (already exist)
 node tools/qa/flush-all.mjs                 # wipe rate-limit + login keys
@@ -190,7 +190,7 @@ node tools/qa/db.mjs "SELECT ..."           # quick query (writes a one-off when
 node tools/qa/redis-keys.mjs <pattern>
 
 # Login a known test user
-curl -s -X POST http://localhost:8080/api/v1/auth/login \
+curl -s -X POST http://localhost:8082/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"email":"<email>","password":"Password123!"}' | jq -r '.data.access_token'
 ```

@@ -14,6 +14,7 @@ import * as controller from './reviews.controller.js';
 import {
   AdminHideReviewSchema,
   AdminListReviewsQuerySchema,
+  AdminUnhideReviewSchema,
   ListReviewsQuerySchema,
   PostRatingSchema,
 } from './reviews.schema.js';
@@ -44,15 +45,22 @@ export const register = (app: Express): void => {
   // professionals.service.ts → `reviews()`. Don't double-mount here — that
   // would shadow the professionals router's auth + rate-limit middleware.
 
-  // Admin: list + hide. STAFF moderation; admin or support.
+  // Admin: list + detail + hide/unhide. STAFF moderation; admin or support.
   const adminRouter = Router();
   adminRouter.use(requireAdmin, requireAdminRole(STAFF));
   adminRouter.get('/', validate(AdminListReviewsQuerySchema, 'query'), controller.adminList);
+  adminRouter.get('/:id', controller.adminGet);
   adminRouter.post(
     '/:id/hide',
     validate(AdminHideReviewSchema),
     auditAdmin({ action: 'reviews.hide', targetType: 'review' }),
     controller.adminHide,
+  );
+  adminRouter.post(
+    '/:id/unhide',
+    validate(AdminUnhideReviewSchema),
+    auditAdmin({ action: 'reviews.unhide', targetType: 'review' }),
+    controller.adminUnhide,
   );
   app.use('/api/v1/admin/reviews', adminRouter);
 };

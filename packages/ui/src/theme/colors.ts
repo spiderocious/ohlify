@@ -28,7 +28,7 @@ export const colors = {
   textMuted: '#6B7280',
   textDeepBlue: '#0F0872',
   textSilver: '#807E7E',
-  textJet: '#08080C',
+  textJet: '#08082C',
   textSlate: '#868C98',
   textCharcoal: '#4F555F',
   textForest: '#1F6F15',

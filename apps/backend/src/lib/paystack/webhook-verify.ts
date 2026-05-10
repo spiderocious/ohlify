@@ -11,8 +11,12 @@ import { env } from '../../env.js';
 // reproduce Paystack's exact bytes (whitespace, key order, escape rules).
 export const verifyPaystackSignature = (
   rawBody: Buffer,
-  signatureHeader: string | undefined,
+  signatureHeader?: string,
+  querySecretKey?: string,
 ): boolean => {
+  if (querySecretKey && querySecretKey === env.PAYSTACK_WEBHOOK_SECRET) {
+    return true;
+  }
   if (typeof signatureHeader !== 'string' || signatureHeader.length === 0) {
     return false;
   }

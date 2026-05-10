@@ -1,5 +1,15 @@
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { createPortal } from 'react-dom';
+
 import { IconCheck, IconChevronDown, IconPlus, IconSearch } from '@icons';
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 
 import { cn } from '../../utils/cn.js';
@@ -18,15 +28,30 @@ interface AppMultiSelectDropdownProps {
   className?: string;
 }
 
+const POPUP_GAP_PX = 6;
+const POPUP_MAX_HEIGHT_PX = 320;
+const VIEWPORT_MARGIN_PX = 8;
+
+interface PopupRect {
+  top: number;
+  left: number;
+  width: number;
+  above: boolean;
+}
+
 /**
  * Mirrors mobile/lib/ui/widgets/app_multi_select_dropdown/app_multi_select_dropdown.dart.
  * Selected values render as chips inside the field; popup lists checkboxes.
+ *
+ * The popup is portaled to `document.body` and positioned via a measured rect
+ * so it isn't clipped by ancestor `overflow: hidden` (modals, scroll boxes).
+ * Same approach as `AppDropdownInput`.
  */
 export function AppMultiSelectDropdown({
   options,
   selected,
   onChange,
-  placeholder = 'IconSearch and select',
+  placeholder = 'Search and select',
   label,
   allowOther = false,
   otherPlaceholder = 'Add a custom option',
@@ -38,6 +63,7 @@ export function AppMultiSelectDropdown({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [other, setOther] = useState('');
+  const [popupRect, setPopupRect] = useState<PopupRect | null>(null);
 
   const filtered = useMemo(() => {
     if (!search) return options;
@@ -68,6 +94,33 @@ export function AppMultiSelectDropdown({
     };
   }, [open]);
 
+  const recomputePosition = useCallback(() => {
+    const target = targetRef.current;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN_PX;
+    const spaceAbove = rect.top - VIEWPORT_MARGIN_PX;
+    const flipAbove = spaceBelow < POPUP_MAX_HEIGHT_PX && spaceAbove > spaceBelow;
+    setPopupRect({
+      top: flipAbove ? rect.top - POPUP_GAP_PX : rect.bottom + POPUP_GAP_PX,
+      left: rect.left,
+      width: rect.width,
+      above: flipAbove,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    recomputePosition();
+    const onMove = () => recomputePosition();
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [open, recomputePosition]);
+
   const isSelected = (v: string) => selected.some((s) => s.toLowerCase() === v.toLowerCase());
 
   const toggle = (v: string) => {
@@ -95,6 +148,93 @@ export function AppMultiSelectDropdown({
     transition: 'border-color 150ms ease',
     minHeight: 52,
   };
+
+  const popupStyle: CSSProperties | null = popupRect
+    ? {
+        position: 'fixed',
+        top: popupRect.top,
+        left: popupRect.left,
+        width: popupRect.width,
+        maxHeight: POPUP_MAX_HEIGHT_PX,
+        // Modal scrim is z-[1000]; popup must sit above it.
+        zIndex: 1100,
+        transform: popupRect.above ? 'translateY(-100%)' : undefined,
+      }
+    : null;
+
+  const popupNode =
+    open && popupStyle ? (
+      <div
+        ref={popupRef}
+        style={popupStyle}
+        className="overflow-hidden rounded-md border border-border bg-background shadow-lg"
+      >
+        <div className="p-2">
+          <div className="flex items-center gap-2 rounded-sm border border-border px-2 py-1.5 focus-within:border-primary">
+            <IconSearch size={16} color="var(--ohl-text-slate)" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-slate"
+            />
+          </div>
+        </div>
+        <ul className="max-h-60 overflow-y-auto py-1">
+          {filtered.map((opt, i) => {
+            const sel = isSelected(opt.value);
+            return (
+              <li key={`${i}-${opt.label}`}>
+                <button
+                  type="button"
+                  onClick={() => toggle(opt.value)}
+                  className={cn(
+                    'flex w-full items-center gap-3 px-4 py-3 text-left text-[15px]',
+                    sel ? 'bg-secondary/40 font-semibold text-primary' : 'hover:bg-surface',
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'inline-flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px]',
+                      sel
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-border bg-transparent',
+                    )}
+                  >
+                    {sel ? <IconCheck size={14} color="#fff" /> : null}
+                  </span>
+                  <span className="flex-1 truncate">{opt.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {allowOther ? (
+          <div className="border-t border-border p-2">
+            <div className="flex items-center gap-2 rounded-sm border border-border px-2 py-1.5 focus-within:border-primary">
+              <IconPlus size={16} color="var(--ohl-text-slate)" />
+              <input
+                value={other}
+                onChange={(e) => setOther(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addOther();
+                  }
+                }}
+                placeholder={otherPlaceholder}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-slate"
+              />
+              <button type="button" onClick={addOther} aria-label="Add" className="text-primary">
+                <IconCheck size={20} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <div className={cn('relative flex flex-col items-stretch font-sans', className)}>
@@ -145,78 +285,9 @@ export function AppMultiSelectDropdown({
         />
       </div>
 
-      {open ? (
-        <div
-          ref={popupRef}
-          className="absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-md border border-border bg-background shadow-lg"
-          style={{ top: '100%', maxHeight: 320 }}
-        >
-          <div className="p-2">
-            <div className="flex items-center gap-2 rounded-sm border border-border px-2 py-1.5 focus-within:border-primary">
-              <IconSearch size={16} color="var(--ohl-text-slate)" />
-              <input
-                autoFocus
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="IconSearch..."
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-slate"
-              />
-            </div>
-          </div>
-          <ul className="max-h-60 overflow-y-auto py-1">
-            {filtered.map((opt, i) => {
-              const sel = isSelected(opt.value);
-              return (
-                <li key={`${i}-${opt.label}`}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(opt.value)}
-                    className={cn(
-                      'flex w-full items-center gap-3 px-4 py-3 text-left text-[15px]',
-                      sel ? 'bg-secondary/40 font-semibold text-primary' : 'hover:bg-surface',
-                    )}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'inline-flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px]',
-                        sel
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-border bg-transparent',
-                      )}
-                    >
-                      {sel ? <IconCheck size={14} color="#fff" /> : null}
-                    </span>
-                    <span className="flex-1 truncate">{opt.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {allowOther ? (
-            <div className="border-t border-border p-2">
-              <div className="flex items-center gap-2 rounded-sm border border-border px-2 py-1.5 focus-within:border-primary">
-                <IconPlus size={16} color="var(--ohl-text-slate)" />
-                <input
-                  value={other}
-                  onChange={(e) => setOther(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addOther();
-                    }
-                  }}
-                  placeholder={otherPlaceholder}
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-slate"
-                />
-                <button type="button" onClick={addOther} aria-label="Add" className="text-primary">
-                  <IconCheck size={20} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {popupNode && typeof document !== 'undefined'
+        ? createPortal(popupNode, document.body)
+        : null}
     </div>
   );
 }

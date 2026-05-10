@@ -1,5 +1,6 @@
-import { IconAlertTriangle, IconCheck, IconClose, IconHelpCircle, IconInfo } from '@icons';
 import type { ReactNode } from 'react';
+
+import { IconAlertTriangle, IconCheck, IconClose, IconHelpCircle, IconInfo } from '@icons';
 
 
 import { AppButton } from '../primitives/app-button/app-button.js';

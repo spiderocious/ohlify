@@ -1,5 +1,6 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+
 import { IconChevronLeft, IconChevronRight } from '@icons';
-import { useMemo, useRef, useState } from 'react';
 
 
 import { cn } from '../../utils/cn.js';
@@ -102,6 +103,48 @@ export function AppDateInput({
       (_, i) => new Date(viewMonth.year, viewMonth.month, i + 1),
     );
   }, [viewMonth]);
+
+  // Auto-scroll the strip so the most useful day is visible by default.
+  // Priority: the selected value > minDate (when it falls in this month) >
+  // today (when it falls in this month) > strip start. Without this, a user
+  // landing on the 27th of the month has to scroll right past 26 disabled
+  // days to find their first selectable date.
+  //
+  // Tile layout: 80px wide, 12px gap (Tailwind `gap-3`). We use that to
+  // compute the scroll offset by index — DOM measurement would be more
+  // robust but the strip dimensions are stable enough that it's not worth
+  // the extra ref bookkeeping.
+  const TILE_WIDTH = 80;
+  const TILE_GAP = 12;
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    const targetDate = (() => {
+      if (selected && selected.getFullYear() === viewMonth.year && selected.getMonth() === viewMonth.month) {
+        return selected;
+      }
+      if (minDate && minDate.getFullYear() === viewMonth.year && minDate.getMonth() === viewMonth.month) {
+        return minDate;
+      }
+      const today = new Date();
+      if (today.getFullYear() === viewMonth.year && today.getMonth() === viewMonth.month) {
+        return today;
+      }
+      return null;
+    })();
+    if (!targetDate) {
+      strip.scrollLeft = 0;
+      return;
+    }
+
+    const dayIndex = targetDate.getDate() - 1;
+    // Position the target tile flush-left rather than off-screen, with a
+    // little padding so it doesn't kiss the edge.
+    const offset = Math.max(0, dayIndex * (TILE_WIDTH + TILE_GAP) - 4);
+    strip.scrollLeft = offset;
+    // Re-run whenever the visible month flips OR the user picks a new value.
+  }, [viewMonth.year, viewMonth.month, selected?.getTime(), minDate?.getTime()]);
 
   const isDisabled = (d: Date) => {
     if (disabled) return true;

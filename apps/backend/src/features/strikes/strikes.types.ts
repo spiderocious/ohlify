@@ -60,6 +60,50 @@ export interface StrikeView {
   created_at: string;
 }
 
+// Admin moderation surface needs the subject denormalized so the queue
+// shows who the strike is against without an extra round-trip. Keeps the
+// rest of StrikeView's shape verbatim so callers that already consume the
+// admin list don't have to refactor.
+export interface AdminStrikeView extends Omit<StrikeView, 'subject_user_id'> {
+  subject: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+    role: SubjectRole;
+  };
+  reviewed_by_admin_id: string | null;
+}
+
+export interface AdminStrikeDetailView extends AdminStrikeView {
+  related_call: {
+    id: string;
+    call_type: 'audio' | 'video';
+    scheduled_at: string;
+    status: string;
+    connected_seconds: number;
+  } | null;
+  related_booking: {
+    id: string;
+    status: string;
+    created_at: string;
+  } | null;
+  subject_strike_history: {
+    total_count: number;
+    active_count: number;
+    upheld_count: number;
+    voided_count: number;
+    strikes_before_ban: number;
+  };
+  audit_trail: Array<{
+    id: string;
+    action: string;
+    admin_id: string | null;
+    admin_email: string | null;
+    note: string | null;
+    created_at: string;
+  }>;
+}
+
 export interface StrikeSummaryView {
   // Per-role counters so mobile can render "you have N strikes as a pro" + "M
   // strikes as a caller" for users who hold both roles.

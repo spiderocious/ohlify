@@ -46,3 +46,9 @@ export const totpConfirm: RequestHandler = asyncHandler(async (req: Request, res
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
+
+export const bootstrap: RequestHandler = asyncHandler(async (_req: Request, res: Response) => {
+  const r = await service.bootstrap();
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});

@@ -66,21 +66,21 @@ const AGORA_WEBHOOK_PATH = '/api/v1/webhooks/agora';
 // avoid future shadowing if /me/reviews-given ever needs relaxed gating).
 // If you add another (e.g. /api/v1/me/notifications-preferences for a
 // partially-active user), it MUST also go before onboarding/profile.
+
 const features = [
   registerHealth,
   registerAuth,
+  registerPlatformConfig,
   registerStrikes, // /api/v1/me/strikes — must precede registerOnboarding + registerProfile
   registerReviews, // /api/v1/me/reviews-given — must precede registerOnboarding + registerProfile
   registerOnboarding,
   registerProfile,
   registerBanks,
-  registerBanners,
   registerRates,
   registerCategories,
   registerProfessionals,
   registerLegal,
   registerSupport,
-  registerPlatformConfig,
   registerWallet,
   registerPayments,
   registerRefunds,
@@ -90,6 +90,7 @@ const features = [
   registerAdminAuth, // /api/v1/admin/auth/* — login/refresh/logout (public) + totp/setup,confirm (authed)
   registerAdmin,
   registerDev, // dev-only; no-op in production. Demo Agora token mint at /api/v1/dev/agora-token.
+  registerBanners,
 ];
 
 export const buildApp = (): express.Express => {

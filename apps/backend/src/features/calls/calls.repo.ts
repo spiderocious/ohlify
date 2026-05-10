@@ -3,7 +3,13 @@ import type { PoolClient } from 'pg';
 import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
 
-import type { CallEventRow, CallRow, CallStatus } from './calls.types.js';
+import type {
+  BookingStatus,
+  CallType,
+  FeeMode,
+} from '@features/bookings/bookings.types.js';
+
+import type { CallEventRow, CallHistoryRow, CallRow, CallStatus } from './calls.types.js';
 
 interface QueryRunner {
   query: PoolClient['query'];
@@ -87,6 +93,166 @@ export const listForUser = async (input: ListInput): Promise<CallRow[]> => {
     params,
   );
   return res.rows;
+};
+
+// ── Unified call history (calls ⨝ bookings) ─────────────────────────────────
+
+interface ListHistoryInput {
+  userId: string;
+  role: 'caller' | 'callee' | 'either';
+  limit: number;
+  cursor?: { last_id: string; last_sort_key: string };
+  bookingStatus?: BookingStatus;
+  callStatus?: CallStatus;
+}
+
+interface RawHistoryRow {
+  call_id: string;
+  call_status: CallStatus;
+  agora_channel_name: string;
+  caller_joined_at: Date | null;
+  callee_joined_at: Date | null;
+  caller_left_at: Date | null;
+  callee_left_at: Date | null;
+  connected_seconds: number;
+  settlement_journal_id: string | null;
+  refund_journal_id: string | null;
+  ended_at: Date | null;
+  call_created_at: Date;
+  booking_id: string;
+  booking_status: BookingStatus;
+  caller_user_id: string;
+  callee_user_id: string;
+  rate_id: string;
+  call_type: CallType;
+  start_at: Date;
+  duration_minutes: number;
+  total_paid_kobo: string;
+  payee_amount_kobo: string;
+  platform_fee_kobo: string;
+  fee_mode_used: FeeMode;
+  cancelled_at: Date | null;
+  cancelled_by_user_id: string | null;
+  booking_created_at: Date;
+}
+
+const HISTORY_SELECT = `
+  c.id                     AS call_id,
+  c.status                 AS call_status,
+  c.agora_channel_name     AS agora_channel_name,
+  c.caller_joined_at       AS caller_joined_at,
+  c.callee_joined_at       AS callee_joined_at,
+  c.caller_left_at         AS caller_left_at,
+  c.callee_left_at         AS callee_left_at,
+  c.connected_seconds      AS connected_seconds,
+  c.settlement_journal_id  AS settlement_journal_id,
+  c.refund_journal_id      AS refund_journal_id,
+  c.ended_at               AS ended_at,
+  c.created_at             AS call_created_at,
+  b.id                     AS booking_id,
+  b.status                 AS booking_status,
+  b.caller_user_id         AS caller_user_id,
+  b.callee_user_id         AS callee_user_id,
+  b.rate_id                AS rate_id,
+  b.call_type              AS call_type,
+  b.start_at               AS start_at,
+  b.duration_minutes       AS duration_minutes,
+  b.total_paid_kobo        AS total_paid_kobo,
+  b.payee_amount_kobo      AS payee_amount_kobo,
+  b.platform_fee_kobo      AS platform_fee_kobo,
+  b.fee_mode_used          AS fee_mode_used,
+  b.cancelled_at           AS cancelled_at,
+  b.cancelled_by_user_id   AS cancelled_by_user_id,
+  b.created_at             AS booking_created_at
+`;
+
+const toHistoryRow = (r: RawHistoryRow): CallHistoryRow => ({
+  call_id: r.call_id,
+  call_status: r.call_status,
+  agora_channel_name: r.agora_channel_name,
+  caller_joined_at: r.caller_joined_at,
+  callee_joined_at: r.callee_joined_at,
+  caller_left_at: r.caller_left_at,
+  callee_left_at: r.callee_left_at,
+  connected_seconds: r.connected_seconds,
+  settlement_journal_id: r.settlement_journal_id,
+  refund_journal_id: r.refund_journal_id,
+  ended_at: r.ended_at,
+  call_created_at: r.call_created_at,
+  booking_id: r.booking_id,
+  booking_status: r.booking_status,
+  caller_user_id: r.caller_user_id,
+  callee_user_id: r.callee_user_id,
+  rate_id: r.rate_id,
+  call_type: r.call_type,
+  start_at: r.start_at,
+  duration_minutes: r.duration_minutes,
+  total_paid_kobo: r.total_paid_kobo,
+  payee_amount_kobo: r.payee_amount_kobo,
+  platform_fee_kobo: r.platform_fee_kobo,
+  fee_mode_used: r.fee_mode_used,
+  cancelled_at: r.cancelled_at,
+  cancelled_by_user_id: r.cancelled_by_user_id,
+  booking_created_at: r.booking_created_at,
+});
+
+export const listHistoryForUser = async (input: ListHistoryInput): Promise<CallHistoryRow[]> => {
+  const params: unknown[] = [];
+  const filters: string[] = [];
+
+  if (input.role === 'caller') {
+    params.push(input.userId);
+    filters.push(`b.caller_user_id = $${params.length}`);
+  } else if (input.role === 'callee') {
+    params.push(input.userId);
+    filters.push(`b.callee_user_id = $${params.length}`);
+  } else {
+    params.push(input.userId);
+    params.push(input.userId);
+    filters.push(
+      `(b.caller_user_id = $${params.length - 1} OR b.callee_user_id = $${params.length})`,
+    );
+  }
+
+  if (input.bookingStatus !== undefined) {
+    params.push(input.bookingStatus);
+    filters.push(`b.status = $${params.length}::booking_status`);
+  }
+  if (input.callStatus !== undefined) {
+    params.push(input.callStatus);
+    filters.push(`c.status = $${params.length}::call_status`);
+  }
+  if (input.cursor !== undefined) {
+    params.push(input.cursor.last_sort_key);
+    params.push(input.cursor.last_id);
+    filters.push(
+      `(b.start_at < $${params.length - 1}::timestamptz OR (b.start_at = $${params.length - 1}::timestamptz AND b.id < $${params.length}))`,
+    );
+  }
+  params.push(input.limit + 1);
+
+  const res = await pool.query<RawHistoryRow>(
+    `SELECT ${HISTORY_SELECT}
+       FROM calls c
+       JOIN bookings b ON b.id = c.booking_id
+      WHERE ${filters.join(' AND ')}
+      ORDER BY b.start_at DESC, b.id DESC
+      LIMIT $${params.length}`,
+    params,
+  );
+  return res.rows.map(toHistoryRow);
+};
+
+export const findHistoryByCallId = async (callId: string): Promise<CallHistoryRow | null> => {
+  const res = await pool.query<RawHistoryRow>(
+    `SELECT ${HISTORY_SELECT}
+       FROM calls c
+       JOIN bookings b ON b.id = c.booking_id
+      WHERE c.id = $1
+      LIMIT 1`,
+    [callId],
+  );
+  return res.rows[0] ? toHistoryRow(res.rows[0]) : null;
 };
 
 export const setCallerJoined = async (runner: QueryRunner, callId: string): Promise<void> => {

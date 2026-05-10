@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. All endpoints share a uniform response envelope, error model, headers, and rate-limit behavior. Read the **Common conventions** section once, then jump to the endpoint of interest.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---

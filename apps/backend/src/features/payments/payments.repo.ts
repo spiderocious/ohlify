@@ -132,3 +132,24 @@ export const updateStatus = async (
     status,
   ]);
 };
+
+export const updateSettledAmount = async (
+  paymentId: string,
+  settledAmountKobo: number,
+): Promise<void> => {
+  await pool.query(
+    `UPDATE payments SET amount_kobo = $2, updated_at = now() WHERE id = $1`,
+    [paymentId, settledAmountKobo],
+  );
+};
+
+export const findUserEmailById = async (
+  runner: QueryRunner,
+  userId: string,
+): Promise<string | null> => {
+  const res = await runner.query<{ email: string }>(
+    `SELECT email FROM users WHERE id = $1 LIMIT 1`,
+    [userId],
+  );
+  return res.rows[0]?.email ?? null;
+};

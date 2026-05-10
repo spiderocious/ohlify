@@ -47,8 +47,33 @@ export const AdminVoidStrikeSchema = z
   })
   .strict();
 
+// Admin-issued strike (manual moderation, e.g. abusive support ticket,
+// payment fraud). Reason must match its role's side — pro-side reasons
+// can only be issued against subject_role='professional', caller-side
+// reasons against subject_role='caller'. Validation runs in the service
+// after Zod parses the shape. The `description` is admin-authored
+// context (free-form, required) and is stored on the strike row.
+export const AdminIssueStrikeSchema = z
+  .object({
+    subject_user_id: z.string().min(1).max(64),
+    subject_role: z.enum(['professional', 'caller']),
+    reason_code: z.enum([
+      'no_show',
+      'late_cancel',
+      'mid_call_quit',
+      'caller_no_show',
+      'caller_disconnect',
+    ]),
+    description: z.string().min(1).max(2000),
+    related_call_id: z.string().min(1).max(64).optional(),
+    related_booking_id: z.string().min(1).max(64).optional(),
+    related_report_id: z.string().min(1).max(64).optional(),
+  })
+  .strict();
+
 export type ListStrikesQueryDto = z.infer<typeof ListStrikesQuerySchema>;
 export type DisputeStrikeDto = z.infer<typeof DisputeStrikeSchema>;
 export type AdminListStrikesQueryDto = z.infer<typeof AdminListStrikesQuerySchema>;
 export type AdminUpholdStrikeDto = z.infer<typeof AdminUpholdStrikeSchema>;
 export type AdminVoidStrikeDto = z.infer<typeof AdminVoidStrikeSchema>;
+export type AdminIssueStrikeDto = z.infer<typeof AdminIssueStrikeSchema>;

@@ -1,4 +1,5 @@
 import type {
+  CallDetail,
   CallStats,
   CompletedCallGroup,
   CompletedCallItem,
@@ -104,6 +105,55 @@ export const MOCK_COMPLETED_CALL_GROUPS: CompletedCallGroup[] = [
 ];
 
 export const MOCK_CALL_STATS: CallStats = { total: 47, thisMonth: 47, thisWeek: 18 };
+
+/**
+ * Mirror of mobile MockService.getCallById — looks across scheduled calls,
+ * upcoming calls, and completed calls to find a single call by id.
+ */
+export function findMockCallById(id: string): CallDetail | null {
+  for (const c of MOCK_SCHEDULED_CALLS) {
+    if (c.id === id) {
+      return {
+        id: c.id,
+        professionalId: 'p-007',
+        name: c.name,
+        role: c.role,
+        rating: c.rating,
+        callType: c.callType,
+        status: 'upcoming',
+        time: c.time,
+        date: c.date,
+        duration: c.duration,
+        canJoin: !c.canReschedule,
+        canReschedule: c.canReschedule,
+        ...(c.avatarKey ? { avatarKey: c.avatarKey } : {}),
+      };
+    }
+  }
+  for (const group of MOCK_COMPLETED_CALL_GROUPS) {
+    for (const c of group.calls) {
+      if (c.id === id) {
+        return {
+          id: c.id,
+          professionalId: 'p-007',
+          name: c.name,
+          role: 'Senior sales manager',
+          rating: 4.9,
+          callType: c.callType,
+          status: 'completed',
+          time: c.time,
+          date: group.date,
+          duration: c.duration,
+          canJoin: false,
+          canReschedule: false,
+          amount: c.amount,
+          ...(c.avatarKey ? { avatarKey: c.avatarKey } : {}),
+        };
+      }
+    }
+  }
+  return null;
+}
 
 export const MOCK_CALL_HISTORY_WITH_PRO: CompletedCallItem[] = [
   {

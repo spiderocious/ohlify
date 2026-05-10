@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { CallRate, CallType } from '@ohlify/core';
 
@@ -10,17 +10,15 @@ import {
 import { AppText } from '../../primitives/app-text/app-text.js';
 import { AppTextInput } from '../../primitives/app-text-input/app-text-input.js';
 
-const CALL_TYPE_OPTIONS: DropdownOption<CallType>[] = [
-  { label: 'Audio call', value: 'audio' },
-  { label: 'Video call', value: 'video' },
-];
+const DEFAULT_CALL_TYPES: readonly CallType[] = ['audio', 'video'];
+const DEFAULT_DURATIONS: readonly number[] = [10, 25, 45, 60];
+const DEFAULT_MIN_KOBO = 50_000;
+const DEFAULT_MAX_KOBO = 50_000_000;
 
-const DURATION_OPTIONS: DropdownOption<number>[] = [
-  { label: '10 minutes', value: 10 },
-  { label: '25 minutes', value: 25 },
-  { label: '45 minutes', value: 45 },
-  { label: '60 minutes', value: 60 },
-];
+const CALL_TYPE_LABELS: Record<CallType, string> = {
+  audio: 'Audio call',
+  video: 'Video call',
+};
 
 function formatPrice(raw: string): string {
   const digits = raw.replace(/[^0-9]/g, '');
@@ -29,10 +27,23 @@ function formatPrice(raw: string): string {
   return `₦ ${withCommas}`;
 }
 
+function formatNairaShort(kobo: number): string {
+  const naira = Math.round(kobo / 100);
+  return `₦${naira.toLocaleString('en-NG')}`;
+}
+
 interface AddRateFormProps {
   onSave: (rate: Omit<CallRate, 'id'> & { id: string }) => void;
   description?: string;
   submitLabel?: string;
+  /** Call types the user is allowed to pick. Sourced from `rates.allowed_call_types`. */
+  callTypes?: readonly CallType[];
+  /** Durations (minutes). Sourced from `rates.allowed_durations_minutes`. */
+  durations?: readonly number[];
+  /** Inclusive minimum price in kobo. Sourced from `rates.min_kobo`. */
+  minKobo?: number;
+  /** Inclusive maximum price in kobo. Sourced from `rates.max_kobo`. */
+  maxKobo?: number;
 }
 
 /** 1:1 with mobile/lib/ui/widgets/add_rate_form/add_rate_form.dart. */
@@ -40,12 +51,46 @@ export function AddRateForm({
   onSave,
   description = 'Add your rate and set duration for every call type, so you can get paid for your time.',
   submitLabel = 'Save',
+  callTypes = DEFAULT_CALL_TYPES,
+  durations = DEFAULT_DURATIONS,
+  minKobo = DEFAULT_MIN_KOBO,
+  maxKobo = DEFAULT_MAX_KOBO,
 }: AddRateFormProps) {
   const [callType, setCallType] = useState<CallType | undefined>(undefined);
   const [duration, setDuration] = useState<number | undefined>(undefined);
   const [amount, setAmount] = useState('');
 
-  const isValid = Boolean(callType && duration && amount.trim());
+  const callTypeOptions = useMemo<DropdownOption<CallType>[]>(
+    () => callTypes.map((c) => ({ label: CALL_TYPE_LABELS[c], value: c })),
+    [callTypes],
+  );
+
+  const durationOptions = useMemo<DropdownOption<number>[]>(
+    () => durations.map((d) => ({ label: `${d} minutes`, value: d })),
+    [durations],
+  );
+
+  const priceKobo = useMemo(() => {
+    const digits = amount.replace(/[^0-9]/g, '');
+    if (digits === '') return null;
+    const naira = Number(digits);
+    if (!Number.isFinite(naira)) return null;
+    return naira * 100;
+  }, [amount]);
+
+  const priceTooLow = priceKobo !== null && priceKobo < minKobo;
+  const priceTooHigh = priceKobo !== null && priceKobo > maxKobo;
+  const priceValid = priceKobo !== null && !priceTooLow && !priceTooHigh;
+
+  const isValid = Boolean(callType && duration !== undefined && priceValid);
+
+  const priceErrorMessage = priceTooLow
+    ? `Minimum is ${formatNairaShort(minKobo)}.`
+    : priceTooHigh
+      ? `Maximum is ${formatNairaShort(maxKobo)}.`
+      : undefined;
+
+  const priceHelper = `Allowed range: ${formatNairaShort(minKobo)} – ${formatNairaShort(maxKobo)}`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -54,7 +99,7 @@ export function AddRateForm({
       </AppText>
       <AppDropdownInput<CallType>
         label="Call type"
-        options={CALL_TYPE_OPTIONS}
+        options={callTypeOptions}
         value={callType}
         placeholder="Select"
         bordered
@@ -62,18 +107,19 @@ export function AddRateForm({
       />
       <AppDropdownInput<number>
         label="Duration"
-        options={DURATION_OPTIONS}
+        options={durationOptions}
         value={duration}
         placeholder="Select"
         bordered
         onChange={setDuration}
       />
       <AppTextInput
-        label="Price"
+        label={`Price (${priceHelper})`}
         value={amount}
         placeholder="Enter amount"
         charSupported="number"
         onChange={setAmount}
+        errorMessage={priceErrorMessage}
       />
       <AppButton
         label={submitLabel}

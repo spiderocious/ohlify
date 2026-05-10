@@ -35,7 +35,14 @@ export const AdminHideReviewSchema = z
   })
   .strict();
 
+export const AdminUnhideReviewSchema = z
+  .object({
+    reason: z.string().min(1).max(2000),
+  })
+  .strict();
+
 export type PostRatingDto = z.infer<typeof PostRatingSchema>;
 export type ListReviewsQueryDto = z.infer<typeof ListReviewsQuerySchema>;
 export type AdminListReviewsQueryDto = z.infer<typeof AdminListReviewsQuerySchema>;
 export type AdminHideReviewDto = z.infer<typeof AdminHideReviewSchema>;
+export type AdminUnhideReviewDto = z.infer<typeof AdminUnhideReviewSchema>;

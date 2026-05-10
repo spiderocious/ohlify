@@ -39,3 +39,4 @@ export type { ProfessionalRate, CallRate } from './rate.js';
 export type { Review } from './review.js';
 export type { AppNotificationKind, AppNotification } from './notification.js';
 export { navigatesToDetail } from './notification.js';
+export type { SortKey, SortDirection, SortOption } from './sort.js';

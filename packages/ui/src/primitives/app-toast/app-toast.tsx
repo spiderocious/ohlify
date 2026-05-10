@@ -1,5 +1,6 @@
-import { IconCheckCircle, IconAlertCircle, IconInfo, IconAlertTriangle } from '@icons';
 import type { ReactNode } from 'react';
+
+import { IconCheckCircle, IconAlertCircle, IconInfo, IconAlertTriangle } from '@icons';
 
 
 import { cn } from '../../utils/cn.js';

@@ -11,7 +11,8 @@ export interface ScheduledCallItem {
   duration: string;
   /** True → Cancel + Reschedule actions. False → Join. */
   canReschedule: boolean;
-  avatarUrl?: string;
+  /** File-service key for the avatar. See `Professional.avatarKey`. */
+  avatarKey?: string | null;
 }
 
 export interface CompletedCallItem {
@@ -22,7 +23,8 @@ export interface CompletedCallItem {
   duration: string;
   /** Pre-formatted display amount, e.g. "₦20,000.00". */
   amount: string;
-  avatarUrl?: string;
+  /** File-service key for the avatar. See `Professional.avatarKey`. */
+  avatarKey?: string | null;
 }
 
 export interface CompletedCallGroup {
@@ -45,5 +47,6 @@ export interface CallDetail {
   canJoin: boolean;
   canReschedule: boolean;
   amount?: string;
-  avatarUrl?: string;
+  /** File-service key for the avatar. See `Professional.avatarKey`. */
+  avatarKey?: string | null;
 }

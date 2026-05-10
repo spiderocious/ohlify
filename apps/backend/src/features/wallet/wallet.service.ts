@@ -17,6 +17,7 @@ import {
   PaystackUpstreamError,
   verifyTransaction,
 } from '@lib/paystack/client.js';
+import { verifyAndCheckCharge } from '@lib/paystack/verify-charge.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
 import { reservePayment } from '@lib/wallet/flows/pay.js';
@@ -286,17 +287,19 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
   return new ServiceSuccess(view, WALLET_MESSAGES.FUNDING_INITIALIZED);
 };
 
-// Applies a Paystack verify result inside one tx — locks the payment, marks
-// it success/failed, posts the wallet_funding journal on success. Idempotent
-// against concurrent webhook arrivals (the journal idempotency key dedupes).
-// Returns a ServiceError on a hard failure, or null on success (caller then
-// reads `paystackResult.status` to build the view). Extracted to keep
-// verifyFunding's cognitive complexity inside the lint cap.
+// Applies a Paystack verify result inside one tx — locks the payment, runs
+// the same structural checks the webhook does (currency, customer email,
+// fee-aware amount mismatch), then marks it success/failed and posts the
+// wallet_funding journal on success. Idempotent against concurrent webhook
+// arrivals (the journal idempotency key dedupes). Returns a ServiceError on
+// rejection, or null on success/failed-marked (caller then reads
+// `paystackResult.status` to build the view).
 const applyVerifyResult = async (
   userId: string,
   reference: string,
   paystackResult: Awaited<ReturnType<typeof verifyTransaction>>,
 ): Promise<ServiceError | null> => {
+  logger.info(paystackResult);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -306,20 +309,36 @@ const applyVerifyResult = async (
       return new ServiceError('not_found', WALLET_MESSAGES.FUNDING_FAILED, 404);
     }
     if (fresh.status !== PaymentStatus.SUCCESS && paystackResult.status === 'success') {
+      // Run the shared structural + fee-aware amount check. This re-fetches
+      // verification (cheap; same merchant key, idempotent) and rejects on
+      // currency / email / amount mismatches. Returning null signals "do not
+      // credit" — we treat this as a failed verification rather than rolling
+      // back, so the user gets a clear failed status.
+      const verified = await verifyAndCheckCharge(client, fresh);
+      if (!verified) {
+        await paymentsRepo.markFailed(client, fresh.id, 'verification_rejected', paystackResult.raw);
+        await client.query('COMMIT');
+        return new ServiceError('upstream_unavailable', WALLET_MESSAGES.FUNDING_FAILED, 422);
+      }
       await paymentsRepo.markSuccess(client, {
         paymentId: fresh.id,
         paystackReference: paystackResult.reference,
-        paidAt: paystackResult.paid_at ? new Date(paystackResult.paid_at) : new Date(),
-        channel: paystackResult.channel,
-        feesKobo: paystackResult.fees_kobo,
+        paidAt: verified.paidAt,
+        channel: verified.channel,
+        feesKobo: verified.feesKobo,
         rawPayload: paystackResult.raw,
       });
+      // Credit what we actually received from Paystack (verified gross −
+      // verified fees). In pass-on fee mode this equals the authorized amount;
+      // in default mode it's slightly less. The journal lines balance because
+      // applyFunding derives the fee bucket from `gross − net`.
       await applyFunding(client, {
         userId,
         paymentId: fresh.id,
         reference: fresh.reference,
-        grossKobo: Number(fresh.amount_kobo),
-        feeKobo: paystackResult.fees_kobo,
+        grossKobo: verified.amountKobo,
+        feeKobo: verified.feesKobo,
+        netCreditKobo: verified.amountKobo - verified.feesKobo,
       });
     } else if (fresh.status === PaymentStatus.PENDING && paystackResult.status !== 'success') {
       await paymentsRepo.markFailed(client, fresh.id, paystackResult.status, paystackResult.raw);
@@ -385,7 +404,7 @@ export const verifyFunding = async (dto: VerifyFundingDto, userId: string) => {
     };
     return new ServiceSuccess(view, WALLET_MESSAGES.FUNDING_PENDING);
   }
-
+  await paymentsRepo.updateSettledAmount(payment.id, paystackResult.amount_kobo);
   // Apply terminal state inside one tx so the journal + payment update
   // commit together. Idempotent against concurrent webhook arrivals.
   const txResult = await applyVerifyResult(userId, dto.reference, paystackResult);
@@ -422,13 +441,6 @@ export const payFromWallet = async (
   dto: PayFromWalletDto,
   userId: string,
 ): Promise<ServiceSuccess<PayResponseView | InsufficientBalanceView> | ServiceError> => {
-  // C-NEW-09: validate the target call exists + belongs to this caller
-  // BEFORE we hit the journal layer. Without this, a bogus external_ref_id
-  // bubbles up the journal_entries.related_call_id FK violation as a
-  // generic 500. Validating up-front lets us return a structured 404,
-  // and as a side-effect blocks a caller from "paying" against someone
-  // else's call_id (they'd never be able to settle anyway, but no need
-  // to even let them try).
   if (dto.purpose === 'call_payment') {
     const call = await callsRepo.findById(dto.external_ref_id);
     if (!call) {

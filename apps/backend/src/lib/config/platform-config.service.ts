@@ -1,5 +1,12 @@
+import type { KycItemConfig } from '@features/onboarding/onboarding.types.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+
+import {
+  DEFAULT_CLIENT_KYC_ITEMS,
+  DEFAULT_PROFESSIONAL_KYC_ITEMS,
+  parseKycItems,
+} from './kyc-item-defaults.js';
 
 // Centralized access to runtime-tunable platform settings.
 //
@@ -15,6 +22,7 @@ export interface RateConfig {
   min_kobo: number;
   max_kobo: number;
   allowed_durations_minutes: readonly number[];
+  allowed_call_types: readonly ('audio' | 'video')[];
 }
 
 export interface BankAccountConfig {
@@ -28,6 +36,8 @@ export interface HandleConfig {
 
 export interface KycConfig {
   auto_approve: boolean;
+  professional_items: KycItemConfig[];
+  client_items: KycItemConfig[];
 }
 
 export interface AvailabilityConfig {
@@ -91,6 +101,7 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     min_kobo: 50_000,
     max_kobo: 50_000_000,
     allowed_durations_minutes: [5, 10, 15, 20, 25, 30, 45, 60],
+    allowed_call_types: ['audio', 'video'],
   },
   bankAccount: {
     min_name_match_percent: 45,
@@ -101,6 +112,8 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
   },
   kyc: {
     auto_approve: true,
+    professional_items: DEFAULT_PROFESSIONAL_KYC_ITEMS,
+    client_items: DEFAULT_CLIENT_KYC_ITEMS,
   },
   availability: {
     daily_start_hour: 9,
@@ -201,6 +214,21 @@ const numArr = (v: unknown, fallback: readonly number[]): readonly number[] => {
   return fallback;
 };
 
+const callTypeArr = (
+  v: unknown,
+  fallback: readonly ('audio' | 'video')[],
+): readonly ('audio' | 'video')[] => {
+  if (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every((x) => x === 'audio' || x === 'video')
+  ) {
+    // Dedupe while preserving order.
+    return Array.from(new Set(v as ('audio' | 'video')[]));
+  }
+  return fallback;
+};
+
 const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
   const map = new Map<string, unknown>();
   for (const row of rows) map.set(row.key, row.value);
@@ -215,6 +243,10 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       allowed_durations_minutes: numArr(
         get('rates.allowed_durations_minutes', d.rate.allowed_durations_minutes),
         d.rate.allowed_durations_minutes,
+      ),
+      allowed_call_types: callTypeArr(
+        get('rates.allowed_call_types', d.rate.allowed_call_types),
+        d.rate.allowed_call_types,
       ),
     },
     bankAccount: {
@@ -235,6 +267,11 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
     },
     kyc: {
       auto_approve: bool(get('kyc.auto_approve', d.kyc.auto_approve), d.kyc.auto_approve),
+      professional_items: parseKycItems(
+        map.get('kyc.professional_items'),
+        d.kyc.professional_items,
+      ),
+      client_items: parseKycItems(map.get('kyc.client_items'), d.kyc.client_items),
     },
     availability: {
       daily_start_hour: num(
@@ -425,7 +462,7 @@ export const reloadPlatformConfig = async (): Promise<void> => {
   await refreshInFlight;
 };
 
-// Exposed for the /config/public endpoint — returns the raw rows so the
+// Exposed for the /platform-config/public endpoint — returns the raw rows so the
 // controller can filter by is_public and serialize the value column directly.
 export const listPublicConfigRows = async (): Promise<{ key: string; value: unknown }[]> => {
   const res = await pool.query<{ key: string; value: unknown }>(

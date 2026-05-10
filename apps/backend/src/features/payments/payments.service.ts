@@ -3,6 +3,8 @@ import type { PoolClient } from 'pg';
 import * as walletRepo from '@features/wallet/wallet.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+import { PaystackUpstreamError } from '@lib/paystack/client.js';
+import { verifyAndCheckCharge, type VerifiedCharge } from '@lib/paystack/verify-charge.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
 import {
@@ -115,35 +117,46 @@ const handleChargeSuccess = async (
     return;
   }
   if (payment.status === PaymentStatus.SUCCESS) {
-    // Already processed by a prior delivery or by the verify polling path.
+    logger.info({ reference }, 'paystack charge.success for already-successful payment; ignoring');
     return;
   }
 
-  const paidAt = data.paid_at ? new Date(data.paid_at) : new Date();
-  const channel = typeof data.channel === 'string' ? data.channel : null;
-  const fees = typeof data.fees === 'number' ? data.fees : null;
+  // Re-verify against Paystack — the webhook body is untrusted input. Throws on
+  // transient upstream failure (rolls back tx → Paystack retries). Returns null
+  // on hard rejection (already logged).
+  let verified: VerifiedCharge | null;
+  try {
+    verified = await verifyAndCheckCharge(runner, payment);
+  } catch (err) {
+    if (err instanceof PaystackUpstreamError) {
+      logger.warn({ reference, err }, 'paystack verify failed in webhook handler');
+      throw err;
+    }
+    throw err;
+  }
+  if (!verified) return;
 
   await repo.markSuccess(runner, {
     paymentId: payment.id,
     paystackReference: reference,
-    paidAt,
-    channel,
-    feesKobo: fees,
+    paidAt: verified.paidAt,
+    channel: verified.channel,
+    feesKobo: verified.feesKobo,
     rawPayload,
   });
 
   if (payment.purpose === PaymentPurpose.WALLET_FUNDING) {
+    // Credit what we actually received (gross − fees). In pass-on mode this
+    // equals the authorized amount; in default mode it's slightly less.
     await applyFunding(runner, {
       userId: payment.user_id,
       paymentId: payment.id,
       reference: payment.reference,
-      grossKobo: Number(payment.amount_kobo),
-      feeKobo: fees,
+      grossKobo: verified.amountKobo,
+      feeKobo: verified.feesKobo,
+      netCreditKobo: verified.amountKobo - verified.feesKobo,
     });
   } else if (payment.purpose === PaymentPurpose.CALL_PAYMENT) {
-    // Slice A doesn't have call payments going through Paystack — but the
-    // skeleton is here for §8. Today, just mark the payment success without
-    // posting any journal. §8 will wire applyCallPayment in this branch.
     logger.info(
       { paymentId: payment.id, callId: payment.call_id },
       'call_payment success ignored in slice A — wallet flow handles call payments now',
@@ -320,6 +333,7 @@ export const processWebhook = async (input: {
 
     let processError: string | null = null;
     try {
+      logger.info({ eventId, eventType }, 'processing paystack webhook');
       await dispatchPaystackEvent(client, eventType, parsed);
     } catch (err) {
       processError = err instanceof Error ? err.message : String(err);

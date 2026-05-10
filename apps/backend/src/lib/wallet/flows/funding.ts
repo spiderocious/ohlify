@@ -16,11 +16,22 @@ export interface ApplyFundingInput {
   // The reference WE issued (ohf_ref_<ulid>) — also the journal idempotency
   // anchor. Replays of the same reference are a no-op.
   reference: string;
-  // Amount the user authorized at Paystack (kobo).
+  // Gross amount that moved through Paystack (kobo). In default fee mode this
+  // equals what the user authorized; in pass-on mode it equals authorized + fees.
   grossKobo: number;
   // Paystack's fee on this transaction (kobo). May be null if not yet known
   // — funding can still post; fee adjustment journal can come later.
   feeKobo: number | null;
+  /**
+   * Override for the wallet credit amount. When provided, the user's wallet is
+   * credited with exactly this many kobo. When omitted, defaults to
+   * `grossKobo - (feeKobo ?? 0)` (the legacy behaviour).
+   *
+   * Use this to credit the authorized amount in pass-on mode where the gross
+   * already includes fees, so `gross - fees` is the right credit anyway, OR to
+   * pin the credit to a known value in default mode.
+   */
+  netCreditKobo?: number;
 }
 
 export interface ApplyFundingResult {
@@ -42,11 +53,21 @@ export const applyFunding = async (
   runner: QueryRunner,
   input: ApplyFundingInput,
 ): Promise<ApplyFundingResult> => {
-  const fee = input.feeKobo ?? 0;
-  const net = input.grossKobo - fee;
+  // The journal must balance: user_credit + fee_account = gross movement on
+  // clearing. When the caller pins netCreditKobo we derive the fee bucket from
+  // the residual so the lines still balance, regardless of which Paystack fee
+  // mode is in play.
+  const net = input.netCreditKobo ?? input.grossKobo - (input.feeKobo ?? 0);
+  const fee = input.grossKobo - net;
+  logger.info({ fee, net, gross: input.grossKobo });
   if (net <= 0) {
     throw new Error(
-      `applyFunding: net amount must be positive, got gross=${input.grossKobo} fee=${fee}`,
+      `applyFunding: net amount must be positive, got gross=${input.grossKobo} fee=${fee} net=${net}`,
+    );
+  }
+  if (fee < 0) {
+    throw new Error(
+      `applyFunding: derived fee is negative, got gross=${input.grossKobo} net=${net}`,
     );
   }
 

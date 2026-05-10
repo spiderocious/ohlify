@@ -180,16 +180,32 @@ interface CallsWorkersHandle {
   stop: () => Promise<void>;
 }
 
-export const startCallWorkers = (): CallsWorkersHandle => {
+export interface CallsWorkersFlags {
+  starter?: boolean;
+  noShowResolver?: boolean;
+  stuckCallResolver?: boolean;
+}
+
+// Each cron is independently toggleable. Skipped crons return a no-op handle
+// so the caller's stop() stays uniform. Default for each flag is `true` —
+// callers that pass nothing get all three running.
+export const startCallWorkers = (flags: CallsWorkersFlags = {}): CallsWorkersHandle => {
+  const starterEnabled = flags.starter ?? true;
+  const noShowEnabled = flags.noShowResolver ?? true;
+  const stuckEnabled = flags.stuckCallResolver ?? true;
+
+  const noop = { stop: (): Promise<void> => Promise.resolve() };
+
   // Stagger startup so all three don't pile-up at boot.
-  const starter = startInterval('call-starter', STARTER_INTERVAL_MS, tickStarter, 5_000);
-  const noShow = startInterval('no-show-resolver', NO_SHOW_INTERVAL_MS, tickNoShowResolver, 10_000);
-  const stuck = startInterval(
-    'stuck-call-resolver',
-    STUCK_CALL_INTERVAL_MS,
-    tickStuckCallResolver,
-    15_000,
-  );
+  const starter = starterEnabled
+    ? startInterval('call-starter', STARTER_INTERVAL_MS, tickStarter, 5_000)
+    : (logger.info({ worker: 'call-starter' }, 'worker disabled via env'), noop);
+  const noShow = noShowEnabled
+    ? startInterval('no-show-resolver', NO_SHOW_INTERVAL_MS, tickNoShowResolver, 10_000)
+    : (logger.info({ worker: 'no-show-resolver' }, 'worker disabled via env'), noop);
+  const stuck = stuckEnabled
+    ? startInterval('stuck-call-resolver', STUCK_CALL_INTERVAL_MS, tickStuckCallResolver, 15_000)
+    : (logger.info({ worker: 'stuck-call-resolver' }, 'worker disabled via env'), noop);
 
   return {
     stop: async () => {

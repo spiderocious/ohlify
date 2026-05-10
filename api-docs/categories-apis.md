@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. The single category endpoint drives the category chips on Home and on the search filter. All endpoints require a Bearer access token. Read **Common conventions** in `onboarding-apis.md` once.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---

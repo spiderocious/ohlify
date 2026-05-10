@@ -4,7 +4,7 @@
 const STORAGE_KEY = 'ohlify-test-area-settings';
 
 const DEFAULTS = {
-  apiBase: 'http://localhost:8080',
+  apiBase: 'http://localhost:8082',
   adminToken: '',
   bearerToken: '',
 };

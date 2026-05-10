@@ -10,8 +10,15 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { CALL_MESSAGES } from './calls.messages.js';
 import * as repo from './calls.repo.js';
 import { resolveCall } from './calls.resolver.js';
-import type { ListCallsQueryDto } from './calls.schema.js';
-import { CallStatus, type CallJoinView, type CallRow, type CallView } from './calls.types.js';
+import type { ListCallHistoryQueryDto, ListCallsQueryDto } from './calls.schema.js';
+import {
+  CallStatus,
+  type CallHistoryRow,
+  type CallHistoryView,
+  type CallJoinView,
+  type CallRow,
+  type CallView,
+} from './calls.types.js';
 
 const toView = (row: CallRow): CallView => ({
   id: row.id,
@@ -27,6 +34,35 @@ const toView = (row: CallRow): CallView => ({
   settlement_journal_id: row.settlement_journal_id,
   refund_journal_id: row.refund_journal_id,
   created_at: row.created_at.toISOString(),
+});
+
+const toHistoryView = (row: CallHistoryRow): CallHistoryView => ({
+  call_id: row.call_id,
+  booking_id: row.booking_id,
+  caller_user_id: row.caller_user_id,
+  callee_user_id: row.callee_user_id,
+  rate_id: row.rate_id,
+  call_type: row.call_type,
+  start_at: row.start_at.toISOString(),
+  duration_minutes: row.duration_minutes,
+  total_paid_kobo: koboToJson(BigInt(row.total_paid_kobo)),
+  payee_amount_kobo: koboToJson(BigInt(row.payee_amount_kobo)),
+  platform_fee_kobo: koboToJson(BigInt(row.platform_fee_kobo)),
+  fee_mode_used: row.fee_mode_used,
+  booking_status: row.booking_status,
+  cancelled_at: row.cancelled_at?.toISOString() ?? null,
+  cancelled_by_user_id: row.cancelled_by_user_id,
+  call_status: row.call_status,
+  agora_channel_name: row.agora_channel_name,
+  caller_joined_at: row.caller_joined_at?.toISOString() ?? null,
+  callee_joined_at: row.callee_joined_at?.toISOString() ?? null,
+  caller_left_at: row.caller_left_at?.toISOString() ?? null,
+  callee_left_at: row.callee_left_at?.toISOString() ?? null,
+  connected_seconds: row.connected_seconds,
+  settlement_journal_id: row.settlement_journal_id,
+  refund_journal_id: row.refund_journal_id,
+  ended_at: row.ended_at?.toISOString() ?? null,
+  created_at: row.booking_created_at.toISOString(),
 });
 
 // ── GET /calls ──────────────────────────────────────────────────────────────
@@ -75,6 +111,59 @@ export const getCall = async (callId: string, userId: string) => {
     return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
   }
   return new ServiceSuccess(toView(row), CALL_MESSAGES.FETCHED);
+};
+
+// ── GET /calls/history ──────────────────────────────────────────────────────
+//
+// Unified bookings + calls timeline. Sorts by booking.start_at DESC so that
+// upcoming calls bubble to the top. Filtering by booking_status and call_status
+// is independent — frontend uses booking_status for the Cancelled tab,
+// call_status for the Completed tab, and the union for All.
+
+export const listCallHistory = async (dto: ListCallHistoryQueryDto, userId: string) => {
+  const limit = resolveLimit(dto.limit);
+  let cursor: { last_id: string; last_sort_key: string } | undefined;
+  if (dto.cursor !== undefined) {
+    try {
+      cursor = decodeCursor(dto.cursor);
+    } catch {
+      return new ServiceError('validation_error', CALL_MESSAGES.HISTORY_LIST_FETCHED, 400, {
+        cursor: ['Invalid cursor'],
+      });
+    }
+  }
+  const rows = await repo.listHistoryForUser({
+    userId,
+    role: dto.role ?? 'either',
+    limit,
+    ...(cursor ? { cursor } : {}),
+    ...(dto.booking_status ? { bookingStatus: dto.booking_status } : {}),
+    ...(dto.call_status ? { callStatus: dto.call_status } : {}),
+  });
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeCursor({ last_id: last.booking_id, last_sort_key: last.start_at.toISOString() })
+      : null;
+  return new ServiceSuccess(
+    {
+      items: page.map(toHistoryView),
+      meta: { next_cursor: nextCursor, has_more: hasMore },
+    },
+    CALL_MESSAGES.HISTORY_LIST_FETCHED,
+  );
+};
+
+// ── GET /calls/history/:id ──────────────────────────────────────────────────
+
+export const getCallHistoryItem = async (callId: string, userId: string) => {
+  const row = await repo.findHistoryByCallId(callId);
+  if (!row || (row.caller_user_id !== userId && row.callee_user_id !== userId)) {
+    return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+  }
+  return new ServiceSuccess(toHistoryView(row), CALL_MESSAGES.HISTORY_FETCHED);
 };
 
 // ── POST /calls/:id/join ────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
 
 import type {
+  AdminIssueStrikeDto,
   AdminUpholdStrikeDto,
   AdminVoidStrikeDto,
   DisputeStrikeDto,
@@ -61,4 +62,16 @@ export const adminVoid: RequestHandler = asyncHandler(async (req: Request, res: 
   );
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
+});
+
+export const adminGet: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.adminGetStrike(String(req.params['id']));
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const adminIssue: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.adminIssueStrike(req.body as AdminIssueStrikeDto, req.adminId!);
+  if (!r.success) bail(r);
+  else ResponseUtil.created(res, r.data);
 });

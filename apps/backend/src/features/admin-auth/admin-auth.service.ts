@@ -10,7 +10,8 @@ import {
   decryptSecret,
 } from '@lib/admin-auth/index.js';
 import { logger } from '@lib/logger.js';
-import { verifyPassword } from '@lib/security/password.js';
+import { hashPassword, verifyPassword } from '@lib/security/password.js';
+import { randomBytes } from 'node:crypto';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
@@ -239,4 +240,102 @@ export const totpConfirm = async (adminId: string, dto: AdminTotpConfirmDto) => 
   }
   await repo.setTotpConfirmed(adminId);
   return new ServiceSuccess({ totp_enabled: true }, MESSAGE_KEYS.OTP_VERIFIED);
+};
+
+// ── POST /admin/auth/bootstrap ────────────────────────────────────────────
+//
+// One-shot bootstrap of the very first admin account. The endpoint is
+// intentionally unauthenticated — there's no admin yet to authenticate as.
+//
+// Three independent locks make repeated calls safe:
+//   1. ADMIN_BOOTSTRAP_ENABLED env flag must be true. Default is false, so
+//      the endpoint is dead-on-arrival in any environment that doesn't
+//      explicitly opt in.
+//   2. admin_users table must be empty. Once the first admin exists this
+//      check fails permanently — even if the env flag stays true (which it
+//      shouldn't, but defense-in-depth).
+//   3. Both checks happen inside the request, so a race that somehow got
+//      two simultaneous calls past #1 would still see one succeed and the
+//      other fail (the email UNIQUE constraint would also catch the second
+//      INSERT — see admin_users table definition).
+//
+// The generated email + password are returned ONCE in the response. There
+// is no way to recover them later — the operator must store them in a
+// password manager immediately. After login, the operator should:
+//   1. Set the ADMIN_BOOTSTRAP_ENABLED env to false and redeploy.
+//   2. Enable TOTP via the admin web UI's /totp-setup screen.
+//   3. (Optional) Change the email + password via a future /admin/me edit
+//      flow when that ships.
+
+const BOOTSTRAP_DOMAIN = 'ohlify.local';
+
+const generatePassword = (): string => {
+  // 24 random bytes → 32-char base64url. Plenty of entropy and copy-paste
+  // friendly (no slashes, no plus signs, no padding).
+  return randomBytes(24).toString('base64url');
+};
+
+const generateEmail = (): string => {
+  // 6-char base32-ish suffix is enough for human eyeballing while
+  // remaining unguessable in the unlikely case the DB row leaked.
+  const suffix = randomBytes(4).toString('hex').slice(0, 6);
+  return `bootstrap-${suffix}@${BOOTSTRAP_DOMAIN}`;
+};
+
+export const bootstrap = async () => {
+  if (!env.ADMIN_BOOTSTRAP_ENABLED) {
+    return new ServiceError(
+      'bootstrap_disabled',
+      MESSAGE_KEYS.ADMIN_BOOTSTRAP_DISABLED,
+      404,
+    );
+  }
+  const existing = await repo.countAdmins();
+  if (existing > 0) {
+    return new ServiceError(
+      'already_bootstrapped',
+      MESSAGE_KEYS.ADMIN_BOOTSTRAP_ALREADY_DONE,
+      409,
+    );
+  }
+
+  const email = generateEmail();
+  const password = generatePassword();
+  const passwordHash = await hashPassword(password);
+
+  const admin = await repo.createAdmin({
+    email,
+    passwordHash,
+    fullName: 'Bootstrap Admin',
+    role: 'admin',
+  });
+
+  logger.warn(
+    { adminId: admin.id, email },
+    'admin bootstrap: first admin created — disable ADMIN_BOOTSTRAP_ENABLED and redeploy',
+  );
+
+  return new ServiceSuccess(
+    {
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        full_name: admin.full_name,
+        role: admin.role,
+      },
+      // Plain-text credentials — only place they ever leave the server.
+      // Caller MUST capture these. There is no recovery path.
+      credentials: {
+        email,
+        password,
+      },
+      next_steps: [
+        'Store these credentials in a password manager immediately.',
+        'Set ADMIN_BOOTSTRAP_ENABLED=false in your environment and redeploy.',
+        'Sign in at /login on the admin web app.',
+        'Visit /totp-setup to enable two-factor authentication.',
+      ],
+    },
+    MESSAGE_KEYS.ADMIN_BOOTSTRAP_CREATED,
+  );
 };

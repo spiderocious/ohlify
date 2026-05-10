@@ -23,6 +23,9 @@ export const register = (app: Express): void => {
   pub.post('/login', validate(AdminLoginSchema), controller.login);
   pub.post('/refresh', validate(AdminRefreshSchema), controller.refresh);
   pub.post('/logout', validate(AdminLogoutSchema), controller.logout);
+  // One-shot first-admin bootstrap. Gated by env flag + table-state check
+  // inside the service — see admin-auth.service.ts → bootstrap().
+  pub.post('/bootstrap', controller.bootstrap);
   app.use('/api/v1/admin/auth', pub);
 
   const authed = Router();

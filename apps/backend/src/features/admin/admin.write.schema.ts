@@ -190,7 +190,7 @@ export const AdminListUsersQuerySchema = z
     limit: z.coerce.number().int().min(1).max(100).optional(),
     role: z.enum(['client', 'professional']).optional(),
     status: z.enum(['active', 'suspended', 'blocked']).optional(),
-    kyc_status: z.enum(['none', 'pending', 'approved', 'rejected']).optional(),
+    kyc_status: z.enum(['none', 'pending_review', 'approved', 'rejected']).optional(),
     q: z.string().min(1).max(120).optional(),
   })
   .strict();

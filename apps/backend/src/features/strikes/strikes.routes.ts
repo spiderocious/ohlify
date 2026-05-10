@@ -10,6 +10,7 @@ const STAFF = ['admin', 'support'] as const;
 
 import * as controller from './strikes.controller.js';
 import {
+  AdminIssueStrikeSchema,
   AdminListStrikesQuerySchema,
   AdminUpholdStrikeSchema,
   AdminVoidStrikeSchema,
@@ -33,6 +34,23 @@ export const register = (app: Express): void => {
   const admin = Router();
   admin.use(requireAdmin, requireAdminRole(STAFF));
   admin.get('/', validate(AdminListStrikesQuerySchema, 'query'), controller.adminList);
+  // POST /admin/strikes — manual issuance. Audit's targetIdFrom can't read
+  // params.id (it's a create), so we read subject_user_id from the body so
+  // the audit row at least references the user this strike is against.
+  admin.post(
+    '/',
+    validate(AdminIssueStrikeSchema),
+    auditAdmin({
+      action: 'strikes.issue',
+      targetType: 'user',
+      targetIdFrom: (req) => {
+        const b = req.body as { subject_user_id?: unknown };
+        return typeof b.subject_user_id === 'string' ? b.subject_user_id : null;
+      },
+    }),
+    controller.adminIssue,
+  );
+  admin.get('/:id', controller.adminGet);
   admin.post(
     '/:id/uphold',
     validate(AdminUpholdStrikeSchema),

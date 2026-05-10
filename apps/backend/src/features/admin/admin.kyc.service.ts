@@ -18,6 +18,7 @@ const toView = (row: repo.KycSubmissionAdminRow) => ({
   identity_type: row.identity_type,
   identity_number: row.identity_number,
   document_upload_id: row.document_upload_id,
+  selfie_upload_key: row.selfie_upload_key,
   status: row.status,
   reviewed_by: row.reviewed_by,
   reviewed_at: row.reviewed_at?.toISOString() ?? null,
@@ -146,6 +147,15 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
          WHERE id = $1`,
       [submission.user_id, dto.reason_code],
     );
+    // Outbox payload is consumed by the notification worker to trigger
+    // email / push. We carry enough context for templates to render a
+    // useful subject line + body and to deep-link the user back into the
+    // app at the rejection screen.
+    //
+    // Intentionally omitted: `note` (admin-internal free text — the
+    // user-facing rejection screen pulls it via GET /onboarding/status,
+    // so it's not duplicated into the worker payload where it could leak
+    // into a third-party email-provider's dashboard logs).
     await insertEvent(client, {
       aggregateType: OutboxAggregateType.USER,
       aggregateId: submission.user_id,
@@ -154,8 +164,7 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
         user_id: submission.user_id,
         submission_id: submission.id,
         reason_code: dto.reason_code,
-        // note intentionally omitted — admin-internal explanation, not
-        // for the user-facing notification template.
+        reviewed_at: new Date().toISOString(),
         reviewed_by: reviewedBy,
       },
     });

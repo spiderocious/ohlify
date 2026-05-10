@@ -3,7 +3,7 @@ import type { MigrationBuilder } from 'node-pg-migrate';
 // Seed platform_config keys for the Calls + Bookings + Strikes slice. All
 // admin-tunable; defaults match the architecture doc §8. Public-safe values
 // (call type definitions, billable seconds, cancel window) are exposed via
-// GET /config/public so mobile can render policy text without a separate
+// GET /platform-config/public so mobile can render policy text without a separate
 // endpoint.
 export const up = (pgm: MigrationBuilder): void => {
   pgm.sql(`

@@ -1,5 +1,4 @@
-import { IconUser } from '@icons';
-
+import { AppAvatar } from '../../primitives/app-avatar/app-avatar.js';
 import { AppButton } from '../../primitives/app-button/app-button.js';
 import { cn } from '../../utils/cn.js';
 import { ProfessionalRating } from '../professional-rating/professional-rating.js';
@@ -9,7 +8,8 @@ interface ProfessionalListTileProps {
   role: string;
   rating: number;
   reviewCount: number;
-  imageUrl?: string;
+  /** File-service key for the pro's avatar (NOT a URL). */
+  imageKey?: string | null;
   onSchedule?: () => void;
   onTap?: () => void;
   className?: string;
@@ -24,22 +24,14 @@ export function ProfessionalListTile({
   role,
   rating,
   reviewCount,
-  imageUrl,
+  imageKey,
   onSchedule,
   onTap,
   className,
 }: ProfessionalListTileProps) {
   const inner = (
     <div className="flex items-center gap-3.5">
-      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-surface">
-        {imageUrl ? (
-          <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <IconUser size={36} color="var(--ohl-text-muted)" />
-          </div>
-        )}
-      </div>
+      <AppAvatar fileKey={imageKey} size={80} radius={8} alt={name} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-sans text-sm font-medium text-text-black">{name}</p>
         <p className="mt-1 truncate font-sans text-xs font-medium text-text-muted">{role}</p>

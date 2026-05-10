@@ -50,11 +50,17 @@ export const ERROR_CODES = {
   UPSTREAM_UNAVAILABLE: 'upstream_unavailable',
   CONFLICT: 'conflict',
   IDEMPOTENCY_MISMATCH: 'idempotency_mismatch',
+  // Admin bootstrap (one-shot first-admin creation)
+  BOOTSTRAP_DISABLED: 'bootstrap_disabled',
+  ALREADY_BOOTSTRAPPED: 'already_bootstrapped',
   // Onboarding / role
   ROLE_ALREADY_SET: 'role_already_set',
   ROLE_REQUIRED: 'role_required',
   ROLE_MISMATCH: 'role_mismatch',
   KYC_INCOMPLETE: 'kyc_incomplete',
+  IDENTITY_REQUIRED_FIRST: 'identity_required_first',
+  STRIKE_REASON_ROLE_MISMATCH: 'strike_reason_role_mismatch',
+  USER_NOT_FOUND: 'user_not_found',
   // Profile
   ACCOUNT_NAME_MISMATCH: 'account_name_mismatch',
   UNRESOLVABLE_ACCOUNT: 'unresolvable_account',

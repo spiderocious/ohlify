@@ -12,6 +12,18 @@ export const list: RequestHandler = asyncHandler(async (req: Request, res: Respo
   else ResponseUtil.ok(res, r.data.items, r.data.meta);
 });
 
+export const listHistory: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.listCallHistory(req.query, req.userId!);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data.items, r.data.meta);
+});
+
+export const getHistoryItem: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.getCallHistoryItem(String(req.params['id']), req.userId!);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
 export const get: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.getCall(String(req.params['id']), req.userId!);
   if (!r.success) bail(r);

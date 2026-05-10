@@ -167,6 +167,28 @@ export const setFulfilled = async (runner: QueryRunner, bookingId: string): Prom
   ]);
 };
 
+// Used by the availability endpoint to mask out slots that already overlap a
+// pending or confirmed booking on the callee. Returns the minimum shape we
+// need to compute slot conflicts (start_at + duration_minutes). Excludes
+// cancelled / fulfilled rows — only live future commitments matter for slot
+// blocking.
+export const findBookingsInWindow = async (
+  calleeUserId: string,
+  fromUtc: Date,
+  toUtcExclusive: Date,
+): Promise<Array<{ start_at: Date; duration_minutes: number }>> => {
+  const res = await pool.query<{ start_at: Date; duration_minutes: number }>(
+    `SELECT start_at, duration_minutes
+       FROM bookings
+      WHERE callee_user_id = $1
+        AND status IN ('pending','confirmed')
+        AND start_at < $3
+        AND (start_at + (duration_minutes * INTERVAL '1 minute')) > $2`,
+    [calleeUserId, fromUtc, toUtcExclusive],
+  );
+  return res.rows;
+};
+
 // Conflict check: callee can't have an overlapping confirmed booking.
 //
 // MUST run inside the booking-creation tx with FOR UPDATE so two concurrent

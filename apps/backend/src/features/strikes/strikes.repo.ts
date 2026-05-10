@@ -120,42 +120,87 @@ interface AdminListInput {
   reasonCode?: StrikeReason;
 }
 
-export const adminList = async (input: AdminListInput): Promise<StrikeRow[]> => {
+export interface AdminStrikeRow extends StrikeRow {
+  subject_name: string | null;
+  subject_avatar_url: string | null;
+}
+
+export const adminList = async (input: AdminListInput): Promise<AdminStrikeRow[]> => {
   const params: unknown[] = [];
   const filters: string[] = [];
   if (input.subjectUserId) {
     params.push(input.subjectUserId);
-    filters.push(`subject_user_id = $${params.length}`);
+    filters.push(`s.subject_user_id = $${params.length}`);
   }
   if (input.subjectRole !== undefined) {
     params.push(input.subjectRole);
-    filters.push(`subject_role = $${params.length}`);
+    filters.push(`s.subject_role = $${params.length}`);
   }
   if (input.status !== undefined) {
     params.push(input.status);
-    filters.push(`status = $${params.length}::strike_status`);
+    filters.push(`s.status = $${params.length}::strike_status`);
   }
   if (input.reasonCode !== undefined) {
     params.push(input.reasonCode);
-    filters.push(`reason_code = $${params.length}::strike_reason`);
+    filters.push(`s.reason_code = $${params.length}::strike_reason`);
   }
   if (input.cursor !== undefined) {
     params.push(input.cursor.last_sort_key);
     params.push(input.cursor.last_id);
     filters.push(
-      `(created_at < $${params.length - 1}::timestamptz OR (created_at = $${params.length - 1}::timestamptz AND id < $${params.length}))`,
+      `(s.created_at < $${params.length - 1}::timestamptz OR (s.created_at = $${params.length - 1}::timestamptz AND s.id < $${params.length}))`,
     );
   }
   params.push(input.limit + 1);
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-  const res = await pool.query<StrikeRow>(
-    `SELECT * FROM strikes
+  const res = await pool.query<AdminStrikeRow>(
+    `SELECT s.*, u.full_name AS subject_name, u.avatar_url AS subject_avatar_url
+       FROM strikes s
+       JOIN users u ON u.id = s.subject_user_id
        ${where}
-       ORDER BY created_at DESC, id DESC
+       ORDER BY s.created_at DESC, s.id DESC
        LIMIT $${params.length}`,
     params,
   );
   return res.rows;
+};
+
+export const findByIdAdmin = async (strikeId: string): Promise<AdminStrikeRow | null> => {
+  const res = await pool.query<AdminStrikeRow>(
+    `SELECT s.*, u.full_name AS subject_name, u.avatar_url AS subject_avatar_url
+       FROM strikes s
+       JOIN users u ON u.id = s.subject_user_id
+      WHERE s.id = $1
+      LIMIT 1`,
+    [strikeId],
+  );
+  return res.rows[0] ?? null;
+};
+
+// Per-status counts for a (subject_user_id, subject_role) — feeds the
+// `subject_strike_history` block on the admin detail view so admins see
+// "this user has 2 active, 1 upheld, 0 voided" without N round-trips.
+export const statusCountsForSubject = async (
+  subjectUserId: string,
+  subjectRole: SubjectRole,
+): Promise<{ active: number; disputed: number; upheld: number; voided: number; total: number }> => {
+  const res = await pool.query<{ status: StrikeStatus; n: string }>(
+    `SELECT status, count(*)::text AS n
+       FROM strikes
+      WHERE subject_user_id = $1 AND subject_role = $2
+      GROUP BY status`,
+    [subjectUserId, subjectRole],
+  );
+  const out = { active: 0, disputed: 0, upheld: 0, voided: 0, total: 0 };
+  for (const r of res.rows) {
+    const n = Number(r.n);
+    out.total += n;
+    if (r.status === 'active') out.active = n;
+    else if (r.status === 'disputed') out.disputed = n;
+    else if (r.status === 'upheld') out.upheld = n;
+    else if (r.status === 'voided') out.voided = n;
+  }
+  return out;
 };
 
 export const setDisputed = async (

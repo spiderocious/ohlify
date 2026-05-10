@@ -1,3 +1,4 @@
+import * as auditRepo from '@features/admin/admin.audit.repo.js';
 import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
 import { TERMINAL_CALL_STATUSES } from '@features/calls/calls.types.js';
@@ -12,10 +13,11 @@ import * as repo from './reviews.repo.js';
 import type {
   AdminHideReviewDto,
   AdminListReviewsQueryDto,
+  AdminUnhideReviewDto,
   ListReviewsQueryDto,
   PostRatingDto,
 } from './reviews.schema.js';
-import type { ReviewView } from './reviews.types.js';
+import type { AdminReviewDetailView, AdminReviewView, ReviewView } from './reviews.types.js';
 
 const toView = (row: repo.ListReviewsRow): ReviewView => ({
   id: row.id,
@@ -29,6 +31,28 @@ const toView = (row: repo.ListReviewsRow): ReviewView => ({
     avatar_url: row.reviewer_avatar_url,
   },
   subject_user_id: row.subject_user_id,
+  created_at: row.created_at.toISOString(),
+});
+
+const toAdminView = (row: repo.AdminReviewListRow): AdminReviewView => ({
+  id: row.id,
+  call_id: row.call_id,
+  rating: row.rating,
+  feedback_text: row.feedback_text,
+  is_public: row.is_public,
+  reviewer: {
+    id: row.reviewer_user_id,
+    name: row.reviewer_name,
+    avatar_url: row.reviewer_avatar_url,
+  },
+  subject: {
+    id: row.subject_user_id,
+    name: row.subject_name,
+    avatar_url: row.subject_avatar_url,
+  },
+  hidden_at: row.hidden_at?.toISOString() ?? null,
+  hidden_by_admin_id: row.hidden_by_admin_id,
+  hide_reason: row.hide_reason,
   created_at: row.created_at.toISOString(),
 });
 
@@ -223,7 +247,7 @@ export const adminListReviews = async (dto: AdminListReviewsQueryDto) => {
       : null;
   return new ServiceSuccess(
     {
-      items: page.map(toView),
+      items: page.map(toAdminView),
       meta: { next_cursor: nextCursor, has_more: hasMore },
     },
     REVIEW_MESSAGES.ADMIN_LIST_FETCHED,
@@ -265,16 +289,8 @@ export const adminHideReview = async (ctx: AdminHideReviewContext) => {
     });
     await client.query('COMMIT');
     logger.info({ reviewId: review.id, adminId: ctx.adminId }, 'admin hid review');
-    const fresh = await repo.findById(review.id);
-    return new ServiceSuccess(
-      {
-        id: fresh!.id,
-        is_public: fresh!.is_public,
-        hidden_at: fresh!.hidden_at?.toISOString() ?? null,
-        hide_reason: fresh!.hide_reason,
-      },
-      REVIEW_MESSAGES.ADMIN_HIDDEN,
-    );
+    const fresh = await repo.findByIdAdmin(review.id);
+    return new ServiceSuccess(toAdminView(fresh!), REVIEW_MESSAGES.ADMIN_HIDDEN);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     logger.error({ err, reviewId: ctx.reviewId }, 'adminHideReview tx failed');
@@ -282,4 +298,93 @@ export const adminHideReview = async (ctx: AdminHideReviewContext) => {
   } finally {
     client.release();
   }
+};
+
+// ── Admin: unhide ───────────────────────────────────────────────────────────
+//
+// Reverses a hide. Requires the review to currently be hidden. The trigger
+// on `reviews` recomputes `review_aggregates` on UPDATE — flipping
+// is_public back to TRUE picks the review back up in aggregate counts
+// automatically (no manual recompute call).
+
+export interface AdminUnhideReviewContext {
+  reviewId: string;
+  adminId: string;
+  dto: AdminUnhideReviewDto;
+}
+
+export const adminUnhideReview = async (ctx: AdminUnhideReviewContext) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const review = await repo.findByIdForUpdate(client, ctx.reviewId);
+    if (!review) {
+      await client.query('ROLLBACK');
+      return new ServiceError('review_not_found', REVIEW_MESSAGES.NOT_FOUND, 404);
+    }
+    if (review.is_public) {
+      await client.query('ROLLBACK');
+      return new ServiceError('conflict', REVIEW_MESSAGES.CONFLICT, 409, {
+        review_id: ['Review is not hidden'],
+      });
+    }
+    await repo.setUnhidden(client, review.id);
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.USER,
+      aggregateId: review.subject_user_id,
+      eventType: OutboxEventType.REVIEW_UNHIDDEN,
+      payload: {
+        review_id: review.id,
+        subject_user_id: review.subject_user_id,
+        admin_id: ctx.adminId,
+        reason: ctx.dto.reason,
+      },
+    });
+    await client.query('COMMIT');
+    logger.info({ reviewId: review.id, adminId: ctx.adminId }, 'admin unhid review');
+    const fresh = await repo.findByIdAdmin(review.id);
+    return new ServiceSuccess(toAdminView(fresh!), REVIEW_MESSAGES.ADMIN_UNHIDDEN);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, reviewId: ctx.reviewId }, 'adminUnhideReview tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ── Admin: GET review by id (with call context + audit trail) ────────────────
+
+export const adminGetReview = async (reviewId: string) => {
+  const row = await repo.findByIdAdmin(reviewId);
+  if (!row) {
+    return new ServiceError('review_not_found', REVIEW_MESSAGES.NOT_FOUND, 404);
+  }
+  const base = toAdminView(row);
+  const call = await callsRepo.findById(row.call_id);
+  const booking = call ? await bookingsRepo.findById(call.booking_id) : null;
+  const trail = await auditRepo.trailFor('review', row.id);
+  const detail: AdminReviewDetailView = {
+    ...base,
+    call:
+      call && booking
+        ? {
+            id: call.id,
+            call_type: booking.call_type,
+            duration_minutes: booking.duration_minutes,
+            connected_seconds: call.connected_seconds,
+            scheduled_at: booking.start_at.toISOString(),
+            status: call.status,
+          }
+        : null,
+    audit_trail: trail.map((t) => ({
+      id: t.id,
+      action: t.action,
+      admin_id: t.admin_id,
+      admin_email: t.admin_email,
+      note: t.note,
+      created_at: t.created_at.toISOString(),
+    })),
+  };
+  return new ServiceSuccess(detail, REVIEW_MESSAGES.ADMIN_FETCHED);
 };

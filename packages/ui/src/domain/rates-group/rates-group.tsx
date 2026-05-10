@@ -1,8 +1,9 @@
-import { IconClock, IconDelete } from '@icons';
 import { Repeat } from 'meemaw';
 import type { CSSProperties } from 'react';
 
 import type { CallRate, CallType } from '@ohlify/core';
+
+import { IconClock, IconDelete } from '@icons';
 
 import { AppIconButton } from '../../primitives/app-icon-button/app-icon-button.js';
 import { AppText } from '../../primitives/app-text/app-text.js';

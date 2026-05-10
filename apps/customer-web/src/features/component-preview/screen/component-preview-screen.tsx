@@ -231,7 +231,7 @@ export function ComponentPreviewScreen() {
 
         <Section title="AppSearchBar" mobileFile="app_search_bar/app_search_bar.dart">
           <div className="space-y-3">
-            <AppSearchBar placeholder="IconSearch professional" />
+            <AppSearchBar placeholder="Search professional" />
             <AppSearchBar
               readOnly
               placeholder="Tap to search (read-only)"

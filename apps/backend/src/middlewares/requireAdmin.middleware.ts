@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 import { type AdminRole, verifyAdminAccessToken } from '@lib/admin-auth/index.js';
 import { AppError, UnauthorizedError } from '@lib/errors.js';
+import { requestContext } from '@lib/http/requestContext.js';
 
 import { env } from '../env.js';
 
@@ -24,6 +25,11 @@ export const requireAdmin = (req: Request, _res: Response, next: NextFunction): 
       const payload = verifyAdminAccessToken(token);
       req.adminId = payload.sub;
       req.adminRole = payload.role;
+      const ctx = requestContext.get();
+      if (ctx !== undefined) {
+        ctx.adminId = payload.sub;
+        ctx.adminRole = payload.role;
+      }
       next();
       return;
     } catch {
@@ -51,6 +57,11 @@ export const requireAdmin = (req: Request, _res: Response, next: NextFunction): 
   // req.adminId need to handle this case (skip-or-tag).
   req.adminId = 'adm_stub';
   req.adminRole = 'admin'; // stub is omnipotent
+  const ctx = requestContext.get();
+  if (ctx !== undefined) {
+    ctx.adminId = 'adm_stub';
+    ctx.adminRole = 'admin';
+  }
   next();
 };
 

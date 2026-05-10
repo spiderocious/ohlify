@@ -12,9 +12,9 @@ import {
   PaystackUpstreamError,
   resolveBankAccountCached,
 } from '@lib/paystack/resolve-cached.js';
-import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { nameSimilarityPercent } from '@lib/util/string-similarity.js';
+import { createOtp, verifyOtp } from '@shared/utils/otp.js';
 
 import { PROFILE_MESSAGES } from './profile.messages.js';
 import * as repo from './profile.repo.js';
@@ -40,16 +40,12 @@ const EMAIL_VERIFY_OTP_TTL = 10 * 60;
 const PHONE_VERIFY_OTP_TTL = 10 * 60;
 const SHARE_SLUG_SUFFIX_LEN = 6;
 
-const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
-
-const generateOtp = (): string => String(crypto.randomInt(100000, 1000000));
-
 const maskAccount = (acct: string): string => (acct.length <= 4 ? '***' : `***${acct.slice(-4)}`);
 
 const buildShareSlug = (handle: string | null, userId: string): string | null => {
   if (!handle) return null;
   // Stable, derived from user id so slug doesn't change on each request.
-  const suffix = sha256(userId).slice(0, SHARE_SLUG_SUFFIX_LEN);
+  const suffix = crypto.createHash('sha256').update(userId).digest('hex').slice(0, SHARE_SLUG_SUFFIX_LEN);
   return `${handle}-${suffix}`;
 };
 
@@ -167,20 +163,7 @@ const consumeSensitiveOtp = async (
   userId: string,
   action: 'change_email' | 'change_phone' | 'delete_account',
   otp: string,
-): Promise<boolean> => {
-  const key = `sa-otp:${userId}:${action}`;
-  const storedHash = await redis.get(key);
-  if (!storedHash) return false;
-  const providedHash = sha256(otp);
-  if (
-    storedHash.length !== providedHash.length ||
-    !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(providedHash))
-  ) {
-    return false;
-  }
-  await redis.del(key);
-  return true;
-};
+): Promise<boolean> => verifyOtp(`sa-otp:${userId}:${action}`, otp);
 
 export const changeEmail = async (dto: ChangeEmailDto, userId: string) => {
   const user = await repo.findUserById(userId);
@@ -210,11 +193,10 @@ export const changeEmail = async (dto: ChangeEmailDto, userId: string) => {
   });
 
   // Send verification OTP to the NEW email. Stored under email-verify key.
-  const verifyOtp = generateOtp();
-  await redis.setex(`email-verify:${userId}`, EMAIL_VERIFY_OTP_TTL, sha256(verifyOtp));
+  const emailOtp = await createOtp(`email-verify:${userId}`, EMAIL_VERIFY_OTP_TTL);
   await notificationService.sendEmailOtp(
     dto.new_email,
-    verifyOtp,
+    emailOtp,
     'change_email',
     EMAIL_VERIFY_OTP_TTL / 60,
   );
@@ -226,22 +208,11 @@ export const changeEmail = async (dto: ChangeEmailDto, userId: string) => {
 };
 
 export const verifyEmail = async (dto: VerifyOtpOnlyDto, userId: string) => {
-  const key = `email-verify:${userId}`;
-  const storedHash = await redis.get(key);
-  if (!storedHash) {
+  const valid = await verifyOtp(`email-verify:${userId}`, dto.otp);
+  if (!valid) {
     return new ServiceError('invalid_otp', PROFILE_MESSAGES.OTP_INVALID, 401);
   }
-  const providedHash = sha256(dto.otp);
-  if (
-    storedHash.length !== providedHash.length ||
-    !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(providedHash))
-  ) {
-    return new ServiceError('invalid_otp', PROFILE_MESSAGES.OTP_INVALID, 401);
-  }
-
   await repo.updateUserFields(userId, { email_verified_at: new Date() });
-  await redis.del(key);
-
   return new ServiceSuccess(null, PROFILE_MESSAGES.EMAIL_VERIFIED);
 };
 
@@ -274,10 +245,9 @@ export const changePhone = async (dto: ChangePhoneDto, userId: string) => {
     phone_verified_at: null,
   });
 
-  const verifyOtp = generateOtp();
-  await redis.setex(`phone-verify:${userId}`, PHONE_VERIFY_OTP_TTL, sha256(verifyOtp));
+  const phoneOtp = await createOtp(`phone-verify:${userId}`, PHONE_VERIFY_OTP_TTL);
   // SMS is currently a no-op stub; logs OTP for dev.
-  notificationService.sendSmsOtp(dto.new_phone_number, verifyOtp, 'change_phone');
+  notificationService.sendSmsOtp(dto.new_phone_number, phoneOtp, 'change_phone');
 
   return new ServiceSuccess(
     { phone_number: dto.new_phone_number, phone_verified: false },
@@ -286,22 +256,11 @@ export const changePhone = async (dto: ChangePhoneDto, userId: string) => {
 };
 
 export const verifyPhone = async (dto: VerifyOtpOnlyDto, userId: string) => {
-  const key = `phone-verify:${userId}`;
-  const storedHash = await redis.get(key);
-  if (!storedHash) {
+  const valid = await verifyOtp(`phone-verify:${userId}`, dto.otp);
+  if (!valid) {
     return new ServiceError('invalid_otp', PROFILE_MESSAGES.OTP_INVALID, 401);
   }
-  const providedHash = sha256(dto.otp);
-  if (
-    storedHash.length !== providedHash.length ||
-    !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(providedHash))
-  ) {
-    return new ServiceError('invalid_otp', PROFILE_MESSAGES.OTP_INVALID, 401);
-  }
-
   await repo.updateUserFields(userId, { phone_verified_at: new Date() });
-  await redis.del(key);
-
   return new ServiceSuccess(null, PROFILE_MESSAGES.PHONE_VERIFIED);
 };
 
@@ -438,14 +397,7 @@ export const putBankAccount = async (dto: PutBankAccountDto, userId: string) => 
 
 export const deleteBankAccount = async (userId: string) => {
   await repo.deleteBankAccount(userId);
-  // Re-evaluate KYC: bank_account is a required item for pros. If they were
-  // already approved, this demotes them back to pending_review (which itself
-  // busts the per-pro caches via invalidateProfessionalCaches inside the
-  // demotion path).
   await onboardingService.revaluateKycStatus(userId);
-  // Always bust on delete: even when the user wasn't approved, /home and
-  // /professionals/:id may have surfaced base_price/etc that referenced the
-  // bank state. Cheap and avoids stale views.
   await invalidateProfessionalCaches(userId);
   return new ServiceSuccess(null, PROFILE_MESSAGES.BANK_ACCOUNT_REMOVED);
 };

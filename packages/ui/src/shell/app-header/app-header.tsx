@@ -1,5 +1,6 @@
-import { IconBell, IconCopy } from '@icons';
 import { CopyToClipboard, Show } from 'meemaw';
+
+import { IconBell, IconCopy } from '@icons';
 
 
 import { cn } from '../../utils/cn.js';

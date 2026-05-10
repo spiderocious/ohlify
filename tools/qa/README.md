@@ -45,7 +45,7 @@ User identity is cached in `tools/qa/.spin-call-state.json` (gitignored), keyed 
 
 ## Conventions
 
-- All scripts assume the local stack: `postgresql://feranmi@localhost:5432/ohlify`, `redis://localhost:6379`, server at `http://localhost:8080`.
+- All scripts assume the local stack: `postgresql://feranmi@localhost:5432/ohlify`, `redis://localhost:6379`, server at `http://localhost:8082`.
 - Override via `DATABASE_URL`, `REDIS_URL`, `OHLIFY_BASE_URL` env vars.
 - ESM-only. Each script can be both imported (`import { redis } from './redis.mjs'`) and CLI-invoked.
 - New script? Add it here AND a one-line entry in the table above.
@@ -57,7 +57,7 @@ User identity is cached in `tools/qa/.spin-call-state.json` (gitignored), keyed 
 TOKEN=$(node tools/qa/register-user.mjs qa@test.dev +2348011000999 | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # Hit a protected endpoint
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/me
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8082/api/v1/me
 
 # After register/initiate or sensitive-action/otp, patch OTPs to known value
 node tools/qa/patch-otps.mjs

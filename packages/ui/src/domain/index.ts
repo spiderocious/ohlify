@@ -16,5 +16,5 @@ export { AddRateForm } from './add-rate-form/index.js';
 // Rates display
 export { RatesGroup } from './rates-group/index.js';
 export { ProfessionalRatesList } from './professional-rates-list/index.js';
-export { RatesListScreen } from './rates-list-screen/index.js';
-export type { RatesController } from './rates-list-screen/index.js';
+export { RatesListScreen, RatesListContent } from './rates-list-screen/index.js';
+export type { RatesController, RateConstraints } from './rates-list-screen/index.js';

@@ -101,6 +101,7 @@ export const upsertKycSubmission = async (input: {
   identityType: IdentityType;
   identityNumber: string;
   documentUploadId?: string | undefined;
+  selfieUploadKey?: string | undefined;
   status: KycStatus;
 }): Promise<KycSubmissionRow> => {
   // Idempotent on (user_id, identity_type, identity_number) — newer overwrites status fields.
@@ -108,8 +109,8 @@ export const upsertKycSubmission = async (input: {
   const submissionId = id('kyc');
   const res = await pool.query<KycSubmissionRow>(
     `INSERT INTO kyc_submissions
-       (id, user_id, identity_type, identity_number, document_upload_id, status)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (id, user_id, identity_type, identity_number, document_upload_id, selfie_upload_key, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       submissionId,
@@ -117,10 +118,150 @@ export const upsertKycSubmission = async (input: {
       input.identityType,
       input.identityNumber,
       input.documentUploadId ?? null,
+      input.selfieUploadKey ?? null,
       input.status,
     ],
   );
   return res.rows[0]!;
+};
+
+/**
+ * Patches just the selfie key on the user's most recent submission. Used when
+ * the user submits a selfie independently of resubmitting their identity.
+ * Returns true when a row was updated.
+ */
+export const updateLatestSelfieKey = async (
+  userId: string,
+  selfieKey: string,
+): Promise<boolean> => {
+  const res = await pool.query(
+    `UPDATE kyc_submissions
+        SET selfie_upload_key = $2
+      WHERE id = (
+        SELECT id FROM kyc_submissions
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1
+      )`,
+    [userId, selfieKey],
+  );
+  return (res.rowCount ?? 0) > 0;
+};
+
+/**
+ * Atomically transitions the user from "items complete" → either auto-
+ * approved or submitted-for-review. Run in a single transaction so the
+ * `users` row and the latest `kyc_submissions` row never disagree.
+ *
+ * What it does:
+ *
+ *   1. Updates `users`: kyc_status, kyc_submitted_at (always), and
+ *      kyc_reviewed_at (only on auto-approval). On auto-approval also
+ *      clears kyc_reject_reason — leaving it set on an approved user
+ *      makes the admin UI show a leftover "rejected for X" badge.
+ *
+ *   2. Updates the latest `kyc_submissions` row to match the new
+ *      `users.kyc_status`. This is the part that was missing — without
+ *      it, auto-approved users carried a `pending_review` (or worse,
+ *      `rejected`) submission row indefinitely. The mismatch broke the
+ *      customer rejection screen (which reads latest_submission_status)
+ *      and confused admin queues.
+ *
+ * If somehow the user has no submission row yet (shouldn't happen —
+ * they had to PATCH KYC to get here for the items to be complete) the
+ * submission update is a no-op.
+ */
+export const completeKycInTx = async (
+  userId: string,
+  status: KycStatus,
+): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const isApproved = status === 'approved';
+    const userSets: string[] = ['kyc_status = $1', 'kyc_submitted_at = now()', 'updated_at = now()'];
+    const userParams: unknown[] = [status];
+    if (isApproved) {
+      userSets.push('kyc_reviewed_at = now()');
+      userSets.push('kyc_reject_reason = NULL');
+    }
+    userParams.push(userId);
+    await client.query(
+      `UPDATE users SET ${userSets.join(', ')} WHERE id = $${userParams.length}`,
+      userParams,
+    );
+
+    if (isApproved) {
+      await client.query(
+        `UPDATE kyc_submissions
+            SET status = 'approved'::kyc_status,
+                reviewed_at = now(),
+                reject_reason_code = NULL,
+                reject_note = NULL
+          WHERE id = (
+            SELECT id FROM kyc_submissions
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1
+          )`,
+        [userId],
+      );
+    } else {
+      // Manual-review path: latest row is the freshly-submitted one.
+      // Stamp it pending_review and clear any prior reject_* state so a
+      // resubmitted row (after a previous rejection on the SAME row —
+      // shouldn't happen because PATCH inserts new rows, but defensive)
+      // doesn't carry stale rejection notes into the next admin review.
+      await client.query(
+        `UPDATE kyc_submissions
+            SET status = 'pending_review'::kyc_status,
+                reviewed_by = NULL,
+                reviewed_at = NULL,
+                reject_reason_code = NULL,
+                reject_note = NULL
+          WHERE id = (
+            SELECT id FROM kyc_submissions
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1
+          )`,
+        [userId],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Sets users.avatar_url to the given file-service key, but ONLY when the
+ * user currently has no avatar set. Used to bootstrap a public-facing
+ * avatar from the user's KYC selfie at submission time so the rest of the
+ * product (home, search, admin, reviews, strikes) doesn't render an
+ * empty avatar circle for users who never explicitly chose one.
+ *
+ * Idempotent and safe to call repeatedly. Never overwrites an admin- or
+ * user-chosen avatar — a later POST /me/avatar always wins.
+ */
+export const setAvatarFromSelfieIfNull = async (
+  userId: string,
+  selfieKey: string,
+): Promise<void> => {
+  await pool.query(
+    `UPDATE users
+        SET avatar_url = $2,
+            updated_at = now()
+      WHERE id = $1
+        AND avatar_url IS NULL
+        AND deleted_at IS NULL`,
+    [userId, selfieKey],
+  );
 };
 
 export const findLatestKycSubmission = async (userId: string): Promise<KycSubmissionRow | null> => {

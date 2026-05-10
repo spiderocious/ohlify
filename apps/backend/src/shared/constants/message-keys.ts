@@ -76,6 +76,8 @@ export const MESSAGE_KEYS = {
   REVIEW_CONFLICT: 'review.conflict',
   ADMIN_REVIEWS_LIST_FETCHED_KEY: 'admin.reviews.list.fetched',
   ADMIN_REVIEW_HIDDEN: 'admin.review.hidden',
+  ADMIN_REVIEW_UNHIDDEN: 'admin.review.unhidden',
+  ADMIN_REVIEW_FETCHED: 'admin.review.fetched',
   ADMIN_REPORTS_LIST_FETCHED: 'admin.reports.list.fetched',
   PROFESSIONAL_AVAILABILITY_FETCHED: 'professional.availability.fetched',
   HOME_FETCHED: 'home.fetched',
@@ -140,6 +142,10 @@ export const MESSAGE_KEYS = {
   ADMIN_BOOKINGS_LIST_FETCHED: 'admin.bookings.list.fetched',
   ADMIN_CALL_FORCE_ENDED: 'admin.call.force_ended',
   ADMIN_STRIKES_LIST_FETCHED: 'admin.strikes.list.fetched',
+  ADMIN_STRIKE_FETCHED: 'admin.strike.fetched',
+  ADMIN_STRIKE_ISSUED: 'admin.strike.issued',
+  ADMIN_STRIKE_NOT_ISSUED: 'admin.strike.not_issued',
+  ADMIN_STRIKE_INVALID: 'admin.strike.invalid',
   // Refunds
   REFUND_CREATED: 'refund.created',
   REFUNDS_LIST_FETCHED: 'refunds.list.fetched',
@@ -222,6 +228,9 @@ export const MESSAGE_KEYS = {
   ADMIN_METRICS_OVERVIEW_FETCHED: 'admin.metrics.overview.fetched',
   ADMIN_METRICS_REVENUE_FETCHED: 'admin.metrics.revenue.fetched',
   ADMIN_METRICS_COHORTS_FETCHED: 'admin.metrics.cohorts.fetched',
+  ADMIN_BOOTSTRAP_DISABLED: 'admin.bootstrap.disabled',
+  ADMIN_BOOTSTRAP_ALREADY_DONE: 'admin.bootstrap.already_done',
+  ADMIN_BOOTSTRAP_CREATED: 'admin.bootstrap.created',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];

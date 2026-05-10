@@ -11,6 +11,20 @@
         "cwd": "apps/backend"
       }
     },
+    "serve:app": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm dev:app",
+        "cwd": "apps/backend"
+      }
+    },
+    "serve:worker": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm dev:worker",
+        "cwd": "apps/backend"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
       "options": {
@@ -23,6 +37,22 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "pnpm start",
+        "cwd": "apps/backend"
+      },
+      "dependsOn": ["build"]
+    },
+    "start:app": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm start:app",
+        "cwd": "apps/backend"
+      },
+      "dependsOn": ["build"]
+    },
+    "start:worker": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm start:worker",
         "cwd": "apps/backend"
       },
       "dependsOn": ["build"]

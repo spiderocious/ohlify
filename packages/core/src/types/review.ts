@@ -5,5 +5,6 @@ export interface Review {
   comment: string;
   /** Display-formatted relative timestamp, e.g. "2 days ago". */
   timeAgo: string;
-  authorAvatarUrl?: string;
+  /** File-service key for the author avatar. See `Professional.avatarKey`. */
+  authorAvatarKey?: string | null;
 }

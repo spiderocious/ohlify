@@ -13,6 +13,7 @@ import type {
 } from './onboarding.schema.js';
 import { HandleCheckSchema } from './onboarding.schema.js';
 import * as service from './onboarding.service.js';
+import * as kycSpecService from './onboarding.kyc-spec.js';
 
 export const getStatus: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.getStatus(req.userId!);
@@ -62,6 +63,12 @@ export const changeHandle: RequestHandler = asyncHandler(async (req: Request, re
 
 export const completeKyc: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.completeKyc(req.userId!);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const getKycSpec: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await kycSpecService.getSpec(req.userId!);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

@@ -2,7 +2,7 @@ import type { MigrationBuilder } from 'node-pg-migrate';
 
 // Adds the keys the wallet engine + support endpoints need at runtime. These
 // were missing from migration 0016. Public-safe keys (is_public=TRUE) become
-// part of GET /config/public; everything else is admin-only.
+// part of GET /platform-config/public; everything else is admin-only.
 export const up = (pgm: MigrationBuilder): void => {
   pgm.sql(`
     INSERT INTO platform_config (key, value, is_public) VALUES

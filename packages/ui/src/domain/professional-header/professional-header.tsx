@@ -1,7 +1,9 @@
-import { IconBack, IconStar, IconUser } from '@icons';
 import type { ReactNode } from 'react';
 
+import { IconBack, IconStar, IconUser } from '@icons';
 
+
+import { AppFilePreview } from '../../primitives/app-file-preview/app-file-preview.js';
 import { AppIconButton } from '../../primitives/app-icon-button/app-icon-button.js';
 import { AppTag } from '../../primitives/app-tag/app-tag.js';
 import { cn } from '../../utils/cn.js';
@@ -10,8 +12,8 @@ interface ProfessionalHeaderProps {
   name: string;
   role: string;
   rating: number;
-  /** Hero/cover image URL. */
-  imageUrl?: string;
+  /** File-service key for the hero/cover image (NOT a URL). */
+  imageKey?: string | null;
   /** Default 300. */
   height?: number;
   available?: boolean;
@@ -26,7 +28,7 @@ export function ProfessionalHeader({
   name,
   role,
   rating,
-  imageUrl,
+  imageKey,
   height = 300,
   available = true,
   onBack,
@@ -36,13 +38,16 @@ export function ProfessionalHeader({
 }: ProfessionalHeaderProps) {
   return (
     <div className={cn('relative w-full overflow-hidden', className)} style={{ height }}>
-      {imageUrl ? (
-        <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-text-navy">
-          <IconUser size={96} color="var(--ohl-border)" />
-        </div>
-      )}
+      <AppFilePreview
+        fileKey={imageKey}
+        kind="image"
+        width="100%"
+        height={height}
+        alt={name}
+        fit="cover"
+        className="bg-text-navy"
+        fallback={<IconUser size={96} color="var(--ohl-border)" />}
+      />
       <div
         aria-hidden="true"
         className="absolute inset-0"

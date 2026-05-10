@@ -25,6 +25,11 @@ export const register = (app: Express): void => {
 
   onboardingRouter.get('/status', controller.getStatus);
 
+  // Spec endpoint that powers the entire KYC screen — returns the list of
+  // items required for the caller's role with current values + completeness.
+  // See api-docs/onboarding-kyc-spec.md.
+  onboardingRouter.get('/kyc/spec', controller.getKycSpec);
+
   onboardingRouter.post('/role', validate(SetRoleSchema), controller.setRole);
 
   onboardingRouter.patch('/kyc/client', validate(ClientKycPatchSchema), controller.patchClientKyc);

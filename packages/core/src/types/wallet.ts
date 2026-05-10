@@ -2,7 +2,7 @@ export type TransactionType =
   | 'withdrawalToBank'
   | 'paymentAudioCall'
   | 'paymentVideoCall'
-  | 'scheduledAudioCall';
+  | 'scheduledAudioCall' | 'walletFunding';
 
 export type TransactionStatus = 'completed' | 'pending' | 'failed';
 
@@ -21,6 +21,7 @@ export const transactionTitle: Record<TransactionType, string> = {
   paymentAudioCall: 'Payment for audio call',
   paymentVideoCall: 'Payment for video call',
   scheduledAudioCall: 'Scheduled audio call',
+  walletFunding: 'Wallet funding',
 };
 
 export const isCredit = (tx: Transaction): boolean => tx.amount.startsWith('+');

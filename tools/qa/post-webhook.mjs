@@ -18,7 +18,7 @@ const SECRET = (() => {
   return m[1].trim();
 })();
 
-const BASE = process.env.OHLIFY_BASE_URL ?? 'http://localhost:8080';
+const BASE = process.env.OHLIFY_BASE_URL ?? 'http://localhost:8082';
 const URL = `${BASE}/api/v1/webhooks/paystack`;
 
 const buildBody = () => {

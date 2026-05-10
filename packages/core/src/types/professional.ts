@@ -5,7 +5,11 @@ export interface Professional {
   role: string;
   rating: number;
   reviewCount: number;
-  avatarUrl?: string;
+  /**
+   * File-service key for the avatar (e.g. `8204e793-….jpg`), NOT a URL.
+   * Render via `<AppAvatar fileKey={...}>` from `@ohlify/ui`.
+   */
+  avatarKey?: string | null;
   /** Starting price in NGN whole naira. Used for sort. */
   basePrice?: number;
 }
@@ -21,7 +25,8 @@ export interface UpcomingCall {
   role: string;
   rating: number;
   reviewCount: number;
-  avatarUrl?: string;
+  /** File-service key. See `Professional.avatarKey`. */
+  avatarKey?: string | null;
 }
 
 export interface ScheduledCall {
@@ -29,5 +34,6 @@ export interface ScheduledCall {
   calleeName: string;
   /** Human-readable countdown, e.g. "5 mins". */
   scheduledTime: string;
-  avatarUrl?: string;
+  /** File-service key. See `Professional.avatarKey`. */
+  avatarKey?: string | null;
 }

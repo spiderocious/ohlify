@@ -6,7 +6,6 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM"],
     "jsx": "react-jsx",
-    "rootDir": "src",
     "outDir": "dist",
     "noEmit": true
   },

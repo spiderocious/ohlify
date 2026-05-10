@@ -6,16 +6,6 @@ export interface AuthUser {
 
 export type UserRole = 'client' | 'professional';
 export type UserStatus = 'active' | 'suspended' | 'blocked' | 'deleted';
-export type OtpPurpose =
-  | 'register'
-  | 'login'
-  | 'forgot_password'
-  | 'change_email'
-  | 'change_phone'
-  | 'change_password'
-  | 'delete_account'
-  | 'public_guest';
-
 export type SensitiveAction =
   | 'change_email'
   | 'change_phone'
@@ -63,24 +53,12 @@ export interface SessionRow {
   created_at: Date;
 }
 
-export interface OtpRow {
-  id: string;
-  purpose: OtpPurpose;
-  subject_key: string;
-  code_hash: string;
-  attempts: number;
-  max_attempts: number;
-  expires_at: Date;
-  consumed_at: Date | null;
-}
-
 export interface RegTokenRow {
   token_hash: string;
   email: string;
   phone_number: string;
   channel: 'email' | 'sms';
   password_hash: string | null;
-  otp_code_id: string | null;
   expires_at: Date;
   consumed_at: Date | null;
 }

@@ -6,7 +6,7 @@ Invoke the qa-runner agent to run a full-surface regression smoke.
 
 The agent should:
 
-1. **Health check** — `curl -s http://localhost:8080/api/v1/health`. Abort if not ok.
+1. **Health check** — `curl -s http://localhost:8082/api/v1/health`. Abort if not ok.
 
 2. **Run the smoke** — `bash tools/qa/regression-smoke.sh`. This script hits one happy-path call per endpoint group across all 5 features (auth, onboarding, profile, banks, rates). Total: ~30-40 fast calls. Should complete in under 60 seconds.
 

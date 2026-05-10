@@ -102,6 +102,8 @@ export const getUser = async (userId: string) => {
         id: string;
         identity_type: string;
         identity_number: string;
+        document_upload_id: string | null;
+        selfie_upload_key: string | null;
         status: string;
         reviewed_by: string | null;
         reviewed_at: Date | null;
@@ -109,7 +111,8 @@ export const getUser = async (userId: string) => {
         reject_note: string | null;
         created_at: Date;
       }>(
-        `SELECT id, identity_type, identity_number, status::text AS status,
+        `SELECT id, identity_type, identity_number, document_upload_id, selfie_upload_key,
+                status::text AS status,
                 reviewed_by, reviewed_at, reject_reason_code, reject_note, created_at
            FROM kyc_submissions
            WHERE user_id = $1
@@ -216,6 +219,8 @@ export const getUser = async (userId: string) => {
             id: kycRow.id,
             identity_type: kycRow.identity_type,
             identity_number: kycRow.identity_number,
+            document_upload_id: kycRow.document_upload_id,
+            selfie_upload_key: kycRow.selfie_upload_key,
             status: kycRow.status,
             reviewed_by: kycRow.reviewed_by,
             reviewed_at: kycRow.reviewed_at?.toISOString() ?? null,

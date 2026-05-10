@@ -1,5 +1,6 @@
-import { IconSearch } from '@icons';
 import { forwardRef, type Ref } from 'react';
+
+import { IconSearch } from '@icons';
 
 
 import { AppTextInput } from '../app-text-input/app-text-input.js';
@@ -25,7 +26,7 @@ export const AppSearchBar = forwardRef(function AppSearchBar(
   ref: Ref<HTMLInputElement>,
 ) {
   const {
-    placeholder = 'IconSearch for professional',
+    placeholder = 'Search for professional',
     onChange,
     onTap,
     readOnly = false,

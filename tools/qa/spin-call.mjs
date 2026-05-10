@@ -24,7 +24,7 @@
 // Flags:
 //
 //   --base <url>          backend base URL. default: env OHLIFY_BASE_URL or
-//                         http://localhost:8080
+//                         http://localhost:8082
 //   --admin-token <token> admin stub token. default: env ADMIN_STUB_TOKEN
 //   --rate-id <id>        force a specific rate. default: pro's first active
 //   --duration <minutes>  forced rate duration if creating one. default 5
@@ -48,7 +48,7 @@
 // Stdout shape (machine-readable):
 //
 //   {
-//     "base_url": "http://localhost:8080",
+//     "base_url": "http://localhost:8082",
 //     "caller": { "user_id": "u_...", "email": "...", "jwt": "ey..." },
 //     "callee": { "user_id": "u_...", "email": "...", "jwt": "ey..." },
 //     "booking_id": "bk_...",
@@ -77,7 +77,7 @@ import { redis as redisLazy } from './redis.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const args = parseArgs(process.argv.slice(2));
-const BASE = (args.base ?? process.env.OHLIFY_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+const BASE = (args.base ?? process.env.OHLIFY_BASE_URL ?? 'http://localhost:8082').replace(/\/$/, '');
 const API = `${BASE}/api/v1`;
 const ADMIN_TOKEN = args['admin-token'] ?? process.env.ADMIN_STUB_TOKEN ?? readEnvFile().ADMIN_STUB_TOKEN;
 const STATE_FILE = join(__dirname, '.spin-call-state.json');

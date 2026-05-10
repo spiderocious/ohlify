@@ -1,5 +1,6 @@
-import { IconClose } from '@icons';
 import type { ReactNode } from 'react';
+
+import { IconClose } from '@icons';
 
 
 import { AppText } from '../primitives/app-text/app-text.js';

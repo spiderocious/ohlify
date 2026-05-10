@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as categoriesService from '@features/categories/categories.service.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { getOrCompute } from '@lib/cache/responseCache.js';
@@ -188,18 +189,41 @@ export const reviews = async (professionalId: string, dto: ReviewsQueryDto) => {
 
 const parseDate = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
 
-const buildAvailability = (
+const buildAvailability = async (
+  professionalId: string,
   fromDate: Date,
   toDateExclusive: Date,
   tz: string,
-): AvailabilityResponse => {
+  bookingDurationMinutes: number | undefined,
+): Promise<AvailabilityResponse> => {
   const config = platformConfig.availability();
+
+  // Pull all live (pending/confirmed) bookings on the pro that overlap the
+  // requested window, including bookings that *start* before `fromDate` but
+  // run into it. Widen the lower bound by a safe upper bound on call length
+  // (4h) so we don't miss a booking-in-progress that started just before the
+  // window. Cheaper than reading config and the window query is already
+  // bounded above by the daily-end constraint.
+  const BOOKING_LOOKBACK_MS = 4 * 60 * 60 * 1000;
+  const fromForBookings = new Date(fromDate.getTime() - BOOKING_LOOKBACK_MS);
+  const bookingsRaw = await bookingsRepo.findBookingsInWindow(
+    professionalId,
+    fromForBookings,
+    toDateExclusive,
+  );
+  const bookings = bookingsRaw.map((b) => ({
+    start: b.start_at,
+    end: new Date(b.start_at.getTime() + b.duration_minutes * 60_000),
+  }));
+
   const days = buildSlotGrid({
     fromDate,
     toDateExclusive,
     config,
     tz,
     now: new Date(),
+    bookings,
+    ...(bookingDurationMinutes !== undefined ? { bookingDurationMinutes } : {}),
   });
   return {
     timezone: tz,
@@ -255,7 +279,13 @@ export const availability = async (professionalId: string, dto: AvailabilityQuer
 
   // No cache: spec marks availability as 🔴 Cold (slot grid changes any moment
   // a booking is created/cancelled).
-  const result = buildAvailability(fromDate, toDateExclusive, tz);
+  const result = await buildAvailability(
+    professionalId,
+    fromDate,
+    toDateExclusive,
+    tz,
+    dto.duration_minutes,
+  );
   return new ServiceSuccess(result, MESSAGE_KEYS.PROFESSIONAL_AVAILABILITY_FETCHED);
 };
 

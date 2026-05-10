@@ -8,6 +8,7 @@ export interface KycSubmissionAdminRow {
   identity_type: string;
   identity_number: string;
   document_upload_id: string | null;
+  selfie_upload_key: string | null;
   status: string;
   reviewed_by: string | null;
   reviewed_at: Date | null;
@@ -39,7 +40,7 @@ export const list = async (q: ListKycQuery): Promise<KycSubmissionAdminRow[]> =>
   params.push(q.limit + 1);
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const res = await pool.query<KycSubmissionAdminRow>(
-    `SELECT id, user_id, identity_type, identity_number, document_upload_id,
+    `SELECT id, user_id, identity_type, identity_number, document_upload_id, selfie_upload_key,
             status::text AS status, reviewed_by, reviewed_at,
             reject_reason_code, reject_note, created_at
        FROM kyc_submissions
@@ -56,7 +57,7 @@ export const findByIdForUpdate = async (
   submissionId: string,
 ): Promise<KycSubmissionAdminRow | null> => {
   const res = await client.query<KycSubmissionAdminRow>(
-    `SELECT id, user_id, identity_type, identity_number, document_upload_id,
+    `SELECT id, user_id, identity_type, identity_number, document_upload_id, selfie_upload_key,
             status::text AS status, reviewed_by, reviewed_at,
             reject_reason_code, reject_note, created_at
        FROM kyc_submissions

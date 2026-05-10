@@ -25,18 +25,16 @@ export const register = (app: Express): void => {
   const authed = Router();
   authed.use(requireAuth);
   authed.get('/banners', validate(ListBannersPublicQuerySchema, 'query'), controller.publicList);
-  app.use('/api/v1', authed);
+  // Mount at /api/v1/banners (NOT /api/v1) — a router-level requireAuth on a
+  // /api/v1 mount fires on every /api/v1/* request, including /auth/login.
+  app.use('/api/v1/', authed);
 
   // /api/v1/public/banners — no-auth variant for guests / web-landing.
   // Same view shape, no userId required. Sensitive only-internal fields
   // are already stripped by toPublicView at the service layer.
   const pub = Router();
-  pub.get(
-    '/public/banners',
-    validate(ListBannersPublicQuerySchema, 'query'),
-    controller.publicList,
-  );
-  app.use('/api/v1', pub);
+  pub.get('/', validate(ListBannersPublicQuerySchema, 'query'), controller.publicList);
+  app.use('/api/v1/public/banners', pub);
 
   // Admin CRUD — banners are admin-only per spec (public-facing copy).
   const admin = Router();

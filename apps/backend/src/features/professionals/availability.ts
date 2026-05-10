@@ -2,6 +2,11 @@ import type { AvailabilityConfig } from '@lib/config/platform-config.service.js'
 
 import type { AvailabilityDay, AvailabilitySlot } from './professionals.types.js';
 
+export interface BookingInterval {
+  start: Date;
+  end: Date;
+}
+
 interface BuildSlotsInput {
   // The window is interpreted as midnight-to-midnight in `tz`. `fromDate` and
   // `toDateExclusive` carry the date components only (their UTC clock parts
@@ -11,22 +16,35 @@ interface BuildSlotsInput {
   config: AvailabilityConfig;
   tz: string;
   now: Date;
+  // Live pending/confirmed bookings on the callee that overlap the window.
+  // Slots that intersect any of these are marked unavailable.
+  bookings?: BookingInterval[];
+  // The duration the caller intends to book. A slot at `slot_start` is
+  // available only if `[slot_start, slot_start + bookingDurationMinutes)`
+  // (a) fits inside the daily window and (b) doesn't overlap any booking.
+  // Defaults to `config.slot_minutes` (existing behavior).
+  bookingDurationMinutes?: number;
 }
 
 // Pure function: emits the slot grid for [fromDate, toDateExclusive) where the
 // boundaries and slot wall-clock hours are interpreted in `tz`. Slot start
-// instants are emitted in UTC. Day labels (`days[].date`) reflect `tz`. Slots
-// before `now + no_instant_booking_minutes` are marked unavailable. Conflict-
-// with-existing-bookings filtering layers on once §8 ships.
+// instants are emitted in UTC. Day labels (`days[].date`) reflect `tz`. A slot
+// is unavailable if any of these holds:
+//   - slot_start < now + no_instant_booking_minutes (too soon)
+//   - slot_start + bookingDuration extends past the daily window end (won't fit)
+//   - [slot_start, slot_start + bookingDuration) overlaps a live booking
 export const buildSlotGrid = ({
   fromDate,
   toDateExclusive,
   config,
   tz,
   now,
+  bookings = [],
+  bookingDurationMinutes,
 }: BuildSlotsInput): AvailabilityDay[] => {
   const days: AvailabilityDay[] = [];
   const minBookableAt = new Date(now.getTime() + config.no_instant_booking_minutes * 60_000);
+  const durationMinutes = bookingDurationMinutes ?? config.slot_minutes;
 
   let year = fromDate.getUTCFullYear();
   let month = fromDate.getUTCMonth();
@@ -47,10 +65,24 @@ export const buildSlotGrid = ({
       m + config.slot_minutes <= windowEndMinutes;
       m += config.slot_minutes
     ) {
-      const slotInstant = wallClockInTzToUtc(year, month, day, m, tz);
+      const slotStart = wallClockInTzToUtc(year, month, day, m, tz);
+      const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60_000);
+
+      // The booking must fit in the daily window — check the END time against
+      // the daily end (separate from the slot cadence loop, which uses
+      // slot_minutes for stepping).
+      const dayEnd = wallClockInTzToUtc(year, month, day, windowEndMinutes, tz);
+      const fitsInWindow = slotEnd <= dayEnd;
+
+      const overlapsBooking = bookings.some(
+        (b) => slotStart < b.end && slotEnd > b.start,
+      );
+
+      const available = slotStart >= minBookableAt && fitsInWindow && !overlapsBooking;
+
       slots.push({
-        start_at: slotInstant.toISOString(),
-        available: slotInstant >= minBookableAt,
+        start_at: slotStart.toISOString(),
+        available,
       });
     }
 

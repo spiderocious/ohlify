@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. Discovery endpoints power the Home screen, the Search & Filter screen, and the Professional Detail screen. All endpoints require a Bearer access token. Read **Common conventions** in `onboarding-apis.md` once.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---

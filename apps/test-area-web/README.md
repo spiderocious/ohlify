@@ -16,7 +16,7 @@ cd apps/test-area-web && python3 -m http.server 5500
 # then visit http://localhost:5500
 ```
 
-The backend should be running on `http://localhost:8080` (or whatever
+The backend should be running on `http://localhost:8082` (or whatever
 `PORT` is set to in `apps/backend/.env`).
 
 ## Layout

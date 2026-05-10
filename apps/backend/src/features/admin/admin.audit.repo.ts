@@ -59,6 +59,60 @@ export interface ListAuditLogQuery {
   targetId?: string | undefined;
 }
 
+// Audit trail rows for a specific (target_type, target_id) joined with
+// admin_users.email so detail responses can render "who did what".
+// Stub-token writes have admin_user_id NULL — those rows still surface but
+// admin_email is null. `note` is read from metadata.body.reason /
+// metadata.body.comment / metadata.body.description (whichever is present)
+// since auditAdmin captures the request body, not a dedicated note field.
+export interface AuditTrailEntry {
+  id: string;
+  action: string;
+  admin_id: string | null;
+  admin_email: string | null;
+  note: string | null;
+  created_at: Date;
+}
+
+export const trailFor = async (
+  targetType: string,
+  targetId: string,
+  limit = 50,
+): Promise<AuditTrailEntry[]> => {
+  const res = await pool.query<{
+    id: string;
+    action: string;
+    admin_user_id: string | null;
+    admin_email: string | null;
+    metadata: Record<string, unknown>;
+    created_at: Date;
+  }>(
+    `SELECT al.id, al.action, al.admin_user_id, au.email AS admin_email,
+            al.metadata, al.created_at
+       FROM admin_audit_log al
+  LEFT JOIN admin_users au ON au.id = al.admin_user_id
+      WHERE al.target_type = $1 AND al.target_id = $2
+      ORDER BY al.created_at DESC, al.id DESC
+      LIMIT $3`,
+    [targetType, targetId, limit],
+  );
+  return res.rows.map((r) => {
+    const body =
+      typeof r.metadata['body'] === 'object' && r.metadata['body'] !== null
+        ? (r.metadata['body'] as Record<string, unknown>)
+        : {};
+    const noteRaw = body['reason'] ?? body['comment'] ?? body['description'] ?? null;
+    return {
+      id: r.id,
+      action: r.action,
+      admin_id: r.admin_user_id,
+      admin_email: r.admin_email,
+      note: typeof noteRaw === 'string' ? noteRaw : null,
+      created_at: r.created_at,
+    };
+  });
+};
+
 export const list = async (q: ListAuditLogQuery): Promise<AuditLogRow[]> => {
   const params: unknown[] = [];
   const filters: string[] = [];

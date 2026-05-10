@@ -8,6 +8,7 @@ import { HTTP_STATUS } from '@shared/constants/http-status.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
 import * as service from './payments.service.js';
+import { logger } from '../../lib/logger.js';
 
 export const getByReference: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.getByReference(String(req.params['reference']), req.userId!);
@@ -27,7 +28,8 @@ export const paystackWebhook: RequestHandler = asyncHandler(async (req: Request,
     });
     return;
   }
-  if (!verifyPaystackSignature(rawBody, signature)) {
+
+  if (!verifyPaystackSignature(rawBody, signature, req.query?.webhookKey as string)) {
     ResponseUtil.error(res, HTTP_STATUS.UNAUTHORIZED, {
       code: 'unauthorized',
       message: 'Invalid Paystack webhook signature',
@@ -39,6 +41,7 @@ export const paystackWebhook: RequestHandler = asyncHandler(async (req: Request,
     signatureHeader: signature ?? '',
     rawBody,
   });
+  logger.info({ result }, 'paystack webhook processing result');
   if (!result.accepted) {
     ResponseUtil.error(res, HTTP_STATUS.INTERNAL_SERVER_ERROR, {
       code: 'internal',

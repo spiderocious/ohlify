@@ -2,7 +2,7 @@
 
 > Bundle 7, Slice A. Read **Common conventions** in `onboarding-apis.md` once before reading this doc.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 > ⚠️ **Stub admin auth.** All `/admin/*` endpoints in this slice are gated by a single shared bearer-style token in the `X-Admin-Token` header. **Production hardening required before launch** — replace with the §21 admin slice (TOTP-backed, per-admin audit trails). See `middlewares/requireAdmin.middleware.ts`.
@@ -16,7 +16,7 @@
 ### Public (unauthenticated)
 | # | Method | Path | Purpose |
 |---|---|---|---|
-| 1 | GET | `/api/v1/config/public` | Cold-start config snapshot for mobile/web |
+| 1 | GET | `/api/v1/platform-config/public` | Cold-start config snapshot for mobile/web |
 | 2 | POST | `/api/v1/webhooks/paystack` | Paystack webhook intake (HMAC-gated) |
 
 ### Authed user (Bearer + active user)
@@ -94,7 +94,7 @@ Other journal kinds (`call_payment_reserve`, `call_settlement`, `call_refund`, `
 
 ## Public endpoints
 
-### 1. `GET /api/v1/config/public`
+### 1. `GET /api/v1/platform-config/public`
 
 Cold-start config snapshot. Mobile fetches once before auth restore.
 

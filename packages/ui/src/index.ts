@@ -41,6 +41,12 @@ export { AppDropdownInput } from './primitives/app-dropdown-input/index.js';
 export type { DropdownOption } from './primitives/app-dropdown-input/index.js';
 export { AppMultiSelectDropdown } from './primitives/app-multi-select-dropdown/index.js';
 export { AppDateInput } from './primitives/app-date-input/index.js';
+export { AppTimeInput } from './primitives/app-time-input/index.js';
+
+export { AppFilePreview } from './primitives/app-file-preview/index.js';
+export type { AppFilePreviewProps } from './primitives/app-file-preview/index.js';
+export { AppAvatar } from './primitives/app-avatar/index.js';
+export type { AppAvatarProps } from './primitives/app-avatar/index.js';
 
 // Shell
 export {
@@ -76,8 +82,9 @@ export {
   RatesGroup,
   ProfessionalRatesList,
   RatesListScreen,
+  RatesListContent,
 } from './domain/index.js';
-export type { RatesController } from './domain/index.js';
+export type { RatesController, RateConstraints } from './domain/index.js';
 
 // Modals + DrawerService
 export { DrawerService, ModalHost, ToastHost } from './modals/index.js';

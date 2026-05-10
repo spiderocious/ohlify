@@ -73,7 +73,7 @@ function rehydrate<C extends Record<string, RouteNode<string>>>(children: C, par
       ...rehydrate(childChildren, newAbs),
       absPath: newAbs,
       build: (params: Record<string, string>) =>
-        buildPath(child.relativePath, params as ParamsOf<typeof child.relativePath>),
+        buildPath(newAbs, params as ParamsOf<typeof child.relativePath>),
     };
   }
   return out as C;
@@ -92,7 +92,7 @@ export function route<P extends string, C extends Record<string, RouteNode<strin
   const node: RouteNode<P> = {
     relativePath,
     absPath,
-    build: (params) => buildPath(relativePath, params),
+    build: (params) => buildPath(absPath, params as ParamsOf<string>),
   };
 
   if (!children) return node;

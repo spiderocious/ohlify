@@ -78,6 +78,13 @@ export interface ListReviewsRow extends ReviewRow {
   reviewer_avatar_url: string | null;
 }
 
+// Admin variant — also carries the subject (the professional being reviewed)
+// since the moderation queue is a third-party view, not a self-view.
+export interface AdminReviewListRow extends ListReviewsRow {
+  subject_name: string | null;
+  subject_avatar_url: string | null;
+}
+
 export const listPublicForSubject = async (
   input: ListPublicForSubjectInput,
 ): Promise<ListReviewsRow[]> => {
@@ -149,7 +156,7 @@ interface AdminListInput {
   onlyHidden?: boolean;
 }
 
-export const adminList = async (input: AdminListInput): Promise<ListReviewsRow[]> => {
+export const adminList = async (input: AdminListInput): Promise<AdminReviewListRow[]> => {
   const params: unknown[] = [];
   const filters: string[] = [];
   if (input.ratingMax !== undefined) {
@@ -176,16 +183,38 @@ export const adminList = async (input: AdminListInput): Promise<ListReviewsRow[]
   }
   params.push(input.limit + 1);
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-  const res = await pool.query<ListReviewsRow>(
-    `SELECT r.*, u.full_name AS reviewer_name, u.avatar_url AS reviewer_avatar_url
+  const res = await pool.query<AdminReviewListRow>(
+    `SELECT r.*,
+            ru.full_name AS reviewer_name,
+            ru.avatar_url AS reviewer_avatar_url,
+            su.full_name AS subject_name,
+            su.avatar_url AS subject_avatar_url
        FROM reviews r
-       JOIN users u ON u.id = r.reviewer_user_id
+       JOIN users ru ON ru.id = r.reviewer_user_id
+       JOIN users su ON su.id = r.subject_user_id
        ${where}
        ORDER BY r.created_at DESC, r.id DESC
        LIMIT $${params.length}`,
     params,
   );
   return res.rows;
+};
+
+export const findByIdAdmin = async (reviewId: string): Promise<AdminReviewListRow | null> => {
+  const res = await pool.query<AdminReviewListRow>(
+    `SELECT r.*,
+            ru.full_name AS reviewer_name,
+            ru.avatar_url AS reviewer_avatar_url,
+            su.full_name AS subject_name,
+            su.avatar_url AS subject_avatar_url
+       FROM reviews r
+       JOIN users ru ON ru.id = r.reviewer_user_id
+       JOIN users su ON su.id = r.subject_user_id
+      WHERE r.id = $1
+      LIMIT 1`,
+    [reviewId],
+  );
+  return res.rows[0] ?? null;
 };
 
 export const setHidden = async (
@@ -203,5 +232,23 @@ export const setHidden = async (
             updated_at = now()
       WHERE id = $1`,
     [reviewId, adminId, reason],
+  );
+};
+
+// Restore a hidden review. Flips is_public back to TRUE and clears hide
+// metadata. The aggregate-recompute trigger fires on UPDATE, so the
+// affected pro's review_aggregates row is recomputed automatically.
+// We don't preserve the user's original is_public choice — schema doesn't
+// track it separately, and the doc commits to "restore visible".
+export const setUnhidden = async (runner: QueryRunner, reviewId: string): Promise<void> => {
+  await runner.query(
+    `UPDATE reviews
+        SET is_public = TRUE,
+            hidden_at = NULL,
+            hidden_by_admin_id = NULL,
+            hide_reason = NULL,
+            updated_at = now()
+      WHERE id = $1`,
+    [reviewId],
   );
 };

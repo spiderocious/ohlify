@@ -6,6 +6,8 @@ import { redis } from '@lib/redis/client.js';
 import { generateRefreshToken, hashToken, signAccessToken } from '@lib/security/jwt.js';
 import { hashPassword, verifyPassword } from '@lib/security/password.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
+import { accountFor } from '@lib/wallet/accounts.js';
+import { createOtp, verifyOtp } from '@shared/utils/otp.js';
 
 import { AUTH_MESSAGES } from './auth.messages.js';
 import * as repo from './auth.repo.js';
@@ -23,7 +25,7 @@ import type {
   ResendOtpDto,
   SensitiveActionOtpDto,
 } from './auth.schema.js';
-import type { OtpPurpose, TokenPair, UserRow } from './auth.types.js';
+import type { TokenPair, UserRow } from './auth.types.js';
 
 const OTP_TTL_SECONDS = 10 * 60;
 const OTP_EXPIRES_IN_MINUTES = 10;
@@ -33,7 +35,7 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const RESEND_COOLDOWN = 60;
 const RESEND_MAX_PER_HOUR = 5;
 
-const generateOtp = (): string => String(crypto.randomInt(100000, 1000000));
+const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
 
 const mintTokens = async (
   user: UserRow,
@@ -62,8 +64,6 @@ const maskEmail = (email: string): string => {
 
 const maskPhone = (phone: string): string => `${phone.slice(0, 4)}***${phone.slice(-2)}`;
 
-const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
-
 // ── Register ──────────────────────────────────────────────────────────────────
 
 export const registerInitiate = async (dto: RegisterInitiateDto) => {
@@ -85,14 +85,7 @@ export const registerInitiate = async (dto: RegisterInitiateDto) => {
   });
 
   const tokenHash = sha256(token);
-  const { id: otpId, code } = await repo.createOtpCode({
-    purpose: 'register',
-    subjectKey: tokenHash,
-    ttlSeconds: OTP_TTL_SECONDS,
-  });
-
-  await repo.linkOtpToRegistrationToken(tokenHash, otpId);
-  await redis.setex(`otp:${tokenHash}`, OTP_TTL_SECONDS, sha256(code));
+  const code = await createOtp(`otp:${tokenHash}`, OTP_TTL_SECONDS);
 
   const destination = dto.channel === 'email' ? dto.email : dto.phone;
   const masked = dto.channel === 'email' ? maskEmail(dto.email) : maskPhone(dto.phone);
@@ -142,8 +135,10 @@ export const registerVerify = async (
     return new ServiceError('credential_not_set', AUTH_MESSAGES.REGISTER_SET_CREDENTIAL, 400);
   }
 
-  const verified = await verifyOtp(tokenHash, dto.otp, 'register');
-  if (!verified.ok) return verified.error;
+  const otpValid = await verifyOtp(`otp:${tokenHash}`, dto.otp);
+  if (!otpValid) {
+    return new ServiceError('invalid_otp', AUTH_MESSAGES.OTP_SENT, 400);
+  }
 
   const consumed = await repo.consumeRegistrationToken(tokenHash);
   if (!consumed) {
@@ -157,6 +152,8 @@ export const registerVerify = async (
     password_hash: regToken.password_hash,
     ...(regToken.channel === 'email' ? { email_verified_at: now } : { phone_verified_at: now }),
   });
+
+  await accountFor.user(user.id);
 
   const tokens = await mintTokens(user, meta);
 
@@ -196,16 +193,7 @@ export const resendOtp = async (dto: ResendOtpDto) => {
     );
   }
 
-  await repo.consumeAllOtpCodesForSubject('register', tokenHash);
-
-  const { id: otpId, code } = await repo.createOtpCode({
-    purpose: 'register',
-    subjectKey: tokenHash,
-    ttlSeconds: OTP_TTL_SECONDS,
-  });
-
-  await repo.linkOtpToRegistrationToken(tokenHash, otpId);
-  await redis.setex(`otp:${tokenHash}`, OTP_TTL_SECONDS, sha256(code));
+  const code = await createOtp(`otp:${tokenHash}`, OTP_TTL_SECONDS);
 
   const destination = regToken.channel === 'email' ? regToken.email : regToken.phone_number;
   if (regToken.channel === 'email') {
@@ -281,11 +269,25 @@ export const login = async (
   await redis.del(emailKey);
   const tokens = await mintTokens(user, meta);
 
+  // onboarding_step here is a coarse hint for the client to decide
+  // whether to drop into the onboarding flow at all. The fine-grained
+  // routing (which onboarding screen) is owned by GET /onboarding/status,
+  // which the OnboardingGuard fetches immediately after login. We don't
+  // duplicate the full step machine here — but we do flag rejection
+  // explicitly so the client can short-circuit to the rejection screen
+  // without an extra round-trip when it's a clear-cut case.
+  const onboardingStep =
+    user.kyc_status === 'rejected'
+      ? 'kyc_rejected'
+      : user.full_name
+        ? 'complete'
+        : 'profile';
+
   return new ServiceSuccess(
     {
       user: { id: user.id, email: user.email, role: user.role, full_name: user.full_name },
       ...tokens,
-      onboarding_step: user.full_name ? 'complete' : 'profile',
+      onboarding_step: onboardingStep,
     },
     AUTH_MESSAGES.USER_LOGGED_IN,
   );
@@ -350,12 +352,7 @@ export const forgotPasswordInitiate = async (dto: ForgotPasswordInitiateDto) => 
   const user = await repo.findUserByEmail(dto.email);
 
   if (user) {
-    const { code } = await repo.createOtpCode({
-      purpose: 'forgot_password',
-      subjectKey: dto.email.toLowerCase(),
-      ttlSeconds: OTP_TTL_SECONDS,
-    });
-    await redis.setex(`otp:fp:${dto.email.toLowerCase()}`, OTP_TTL_SECONDS, sha256(code));
+    const code = await createOtp(`otp:fp:${dto.email.toLowerCase()}`, OTP_TTL_SECONDS);
     await notificationService.sendEmailOtp(
       dto.email,
       code,
@@ -363,7 +360,7 @@ export const forgotPasswordInitiate = async (dto: ForgotPasswordInitiateDto) => 
       OTP_EXPIRES_IN_MINUTES,
     );
   } else {
-    // Constant-time stub: match the ~1ms DB write overhead so timing doesn't reveal email existence.
+    // Constant-time stub: match the ~1ms write overhead so timing doesn't reveal email existence.
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
@@ -372,8 +369,10 @@ export const forgotPasswordInitiate = async (dto: ForgotPasswordInitiateDto) => 
 
 export const forgotPasswordVerifyOtp = async (dto: ForgotPasswordVerifyOtpDto) => {
   const subjectKey = dto.email.toLowerCase();
-  const verified = await verifyOtp(subjectKey, dto.otp, 'forgot_password');
-  if (!verified.ok) return verified.error;
+  const otpValid = await verifyOtp(`otp:fp:${subjectKey}`, dto.otp);
+  if (!otpValid) {
+    return new ServiceError('invalid_otp', AUTH_MESSAGES.OTP_SENT, 400);
+  }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
   const resetHash = sha256(resetToken);
@@ -407,14 +406,9 @@ export const forgotPasswordReset = async (dto: ForgotPasswordResetDto) => {
 
 export const changePassword = async (dto: ChangePasswordDto, userId: string) => {
   const saOtpKey = `sa-otp:${userId}:change_password`;
-  const storedHash = await redis.get(saOtpKey);
+  const otpValid = await verifyOtp(saOtpKey, dto.otp);
 
-  if (!storedHash) {
-    return new ServiceError('invalid_otp', AUTH_MESSAGES.SENSITIVE_OTP_SENT, 401);
-  }
-
-  const providedHash = sha256(dto.otp);
-  if (!crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(providedHash))) {
+  if (!otpValid) {
     return new ServiceError('invalid_otp', AUTH_MESSAGES.SENSITIVE_OTP_SENT, 401);
   }
 
@@ -431,7 +425,6 @@ export const changePassword = async (dto: ChangePasswordDto, userId: string) => 
   const newCredentialHash = await hashPassword(dto.new_password);
   await repo.updateUser(userId, { password_hash: newCredentialHash });
   await repo.revokeAllUserSessions(userId);
-  await redis.del(saOtpKey);
 
   return new ServiceSuccess(null, AUTH_MESSAGES.CREDENTIAL_CHANGED);
 };
@@ -458,10 +451,8 @@ export const requestSensitiveActionOtp = async (dto: SensitiveActionOtpDto, user
     return new ServiceError('token_invalid', AUTH_MESSAGES.SENSITIVE_OTP_SENT, 401);
   }
 
-  const otp = generateOtp();
-  const otpHash = sha256(otp);
   const saOtpKey = `sa-otp:${userId}:${dto.action}`;
-  await redis.setex(saOtpKey, 10 * 60, otpHash);
+  const code = await createOtp(saOtpKey, 10 * 60);
 
   const usePhone = dto.action === 'change_phone';
   const destination = usePhone ? user.phone_number : user.email;
@@ -469,59 +460,10 @@ export const requestSensitiveActionOtp = async (dto: SensitiveActionOtpDto, user
   const masked = usePhone ? maskPhone(user.phone_number) : maskEmail(user.email);
 
   if (usePhone) {
-    notificationService.sendSmsOtp(destination, otp, purpose);
+    notificationService.sendSmsOtp(destination, code, purpose);
   } else {
-    await notificationService.sendEmailOtp(destination, otp, purpose, 10);
+    await notificationService.sendEmailOtp(destination, code, purpose, 10);
   }
 
   return new ServiceSuccess({ otp_destination_masked: masked }, AUTH_MESSAGES.SENSITIVE_OTP_SENT);
-};
-
-// ── Internal: OTP verification helper ────────────────────────────────────────
-
-type VerifyOtpResult = { ok: true } | { ok: false; error: ServiceError };
-
-const verifyOtp = async (
-  subjectKey: string,
-  code: string,
-  purpose: OtpPurpose,
-): Promise<VerifyOtpResult> => {
-  const redisKey = purpose === 'forgot_password' ? `otp:fp:${subjectKey}` : `otp:${subjectKey}`;
-
-  const cachedHash = await redis.get(redisKey);
-  const providedHash = sha256(code);
-
-  if (cachedHash) {
-    const valid = crypto.timingSafeEqual(Buffer.from(cachedHash), Buffer.from(providedHash));
-    if (valid) {
-      await redis.del(redisKey);
-      const dbRow = await repo.findActiveOtpCode(purpose, subjectKey);
-      if (dbRow) await repo.consumeOtpCode(dbRow.id);
-      return { ok: true };
-    }
-  }
-
-  const dbRow = await repo.findActiveOtpCode(purpose, subjectKey);
-
-  if (!dbRow) {
-    return { ok: false, error: new ServiceError('invalid_otp', AUTH_MESSAGES.OTP_SENT, 400) };
-  }
-
-  if (dbRow.expires_at < new Date()) {
-    return { ok: false, error: new ServiceError('otp_expired', AUTH_MESSAGES.OTP_SENT, 400) };
-  }
-
-  if (!repo.verifyOtpCode(dbRow, code)) {
-    await repo.incrementOtpAttempts(dbRow.id);
-    if (dbRow.attempts + 1 >= dbRow.max_attempts) {
-      return {
-        ok: false,
-        error: new ServiceError('otp_max_attempts', AUTH_MESSAGES.OTP_SENT, 429),
-      };
-    }
-    return { ok: false, error: new ServiceError('invalid_otp', AUTH_MESSAGES.OTP_SENT, 400) };
-  }
-
-  await repo.consumeOtpCode(dbRow.id);
-  return { ok: true };
 };

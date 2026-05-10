@@ -1,5 +1,6 @@
-import { IconClose } from '@icons';
 import { useState } from 'react';
+
+import { IconClose } from '@icons';
 
 
 import { AppButton } from '../primitives/app-button/app-button.js';

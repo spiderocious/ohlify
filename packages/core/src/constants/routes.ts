@@ -24,10 +24,9 @@ export const ROUTES = route('', {
 
   // Onboarding / role + KYC
   ROLE_SELECTION: route('role-selection'),
-  PROFESSIONAL_KYC: route('professional-kyc', {
-    RATES: route('rates'),
-  }),
+  PROFESSIONAL_KYC: route('professional-kyc'),
   CLIENT_KYC: route('client-kyc'),
+  KYC_REJECTED: route('kyc-rejected'),
 
   // Main shell tabs
   HOME: route('home'),

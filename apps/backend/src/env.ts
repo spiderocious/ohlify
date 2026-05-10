@@ -2,7 +2,17 @@ import { z } from 'zod';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']),
-  PORT: z.coerce.number().default(8080),
+  PORT: z.coerce.number().default(8082),
+  WORKER_PORT: z.coerce.number().default(8083),
+
+  // Process role. Controls whether this Node process runs the HTTP server,
+  // the background workers, or both. 'all' (default) preserves the original
+  // single-process behavior. 'app' skips worker bootstrap entirely. 'worker'
+  // skips the main HTTP server (a tiny /health listener still binds so
+  // platform healthchecks pass). Per-worker WORKER_*_ENABLED flags continue
+  // to apply on top — useful for disabling individual workers in 'worker'
+  // mode.
+  PROCESS_ROLE: z.enum(['all', 'app', 'worker']).default('all'),
 
   APP_BASE_URL: z.string(),
   WEB_BASE_URL: z.string(),
@@ -47,6 +57,31 @@ const EnvSchema = z.object({
   ADMIN_JWT_REFRESH_SECRET: z.string().min(32),
   ADMIN_JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   ADMIN_JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+
+  // One-shot bootstrap for the very first admin account. Endpoint is
+  // POST /api/v1/admin/auth/bootstrap — unauthenticated, but gated three ways:
+  //   1. ADMIN_BOOTSTRAP_ENABLED must be 'true' (this flag).
+  //   2. admin_users table must be empty (idempotency by table state).
+  //   3. After first call, the row exists, so #2 fails permanently.
+  // After deploy + bootstrap, flip this to 'false' (or remove) and redeploy.
+  // Default 'false' so production is safe-by-default.
+  ADMIN_BOOTSTRAP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  USE_DEFAULT_OTP: z.string().optional(),
+  DEFAULT_OTP: z.string().optional(),
+
+  // Worker toggles. Set any of these to 'false' to skip starting that worker
+  // at boot — useful for running the API process without crons in dev, or for
+  // splitting workers into a separate Railway service. Default (env var unset
+  // or anything other than 'false') = enabled.
+  WORKER_OUTBOX_ENABLED: z.string().optional(),
+  WORKER_RECONCILIATION_ENABLED: z.string().optional(),
+  WORKER_CALL_STARTER_ENABLED: z.string().optional(),
+  WORKER_NO_SHOW_RESOLVER_ENABLED: z.string().optional(),
+  WORKER_STUCK_CALL_RESOLVER_ENABLED: z.string().optional(),
+  WORKER_EMAIL_ENABLED: z.string().optional(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
