@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@app/*": ["./src/*"],
+      "@features/*": ["./src/features/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@ohlify/ui": ["../../packages/ui/src/index.ts"],
+      "@ohlify/ui/*": ["../../packages/ui/src/*"],
+      "@ohlify/core": ["../../packages/core/src/index.ts"],
+      "@ohlify/core/*": ["../../packages/core/src/*"],
+      "@ohlify/api": ["../../packages/api/src/index.ts"],
+      "@ohlify/api/*": ["../../packages/api/src/*"],
+      "@icons": ["../../packages/ui/src/icons/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

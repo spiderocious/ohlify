@@ -15,12 +15,16 @@ export const subKobo = (a: Kobo, b: Kobo): Kobo => {
   return (a - b) as Kobo;
 };
 
-// Serialize to JSON. Throws if value exceeds safe integer range (guard for v1).
-export const koboToJson = (k: Kobo): number => {
-  if (k > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError(`Kobo value ${k} exceeds MAX_SAFE_INTEGER — use string serialization`);
-  }
-  return Number(k);
+// Serialize a Kobo / bigint kobo value to JSON. Returns a JS number when the
+// magnitude fits in IEEE-754 safe range (< 2^53), else a string. The
+// number|string union is intentional (conventions.md §6) — returning a number
+// would silently truncate for kobo values above 2^53.
+// eslint-disable-next-line sonarjs/function-return-type
+export const koboToJson = (k: Kobo | bigint): number | string => {
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  const min = -max;
+  if (k <= max && k >= min) return Number(k);
+  return k.toString();
 };
 
 // Parse from a DB BIGINT row value (pg returns bigint columns as strings).

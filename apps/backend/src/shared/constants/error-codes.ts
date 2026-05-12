@@ -22,6 +22,19 @@ export const ERROR_CODES = {
   // Wallet
   INSUFFICIENT_BALANCE: 'insufficient_balance',
   NO_BANK_ACCOUNT: 'no_bank_account',
+  // Calls + bookings
+  RATE_NOT_FOUND: 'rate_not_found',
+  PROFESSIONAL_UNAVAILABLE: 'professional_unavailable',
+  BOOKING_NOT_FOUND: 'booking_not_found',
+  CALL_NOT_FOUND: 'call_not_found',
+  CALL_NOT_JOINABLE: 'call_not_joinable',
+  STRIKE_NOT_FOUND: 'strike_not_found',
+  STRIKE_DISPUTE_WINDOW_CLOSED: 'strike_dispute_window_closed',
+  STRIKE_NOT_DISPUTABLE: 'strike_not_disputable',
+  // Reviews
+  REVIEW_NOT_FOUND: 'review_not_found',
+  REVIEW_EXISTS: 'review_exists',
+  REVIEW_NOT_ELIGIBLE: 'review_not_eligible',
   // Handles
   HANDLE_TAKEN: 'handle_taken',
   HANDLE_INVALID_FORMAT: 'handle_invalid_format',
@@ -37,11 +50,19 @@ export const ERROR_CODES = {
   UPSTREAM_UNAVAILABLE: 'upstream_unavailable',
   CONFLICT: 'conflict',
   IDEMPOTENCY_MISMATCH: 'idempotency_mismatch',
+  // Admin bootstrap (one-shot first-admin creation)
+  BOOTSTRAP_DISABLED: 'bootstrap_disabled',
+  ALREADY_BOOTSTRAPPED: 'already_bootstrapped',
   // Onboarding / role
   ROLE_ALREADY_SET: 'role_already_set',
   ROLE_REQUIRED: 'role_required',
   ROLE_MISMATCH: 'role_mismatch',
   KYC_INCOMPLETE: 'kyc_incomplete',
+  IDENTITY_REQUIRED_FIRST: 'identity_required_first',
+  ITEM_NOT_IN_RESUBMIT_SET: 'item_not_in_resubmit_set',
+  RESUBMIT_UNCHANGED: 'resubmit_unchanged',
+  STRIKE_REASON_ROLE_MISMATCH: 'strike_reason_role_mismatch',
+  USER_NOT_FOUND: 'user_not_found',
   // Profile
   ACCOUNT_NAME_MISMATCH: 'account_name_mismatch',
   UNRESOLVABLE_ACCOUNT: 'unresolvable_account',

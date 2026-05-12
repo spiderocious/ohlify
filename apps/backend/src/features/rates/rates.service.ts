@@ -6,7 +6,7 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { RATES_MESSAGES } from './rates.messages.js';
 import * as repo from './rates.repo.js';
 import type { CreateRateDto, UpdateRateDto } from './rates.schema.js';
-import type { RateRow, RateView } from './rates.types.js';
+import type { CallType, RateRow, RateView } from './rates.types.js';
 
 const toView = (row: RateRow): RateView => ({
   id: row.id,
@@ -15,6 +15,16 @@ const toView = (row: RateRow): RateView => ({
   price_kobo: Number(row.price_kobo),
   currency: row.currency,
 });
+
+const validateCallType = (callType: CallType): ServiceError | null => {
+  const { allowed_call_types } = platformConfig.rate();
+  if (!allowed_call_types.includes(callType)) {
+    return new ServiceError('value_out_of_range', RATES_MESSAGES.INVALID_DURATION, 422, {
+      call_type: [`call_type must be one of: ${allowed_call_types.join(', ')}`],
+    });
+  }
+  return null;
+};
 
 const validateDuration = (durationMinutes: number): ServiceError | null => {
   const { allowed_durations_minutes } = platformConfig.rate();
@@ -44,6 +54,8 @@ export const listMine = async (userId: string) => {
 };
 
 export const create = async (dto: CreateRateDto, userId: string) => {
+  const callTypeErr = validateCallType(dto.call_type);
+  if (callTypeErr !== null) return callTypeErr;
   const durationErr = validateDuration(dto.duration_minutes);
   if (durationErr !== null) return durationErr;
   const priceErr = validatePrice(dto.price_kobo);
@@ -70,6 +82,10 @@ export const update = async (rateId: string, dto: UpdateRateDto, userId: string)
     return new ServiceError('not_found', RATES_MESSAGES.NOT_FOUND, 404);
   }
 
+  if (dto.call_type !== undefined) {
+    const callTypeErr = validateCallType(dto.call_type);
+    if (callTypeErr !== null) return callTypeErr;
+  }
   if (dto.duration_minutes !== undefined) {
     const durationErr = validateDuration(dto.duration_minutes);
     if (durationErr !== null) return durationErr;

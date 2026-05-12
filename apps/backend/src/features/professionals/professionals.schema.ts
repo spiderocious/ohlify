@@ -15,6 +15,8 @@ export const ReviewsQuerySchema = z
   .object({
     cursor: z.string().min(1).max(2048).optional(),
     limit: z.coerce.number().int().min(1).max(50).optional(),
+    rating_min: z.coerce.number().int().min(1).max(5).optional(),
+    rating_max: z.coerce.number().int().min(1).max(5).optional(),
   })
   .strict();
 

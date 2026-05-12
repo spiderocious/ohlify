@@ -2,7 +2,7 @@
   "name": "customer-web",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "sourceRoot": "apps/customer-web",
+  "sourceRoot": "apps/customer-web/src",
   "targets": {
     "serve": {
       "executor": "nx:run-commands",
@@ -10,8 +10,26 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm build", "cwd": "apps/customer-web" }
+      "options": { "command": "pnpm build", "cwd": "apps/customer-web" },
+      "dependsOn": ["^build"]
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm preview", "cwd": "apps/customer-web" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm typecheck", "cwd": "apps/customer-web" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm lint", "cwd": "apps/customer-web" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm test", "cwd": "apps/customer-web" }
     }
   },
-  "tags": ["scope:customer-web", "type:app"]
+  "tags": ["scope:customer-web", "type:app"],
+  "implicitDependencies": ["ui", "core", "api"]
 }

@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { pool } from './db.mjs';
 import { redis } from './redis.mjs';
 
-const BASE = process.env.OHLIFY_BASE_URL ?? 'http://localhost:8080/api/v1';
+const BASE = process.env.OHLIFY_BASE_URL ?? 'http://localhost:8082/api/v1';
 
 const email = process.argv[2];
 const phone = process.argv[3];

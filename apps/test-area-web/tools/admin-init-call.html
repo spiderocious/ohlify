@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin · init test call · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>tools</span> ·
+      <span>init test call</span>
+    </nav>
+
+    <h1>Admin · init test call</h1>
+    <p class="tagline">
+      Skip the booking flow. Backend creates a call row directly and returns Agora tokens for both
+      sides. Open the join links in two tabs and you have a working call in five seconds.
+    </p>
+
+    <div class="callout">
+      <strong>Live.</strong> Hits <code>POST /api/v1/admin/calls/test-init</code>. Wallet IS debited
+      honestly — admin-credit the test caller first via <a href="manual-journal.html">manual-journal</a>.
+    </div>
+
+    <div class="panel">
+      <label for="callerId">Caller user id</label>
+      <input id="callerId" type="text" placeholder="u_..." />
+
+      <label for="calleeId">Callee user id (professional)</label>
+      <input id="calleeId" type="text" placeholder="u_..." />
+
+      <label for="duration">Duration minutes</label>
+      <input id="duration" type="number" value="15" min="1" max="120" />
+
+      <label for="callType">Call type</label>
+      <select id="callType">
+        <option value="audio">audio</option>
+        <option value="video">video</option>
+      </select>
+
+      <label for="rateId">Rate id (optional, defaults to callee's first active)</label>
+      <input id="rateId" type="text" placeholder="rate_..." />
+
+      <div style="height: 12px"></div>
+      <button id="submit">Init test call</button>
+    </div>
+
+    <h3>Response</h3>
+    <pre id="result">(no request yet)</pre>
+
+    <h3>Next step (once we have a response)</h3>
+    <p>
+      The response will include <code>channel_name</code>, <code>caller_token</code>, and
+      <code>callee_token</code>. Click the join links to open
+      <a href="../agora/two-party-call.html">two-party-call.html</a> with each side
+      prefilled.
+    </p>
+
+    <script type="module">
+      import { api, confirmRequest, renderResult } from '../shared/api.js';
+
+      document.getElementById('submit').addEventListener('click', async () => {
+        const body = {
+          caller_user_id: document.getElementById('callerId').value.trim(),
+          callee_user_id: document.getElementById('calleeId').value.trim(),
+        };
+        const rateId = document.getElementById('rateId').value.trim();
+        if (rateId) body.rate_id = rateId;
+        if (!confirmRequest('POST', '/api/v1/admin/calls/test-init', body)) return;
+        const r = await api('/api/v1/admin/calls/test-init', {
+          method: 'POST',
+          body,
+          admin: true,
+        });
+        renderResult('result', r);
+      });
+    </script>
+  </body>
+</html>

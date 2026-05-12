@@ -5,14 +5,19 @@ import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
+import * as bookingBlocksService from './booking-blocks.service.js';
+import * as deviceTokensService from './device-tokens.service.js';
 import type {
   ChangeEmailDto,
   ChangePhoneDto,
   DeleteAccountDto,
+  DeleteDeviceTokenDto,
   NotificationPreferencesPatchDto,
   PatchMeDto,
   PostAvatarDto,
   PutBankAccountDto,
+  PutBookingBlocksDto,
+  RegisterDeviceTokenDto,
   VerifyOtpOnlyDto,
 } from './profile.schema.js';
 import * as service from './profile.service.js';
@@ -102,3 +107,41 @@ export const removeAvatar: RequestHandler = asyncHandler(async (req: Request, re
   await service.removeAvatar(req.userId!);
   res.status(HTTP_STATUS.NO_CONTENT).end();
 });
+
+export const getBookingBlocks: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await bookingBlocksService.list(req.userId!);
+    ResponseUtil.ok(res, r.data);
+  },
+);
+
+export const putBookingBlocks: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await bookingBlocksService.replace(
+      req.body as PutBookingBlocksDto,
+      req.userId!,
+    );
+    if (!r.success) bail(r);
+    else ResponseUtil.ok(res, r.data);
+  },
+);
+
+export const registerDeviceToken: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await deviceTokensService.register(
+      req.body as RegisterDeviceTokenDto,
+      req.userId!,
+    );
+    ResponseUtil.ok(res, r.data);
+  },
+);
+
+export const deleteDeviceToken: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await deviceTokensService.unregister(
+      req.body as DeleteDeviceTokenDto,
+      req.userId!,
+    );
+    ResponseUtil.ok(res, r.data);
+  },
+);

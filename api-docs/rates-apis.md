@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. Rates endpoints manage a professional's call pricing — duration × call_type → price_kobo. **Professional-only.** Clients (role=client) get `403 forbidden` on every endpoint. All endpoints require a Bearer access token. Read **Common conventions** in `onboarding-apis.md` once, then jump to the endpoint of interest.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---
@@ -24,13 +24,13 @@
 
 A **rate** is a unique tuple `(user_id, call_type, duration_minutes)`:
 
-- `call_type` ∈ `audio` | `video`.
+- `call_type` must be one of the platform-allowed values. Default: `["audio", "video"]`. The closed type union (`audio` | `video`) at the wire level is enforced by zod; the live config narrows further at runtime — admins can disable `video` (or `audio`) without a deploy and the create/update endpoints will reject the disabled value with `422 value_out_of_range` and `field_errors.call_type`.
 - `duration_minutes` must be one of the platform-allowed values. Default: `[5, 10, 15, 20, 25, 30, 45, 60]`.
 - `price_kobo` must be between `min_kobo` and `max_kobo` inclusive. Default: `50_000` (₦500) → `50_000_000` (₦500k).
 - A pro cannot have two active rates with the same `(call_type, duration_minutes)` shape — returns `409 conflict`.
 - Soft-delete: `DELETE /me/rates/:id` sets `deleted_at`; the row remains for audit but stops counting toward KYC and stops appearing in `GET /me/rates`.
 
-All four config values come from [src/lib/config/platform-config.service.ts](apps/backend/src/lib/config/platform-config.service.ts) (today: constants; later: admin-tunable via `platform_config` table — surface unchanged).
+All four config values are admin-editable via `platform_config` rows and are mirrored as defaults in [src/lib/config/platform-config.service.ts](apps/backend/src/lib/config/platform-config.service.ts). All four are `is_public = TRUE`, so the customer-web reads them directly via `GET /platform-config/public` to populate dropdowns and show min/max hints on the price field — see "Frontend consumption" below.
 
 ---
 
@@ -113,6 +113,7 @@ All three fields required. Body is strict (extra keys → 400).
 | 401 | `unauthorized` | Bearer missing/invalid | no |
 | 403 | `forbidden` | Caller's role is `client` | no |
 | 409 | `conflict` | Pro already has an active rate with this `(call_type, duration_minutes)` | no |
+| 422 | `value_out_of_range` | `call_type` not in `rates.allowed_call_types` | yes — `field_errors.call_type` |
 | 422 | `value_out_of_range` | `duration_minutes` not in allowed set | yes — `field_errors.duration_minutes` |
 | 422 | `value_out_of_range` | `price_kobo` outside `[min_kobo, max_kobo]` | yes — `field_errors.price_kobo` |
 | 429 | `rate_limited` | Per-user (30/60min) or global limit | no |
@@ -120,6 +121,18 @@ All three fields required. Body is strict (extra keys → 400).
 > **400 vs 422:** `validation_error` (400) means the request shape is wrong (missing/extra/wrong-type field). `value_out_of_range` (422) means the shape is correct but a value violates a business policy (e.g. duration not allowed, price outside bounds). Frontends can branch on `code` alone — no need to inspect HTTP status.
 
 **Field-error message examples**
+
+```json
+{
+  "error": {
+    "code": "value_out_of_range",
+    "message": "Request failed",
+    "field_errors": {
+      "call_type": ["call_type must be one of: audio, video"]
+    }
+  }
+}
+```
 
 ```json
 {
@@ -189,7 +202,7 @@ Body is strict (extra keys → 400). Empty body → 400 with `_root` field error
 | 403 | `forbidden` | Caller's role is `client` |
 | 404 | `not_found` | `id` is well-formed but the rate doesn't exist, is soft-deleted, or belongs to another user |
 | 409 | `conflict` | Edit would create a duplicate `(call_type, duration_minutes)` shape with another active rate |
-| 422 | `value_out_of_range` | New `duration_minutes` not in allowed set OR new `price_kobo` outside bounds |
+| 422 | `value_out_of_range` | New `call_type` not in `rates.allowed_call_types`, OR new `duration_minutes` not in allowed set, OR new `price_kobo` outside bounds (`field_errors` indicates which) |
 | 429 | `rate_limited` | Per-user (60/60min) or global limit |
 
 **Notes**
@@ -244,10 +257,15 @@ Discovery (other pros' rates) lives at `GET /professionals/:id/rates` (not yet i
 
 ## 6. Configuration
 
-| Key | Default | Used by |
-|---|---|---|
-| `rates.min_kobo` | `50000` (₦500) | `POST /me/rates`, `PATCH /me/rates/:id` |
-| `rates.max_kobo` | `50000000` (₦500k) | same |
-| `rates.allowed_durations_minutes` | `[5, 10, 15, 20, 25, 30, 45, 60]` | same |
+| Key | Default | `is_public` | Used by |
+|---|---|---|---|
+| `rates.min_kobo` | `50000` (₦500) | TRUE | `POST /me/rates`, `PATCH /me/rates/:id` |
+| `rates.max_kobo` | `50000000` (₦500k) | TRUE | same |
+| `rates.allowed_durations_minutes` | `[5, 10, 15, 20, 25, 30, 45, 60]` | TRUE | same |
+| `rates.allowed_call_types` | `["audio", "video"]` | TRUE | same — added in migration `0062_seed_rates_allowed_call_types`. Disabling a value (e.g. dropping `"video"`) is rejected at create/update time but does NOT delete existing rows that already use the disabled type — those continue to surface in `GET /me/rates` until the pro deletes them. |
 
-Read at every call-site via `platformConfig.rate()`. Today these values are constants in [src/lib/config/platform-config.service.ts](apps/backend/src/lib/config/platform-config.service.ts); later the same surface will read from `platform_config` rows.
+Read at every call-site via `platformConfig.rate()`. The values are seeded in `platform_config` and admin-editable via `PATCH /admin/config`; defaults in [src/lib/config/platform-config.service.ts](apps/backend/src/lib/config/platform-config.service.ts) are used as fallbacks when a row is missing or malformed.
+
+### Frontend consumption
+
+All four keys are public. The customer-web reads them via `GET /platform-config/public` (cached for 5 min) and threads them into the `AddRateForm` widget so the call-type and duration dropdowns mirror the live config and the price field shows an inline `Allowed range: ₦500 – ₦500,000` hint with min/max validation. See `apps/customer-web/src/features/profile/screen/profile-rates-screen.tsx` and `apps/customer-web/src/features/professional-kyc/screen/parts/rates-modal-content.tsx`. Admin changes propagate to clients within ~5 min (server snapshot refresh + frontend public-config TTL).

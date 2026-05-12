@@ -6,6 +6,11 @@ import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { HANDLE_REGEX, RESERVED_HANDLES } from '@shared/constants/reserved-handles.js';
 
+import {
+  buildKycSpec,
+  findActiveResubmitSet,
+  findIncompleteKeys,
+} from './onboarding.kyc-spec.js';
 import { ONBOARDING_MESSAGES } from './onboarding.messages.js';
 import * as repo from './onboarding.repo.js';
 import type {
@@ -15,82 +20,75 @@ import type {
   ProfessionalKycPatchDto,
   SetRoleDto,
 } from './onboarding.schema.js';
+import { KNOWN_KYC_ITEM_KEYS } from './onboarding.types.js';
 import type {
-  ClientKycItem,
+  KycItemKey,
   KycProgress,
   KycStatus,
   OnboardingStatus,
   OnboardingStep,
-  ProfessionalKycItem,
 } from './onboarding.types.js';
-import { CLIENT_KYC_ITEMS, PROFESSIONAL_KYC_ITEMS } from './onboarding.types.js';
+
+const KNOWN_KEY_SET = new Set<string>(KNOWN_KYC_ITEM_KEYS);
+
+/**
+ * Defensive read filter for `kyc_submissions.reject_item_keys`. Drops
+ * unknown keys (e.g. left over from a config that no longer ships them)
+ * and dedupes. Returns [] when there's nothing to surface, matching the
+ * "always-an-array" client contract.
+ */
+const sanitizeItemKeys = (raw: string[] | null | undefined): KycItemKey[] => {
+  if (!raw || raw.length === 0) return [];
+  const out: KycItemKey[] = [];
+  const seen = new Set<string>();
+  for (const k of raw) {
+    if (!KNOWN_KEY_SET.has(k)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(k as KycItemKey);
+  }
+  return out;
+};
 
 const HANDLE_CHECK_CACHE_TTL = 60;
 const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
 const HANDLE_REDIRECT_DAYS = 90;
 
-// MVP: read once at module load. Move to platform_config reader when feature flags ship.
-const KYC_AUTO_APPROVE = true;
 
 // ── Status / progress helpers ────────────────────────────────────────────────
+//
+// Progress is sourced from the same KYC-spec composer that powers
+// GET /onboarding/kyc/spec, so /status, the PATCH responses, and the spec
+// endpoint can never disagree.
 
-const computeClientCompleted = (user: UserRow): ClientKycItem[] => {
-  const done: ClientKycItem[] = [];
-  if (user.full_name && user.full_name.trim().length > 0) done.push('full_name');
-  if (user.description && user.description.trim().length > 0) done.push('description');
-  if (user.interests.length > 0) done.push('interests');
-  return done;
+const buildProgressFromSpec = async (user: UserRow): Promise<KycProgress> => {
+  const spec = await buildKycSpec(user);
+  const required = spec.items.filter((i) => i.required);
+  const completed = required.filter((i) => i.complete).map((i) => i.key as string);
+  return {
+    completed_items: completed,
+    total_items: required.length,
+    percent: required.length === 0 ? 0 : Math.round((completed.length / required.length) * 100),
+  };
 };
-
-interface ProAggregates {
-  hasBank: boolean;
-  hasIdentity: boolean;
-  hasRates: boolean;
-}
-
-const computeProfessionalCompleted = (user: UserRow, agg: ProAggregates): ProfessionalKycItem[] => {
-  const done: ProfessionalKycItem[] = [];
-  if (user.full_name && user.full_name.trim().length > 0) done.push('full_name');
-  if (user.handle && user.handle.trim().length > 0) done.push('handle');
-  if (user.occupation && user.occupation.trim().length > 0) done.push('occupation');
-  if (user.description && user.description.trim().length > 0) done.push('description');
-  if (user.interests.length > 0) done.push('interests');
-  if (agg.hasBank) done.push('bank_account');
-  if (agg.hasIdentity) done.push('identity');
-  if (agg.hasRates) done.push('rates');
-  return done;
-};
-
-const buildProgress = (completed: readonly string[], total: number): KycProgress => ({
-  completed_items: [...completed],
-  total_items: total,
-  percent: total === 0 ? 0 : Math.round((completed.length / total) * 100),
-});
 
 const stepFor = (user: UserRow, completed: readonly string[], total: number): OnboardingStep => {
+  // Rejection is a hard short-circuit: regardless of whether items are
+  // still filled in (we don't clear them), the user has to view the
+  // rejection reason and resubmit. The kyc_rejected step persists until
+  // admin re-reviews — see policy doc above OnboardingStep.
+  if (user.kyc_status === 'rejected') return 'kyc_rejected';
+
   // Derive step from items, NOT just from kyc_status. The status can be
   // `approved` while items are incomplete in narrow windows (e.g. a delete
   // request between revaluateKycStatus running and a later GET). Trust items.
-  const allItemsComplete = completed.length === total;
+  const allItemsComplete = total > 0 && completed.length === total;
   if (user.kyc_status === 'approved' && allItemsComplete) return 'complete';
   if (user.role === 'professional') {
     return allItemsComplete ? 'complete' : 'professional_kyc';
   }
   // role = client (default until role explicitly chosen)
   return allItemsComplete ? 'complete' : 'client_kyc';
-};
-
-const loadProAggregates = async (userId: string): Promise<ProAggregates> => {
-  const [hasBank, kycRow, hasRates] = await Promise.all([
-    repo.hasBankAccount(userId),
-    repo.findLatestKycSubmission(userId),
-    repo.hasAnyActiveRate(userId),
-  ]);
-  return {
-    hasBank,
-    hasIdentity: kycRow !== null,
-    hasRates,
-  };
 };
 
 // ── GET /onboarding/status ───────────────────────────────────────────────────
@@ -101,19 +99,8 @@ export const getStatus = async (userId: string) => {
     return new ServiceError('token_invalid', ONBOARDING_MESSAGES.STATUS_FETCHED, 401);
   }
 
-  let progress: KycProgress;
-  let step: OnboardingStep;
-
-  if (user.role === 'professional') {
-    const agg = await loadProAggregates(userId);
-    const done = computeProfessionalCompleted(user, agg);
-    progress = buildProgress(done, PROFESSIONAL_KYC_ITEMS.length);
-    step = stepFor(user, done, PROFESSIONAL_KYC_ITEMS.length);
-  } else {
-    const done = computeClientCompleted(user);
-    progress = buildProgress(done, CLIENT_KYC_ITEMS.length);
-    step = stepFor(user, done, CLIENT_KYC_ITEMS.length);
-  }
+  const progress = await buildProgressFromSpec(user);
+  let step = stepFor(user, progress.completed_items, progress.total_items);
 
   // Role is technically always set in DB (defaults to 'client'), but step uses
   // role_selection until the user has confirmed via POST /onboarding/role.
@@ -122,10 +109,37 @@ export const getStatus = async (userId: string) => {
     step = 'role_selection';
   }
 
+  // When step is kyc_rejected, attach the latest rejection details so the
+  // rejection screen can render reason + admin note without an extra
+  // round-trip. Source of truth is the most recent kyc_submissions row —
+  // users.kyc_reject_reason carries the code only.
+  //
+  // `latest_submission_status` lets the client tell apart "user hasn't
+  // resubmitted" (latest 'rejected') from "user already resubmitted,
+  // awaiting re-review" (latest 'pending_review'). users.kyc_status stays
+  // 'rejected' until admin acts again, per the documented policy.
+  let rejection: OnboardingStatus['kyc_rejection'] = null;
+  if (step === 'kyc_rejected') {
+    const latest = await repo.findLatestKycSubmission(userId);
+    if (latest) {
+      rejection = {
+        reason_code: latest.reject_reason_code ?? user.kyc_reject_reason ?? 'unknown',
+        note: latest.reject_note,
+        reviewed_at: latest.reviewed_at?.toISOString() ?? null,
+        submission_id: latest.id,
+        latest_submission_status: latest.status,
+        // Always emit an array — empty = whole-submission rejection.
+        item_keys: sanitizeItemKeys(latest.reject_item_keys),
+      };
+    }
+  }
+
   const status: OnboardingStatus = {
     step,
     role: user.role,
+    kyc_status: user.kyc_status,
     kyc_progress: progress,
+    kyc_rejection: rejection,
   };
 
   return new ServiceSuccess(status, ONBOARDING_MESSAGES.STATUS_FETCHED);
@@ -157,6 +171,55 @@ export const setRole = async (dto: SetRoleDto, userId: string) => {
 
 // ── PATCH /onboarding/kyc/client ─────────────────────────────────────────────
 
+/**
+ * Enforces that a PATCH request only touches keys the admin flagged for
+ * resubmission. Returns a 403 ServiceError when the user has an active
+ * resubmit set and the touched keys leak outside it. Returns `null`
+ * otherwise (no active rejection scope, or all touched keys are allowed).
+ *
+ * Note: `bank_account` and `rates` aren't editable through PATCH
+ * /onboarding/kyc/* — they live behind /me/bank-accounts and /me/rates.
+ * The UI is responsible for hiding those modals when out of scope; this
+ * server guard only covers the patch surface.
+ */
+const enforceResubmitScope = async (
+  user: UserRow,
+  touched: readonly KycItemKey[],
+): Promise<ServiceError | null> => {
+  if (touched.length === 0) return null;
+  const allowed = await findActiveResubmitSet(user);
+  if (allowed === null) return null;
+  const allowedSet = new Set<string>(allowed);
+  const outOfScope = touched.filter((k) => !allowedSet.has(k));
+  if (outOfScope.length === 0) return null;
+  return new ServiceError(
+    'item_not_in_resubmit_set',
+    ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED,
+    403,
+    { item_keys: [...outOfScope] },
+  );
+};
+
+const collectClientTouchedKeys = (dto: ClientKycPatchDto): KycItemKey[] => {
+  const out: KycItemKey[] = [];
+  if (dto.full_name !== undefined) out.push('full_name');
+  if (dto.description !== undefined) out.push('description');
+  if (dto.interests !== undefined) out.push('interests');
+  return out;
+};
+
+const collectProTouchedKeys = (dto: ProfessionalKycPatchDto): KycItemKey[] => {
+  const out: KycItemKey[] = [];
+  if (dto.full_name !== undefined) out.push('full_name');
+  if (dto.handle !== undefined) out.push('handle');
+  if (dto.occupation !== undefined) out.push('occupation');
+  if (dto.description !== undefined) out.push('description');
+  if (dto.interests !== undefined) out.push('interests');
+  if (dto.identity !== undefined) out.push('identity');
+  if (dto.selfie !== undefined) out.push('selfie');
+  return out;
+};
+
 export const patchClientKyc = async (dto: ClientKycPatchDto, userId: string) => {
   const user = await repo.findUserById(userId);
   if (!user) {
@@ -166,14 +229,25 @@ export const patchClientKyc = async (dto: ClientKycPatchDto, userId: string) => 
     return new ServiceError('role_mismatch', ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED, 403);
   }
 
+  const touchedKeys = collectClientTouchedKeys(dto);
+  const scopeErr = await enforceResubmitScope(user, touchedKeys);
+  if (scopeErr !== null) return scopeErr;
+
   const updates: Record<string, unknown> = {};
   if (dto.full_name !== undefined) updates['full_name'] = dto.full_name;
   if (dto.description !== undefined) updates['description'] = dto.description;
   if (dto.interests !== undefined) updates['interests'] = dto.interests;
 
   const updated = (await repo.updateUserFields(userId, updates)) ?? user;
-  const done = computeClientCompleted(updated);
-  const progress = buildProgress(done, CLIENT_KYC_ITEMS.length);
+
+  // If the user is mid-resubmit, mark the touched keys as acknowledged
+  // on the rejected submission row. The complete endpoint reads this
+  // back to enforce that every flagged item was actually touched.
+  if (user.kyc_status === 'rejected' && touchedKeys.length > 0) {
+    await repo.acknowledgeRejectedKeys(userId, touchedKeys);
+  }
+
+  const progress = await buildProgressFromSpec(updated);
 
   return new ServiceSuccess({ kyc_progress: progress }, ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED);
 };
@@ -228,6 +302,10 @@ export const patchProfessionalKyc = async (dto: ProfessionalKycPatchDto, userId:
     return new ServiceError('role_mismatch', ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED, 403);
   }
 
+  const touchedKeys = collectProTouchedKeys(dto);
+  const scopeErr = await enforceResubmitScope(user, touchedKeys);
+  if (scopeErr !== null) return scopeErr;
+
   if (dto.handle !== undefined) {
     const handleErr = await validateHandleForUpdate(dto.handle, user.handle);
     if (handleErr !== null) return handleErr;
@@ -236,24 +314,53 @@ export const patchProfessionalKyc = async (dto: ProfessionalKycPatchDto, userId:
   const updates = buildProUpdatesFromDto(dto, user.handle);
   const updated = (await repo.updateUserFields(userId, updates)) ?? user;
 
-  // Identity: persist a kyc_submission row if provided.
+  // Identity: persist a kyc_submission row if provided. Prefer the new
+  // `document_upload_key` field; fall back to the legacy `document_upload_id`
+  // for old slice clients (both store into the same column).
   if (dto.identity !== undefined) {
+    const docKey = dto.identity.document_upload_key ?? dto.identity.document_upload_id;
     await repo.upsertKycSubmission({
       userId,
       identityType: dto.identity.type,
       identityNumber: dto.identity.number,
-      documentUploadId: dto.identity.document_upload_id,
+      documentUploadId: docKey,
       status: 'pending_review',
     });
+  }
+
+  // Selfie can be submitted independently of identity. If there's already a
+  // submission, patch it; otherwise create a stub so the value is captured.
+  // (We don't reject "selfie without identity" — admins decide.)
+  if (dto.selfie !== undefined) {
+    const updated = await repo.updateLatestSelfieKey(userId, dto.selfie.upload_key);
+    if (!updated) {
+      // No existing submission — selfie alone isn't enough to materialize one
+      // because identity_type/number are NOT NULL. Surface a clean error so
+      // the frontend prompts the user to fill identity first.
+      return new ServiceError(
+        'identity_required_first',
+        ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED,
+        422,
+        { selfie: ['Submit identity verification before adding a selfie.'] },
+      );
+    }
+    // Bootstrap the public-facing avatar from the selfie when the user
+    // hasn't picked one explicitly. POST /me/avatar always takes precedence
+    // over this — the helper is a no-op when avatar_url is already set.
+    await repo.setAvatarFromSelfieIfNull(userId, dto.selfie.upload_key);
   }
 
   // Any of these fields (full_name, handle, occupation, description, interests)
   // is surfaced by /professionals/:id, so bust the per-pro caches.
   await invalidateProfessionalCaches(userId);
 
-  const agg = await loadProAggregates(userId);
-  const done = computeProfessionalCompleted(updated, agg);
-  const progress = buildProgress(done, PROFESSIONAL_KYC_ITEMS.length);
+  // Mark the touched keys as acknowledged on the rejected submission row
+  // so kyc/complete can verify the user actually addressed every flag.
+  if (user.kyc_status === 'rejected' && touchedKeys.length > 0) {
+    await repo.acknowledgeRejectedKeys(userId, touchedKeys);
+  }
+
+  const progress = await buildProgressFromSpec(updated);
 
   return new ServiceSuccess({ kyc_progress: progress }, ONBOARDING_MESSAGES.KYC_PROGRESS_UPDATED);
 };
@@ -407,17 +514,11 @@ export const changeHandle = async (dto: ChangeHandleDto, userId: string) => {
 };
 
 // ── POST /onboarding/kyc/complete ────────────────────────────────────────────
-
-const isProKycComplete = async (user: UserRow): Promise<boolean> => {
-  const agg = await loadProAggregates(user.id);
-  const done = computeProfessionalCompleted(user, agg);
-  return done.length === PROFESSIONAL_KYC_ITEMS.length;
-};
-
-const isClientKycComplete = (user: UserRow): boolean => {
-  const done = computeClientCompleted(user);
-  return done.length === CLIENT_KYC_ITEMS.length;
-};
+//
+// Completion is derived from `kyc.professional_items` / `kyc.client_items`
+// platform_config rows via findIncompleteKeys (see onboarding.kyc-spec.ts).
+// The legacy isProKycComplete / isClientKycComplete helpers are gone — they
+// hardcoded the item list and missed admin-toggleable items like `selfie`.
 
 // Re-evaluate a user's KYC status after a required item has potentially
 // disappeared (e.g. last rate deleted, bank account deleted). If the user is
@@ -428,9 +529,8 @@ export const revaluateKycStatus = async (userId: string): Promise<void> => {
   const user = await repo.findUserById(userId);
   if (!user || user.kyc_status !== 'approved') return;
 
-  const stillComplete =
-    user.role === 'professional' ? await isProKycComplete(user) : isClientKycComplete(user);
-  if (stillComplete) return;
+  const incomplete = await findIncompleteKeys(user);
+  if (incomplete.length === 0) return;
 
   await repo.setKycStatus(userId, 'pending_review', false, false);
   // Bust per-pro caches so a de-approved pro disappears from detail/rates/home
@@ -438,31 +538,65 @@ export const revaluateKycStatus = async (userId: string): Promise<void> => {
   await invalidateProfessionalCaches(userId);
 };
 
+/**
+ * Keys whose acknowledgement doesn't go through PATCH /onboarding/kyc/*
+ * — they live behind their own routes (`/me/bank-accounts`, `/me/rates`)
+ * and we don't want to thread the resubmit notion across feature
+ * services. For these, "the data exists on the spec" is good-enough
+ * proof that the user addressed the flag.
+ */
+const PASSIVELY_ACKNOWLEDGED: readonly KycItemKey[] = ['bank_account', 'rates'];
+
 export const completeKyc = async (userId: string) => {
   const user = await repo.findUserById(userId);
   if (!user) {
     return new ServiceError('token_invalid', ONBOARDING_MESSAGES.KYC_SUBMITTED, 401);
   }
 
-  const complete =
-    user.role === 'professional' ? await isProKycComplete(user) : isClientKycComplete(user);
-
-  if (!complete) {
-    return new ServiceError('kyc_incomplete', ONBOARDING_MESSAGES.KYC_SUBMITTED, 422);
+  const incompleteKeys = await findIncompleteKeys(user);
+  if (incompleteKeys.length > 0) {
+    return new ServiceError('kyc_incomplete', ONBOARDING_MESSAGES.KYC_SUBMITTED, 422, {
+      incomplete_items: incompleteKeys.map((k) => String(k)),
+    });
   }
 
-  const finalStatus: KycStatus = KYC_AUTO_APPROVE ? 'approved' : 'pending_review';
-  await repo.setKycStatus(userId, finalStatus, true, finalStatus === 'approved');
-  // Approval flips visibility; bust caches so the new pro shows up in
-  // /home and /professionals/:id immediately.
-  if (finalStatus === 'approved') {
-    await invalidateProfessionalCaches(userId);
+  // If the user is mid-resubmit, every flagged key must be acknowledged
+  // before we let the submission through. Stops the "click Proceed
+  // without changing anything" loophole — admin-flagged items keep prior
+  // values on file but are visually unchecked; without this guard a
+  // user could refresh and submit an unchanged form.
+  if (user.kyc_status === 'rejected') {
+    const latest = await repo.findLatestKycSubmission(userId);
+    const flagged = sanitizeItemKeys(latest?.reject_item_keys);
+    if (latest?.status === 'rejected' && flagged.length > 0) {
+      const acknowledged = new Set<string>(latest.reject_acknowledged_keys ?? []);
+      const passive = new Set<string>(PASSIVELY_ACKNOWLEDGED);
+      const stillNeeded = flagged.filter(
+        (k) => !acknowledged.has(k) && !passive.has(k),
+      );
+      if (stillNeeded.length > 0) {
+        return new ServiceError(
+          'resubmit_unchanged',
+          ONBOARDING_MESSAGES.KYC_SUBMITTED,
+          422,
+          { item_keys: stillNeeded.map(String) },
+        );
+      }
+    }
   }
 
+  // Every submission goes through admin review — there's no auto-approve
+  // path. The admin KYC queue is the source of truth for approvals.
+  // completeKycInTx writes BOTH the users row AND the latest
+  // kyc_submissions row in a single transaction so they can never drift.
+  const finalStatus: KycStatus = 'pending_review';
+  await repo.completeKycInTx(userId, finalStatus);
+
+  // `next_step: 'complete'` means "onboarding flow is finished, let the
+  // user into the app." It's not the same as "KYC approved" — the
+  // sticky review banner reads `kyc_status` to know whether to show.
   return new ServiceSuccess(
     { kyc_status: finalStatus, next_step: 'complete' as const },
-    finalStatus === 'approved'
-      ? ONBOARDING_MESSAGES.KYC_APPROVED
-      : ONBOARDING_MESSAGES.KYC_SUBMITTED,
+    ONBOARDING_MESSAGES.KYC_SUBMITTED,
   );
 };

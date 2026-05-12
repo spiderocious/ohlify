@@ -13,7 +13,7 @@
 
 set -uo pipefail
 
-BASE="http://localhost:8080/api/v1"
+BASE="http://localhost:8082/api/v1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Pretty output ─────────────────────────────────────────────────────────────

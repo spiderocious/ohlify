@@ -6,6 +6,7 @@ import { env } from '../../env.js';
 
 import { type EmailJobPayload } from './email-worker.js';
 import { otpEmailTemplate } from './templates/otp-email.js';
+import { walletEmailTemplates } from './templates/wallet-events.js';
 import { welcomeEmailTemplate } from './templates/welcome-email.js';
 
 type OtpPurpose =
@@ -52,5 +53,45 @@ export const notificationService = {
     const subject = welcomeEmailTemplate.subject();
     const html = welcomeEmailTemplate.html({ name });
     await sendEmail(to, subject, html);
+  },
+
+  async sendWalletEvent(
+    to: string,
+    kind:
+      | 'call_payment_reserved'
+      | 'call_settled'
+      | 'call_refunded'
+      | 'withdrawal_requested'
+      | 'withdrawal_completed'
+      | 'withdrawal_reversed',
+    ctx: { amountKobo: string; currency?: string; reason?: string },
+  ): Promise<void> {
+    const currency = ctx.currency ?? 'NGN';
+    let tpl: { subject: string; html: string };
+    switch (kind) {
+      case 'call_payment_reserved':
+        tpl = walletEmailTemplates.callPaymentReserved({ amountKobo: ctx.amountKobo, currency });
+        break;
+      case 'call_settled':
+        tpl = walletEmailTemplates.callSettled({ amountKobo: ctx.amountKobo, currency });
+        break;
+      case 'call_refunded':
+        tpl = walletEmailTemplates.callRefunded({ amountKobo: ctx.amountKobo, currency });
+        break;
+      case 'withdrawal_requested':
+        tpl = walletEmailTemplates.withdrawalRequested({ amountKobo: ctx.amountKobo, currency });
+        break;
+      case 'withdrawal_completed':
+        tpl = walletEmailTemplates.withdrawalCompleted({ amountKobo: ctx.amountKobo, currency });
+        break;
+      case 'withdrawal_reversed':
+        tpl = walletEmailTemplates.withdrawalReversed({
+          amountKobo: ctx.amountKobo,
+          currency,
+          ...(ctx.reason !== undefined ? { reason: ctx.reason } : {}),
+        });
+        break;
+    }
+    await sendEmail(to, tpl.subject, tpl.html);
   },
 };

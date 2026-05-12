@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. Onboarding endpoints drive role selection, KYC progress, and handle management. All endpoints require a Bearer access token. Read **Common conventions** once, then jump to the endpoint of interest.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---
@@ -12,14 +12,17 @@
 | # | Method | Path | Auth | Purpose |
 |---|---|---|---|---|
 | 1 | GET | `/api/v1/onboarding/status` | Bearer | Current onboarding step + KYC progress |
-| 2 | POST | `/api/v1/onboarding/role` | Bearer | Choose `client` or `professional` role |
-| 3 | PATCH | `/api/v1/onboarding/kyc/client` | Bearer | Incremental save of client KYC fields |
-| 4 | PATCH | `/api/v1/onboarding/kyc/professional` | Bearer | Incremental save of professional KYC fields |
-| 5 | GET | `/api/v1/onboarding/handle/check?handle=…` | Bearer | Real-time handle availability check |
-| 6 | POST | `/api/v1/me/handle` | Bearer | Post-onboarding handle rename (30-day cooldown) |
-| 7 | POST | `/api/v1/onboarding/kyc/complete` | Bearer | Submit KYC for review/auto-approve |
+| 2 | GET | `/api/v1/onboarding/kyc/spec` | Bearer | Full KYC item spec — what to render, current values, completeness. Drives the entire KYC screen. |
+| 3 | POST | `/api/v1/onboarding/role` | Bearer | Choose `client` or `professional` role |
+| 4 | PATCH | `/api/v1/onboarding/kyc/client` | Bearer | Incremental save of client KYC fields |
+| 5 | PATCH | `/api/v1/onboarding/kyc/professional` | Bearer | Incremental save of professional KYC fields |
+| 6 | GET | `/api/v1/onboarding/handle/check?handle=…` | Bearer | Real-time handle availability check |
+| 7 | POST | `/api/v1/me/handle` | Bearer | Post-onboarding handle rename (30-day cooldown) |
+| 8 | POST | `/api/v1/onboarding/kyc/complete` | Bearer | Submit KYC for review/auto-approve |
 
-> **Related endpoints (separate docs):** bank account is at `PUT /me/bank-account` (profile API), rates are at `POST /me/rates` (rates API). Both count toward professional KYC progress.
+> **Related endpoints (separate docs):** bank account is at `PUT /me/bank-account` (profile API), rates are at `POST /me/rates` (rates API). Both count toward professional KYC progress. ID-document and selfie photos are uploaded via the external file service — see [`file-uploads-apis.md`](./file-uploads-apis.md).
+>
+> **New:** the KYC item list per role is **driven by `platform_config`** (keys `kyc.professional_items` and `kyc.client_items`). `GET /onboarding/kyc/spec` is the canonical way to render the screen — see §2 and `onboarding-kyc-spec.md` for the full schema. The legacy hardcoded `PROFESSIONAL_KYC_ITEMS` / `CLIENT_KYC_ITEMS` arrays are gone.
 
 ---
 
@@ -65,7 +68,8 @@ Every code below is a snake_case string returned in `error.code`. UI/i18n must k
 | `handle_reserved` | Handle is on the reserved list | 400 |
 | `handle_taken` | Handle is owned by another user, or in `handle_redirects` (90-day) | 409 |
 | `handle_cooldown` | Within the 30-day rename cooldown | 429 |
-| `kyc_incomplete` | `POST /onboarding/kyc/complete` called with missing items | 422 |
+| `kyc_incomplete` | `POST /onboarding/kyc/complete` called with missing items. Carries `field_errors.incomplete_items: string[]` listing the missing item keys. | 422 |
+| `identity_required_first` | `PATCH /onboarding/kyc/professional` body included `selfie` but the user has no prior `kyc_submissions` row to attach it to. Submit `identity` first. | 422 |
 | `rate_limited` | Per-route or global IP rate limit hit | 429 |
 | `not_found` | Route doesn't exist | 404 |
 | `internal` | Unhandled exception caught by the error handler | 500 |
@@ -121,20 +125,33 @@ There is no service-level rate limit on onboarding endpoints other than the natu
 - **interests** — array of up to 20 strings, each 1–60 chars. Empty array stores fine but does NOT count toward completion.
 - **identity.type** — exactly one of `"nin"` | `"bvn"` | `"passport"` | `"drivers_license"`.
 - **identity.number** — 4–40 chars.
-- **identity.document_upload_id** — optional, 1–120 chars (file_key from uploads microservice).
+- **identity.document_upload_key** — file-service key (uuid + extension), regex `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|webp|pdf)$`. Obtained via the file-uploads service. **Required for the `identity` item to count as complete.**
+- **identity.document_upload_id** — *deprecated* alias for `document_upload_key`, accepted for back-compat. New clients should use `document_upload_key`.
+- **selfie.upload_key** — same regex as `document_upload_key` but extension restricted to `jpg|jpeg|png` for the selfie kind.
 
 ### 6. KYC item lists
 
-Used by `GET /onboarding/status` and `POST /onboarding/kyc/complete`.
+Used by `GET /onboarding/status`, `GET /onboarding/kyc/spec`, and `POST /onboarding/kyc/complete`.
 
-**Client (3 items):** `full_name`, `description`, `interests`.
+**The required item set is now driven by `platform_config`.** Two keys, both `is_public = TRUE`:
 
-**Professional (8 items):** `full_name`, `handle`, `occupation`, `description`, `interests`, `bank_account`, `identity`, `rates`.
+- `kyc.client_items` — JSON array of `KycItemSpec` for client onboarding.
+- `kyc.professional_items` — JSON array of `KycItemSpec` for professional onboarding.
 
-The last three for pros are derived from sibling tables, NOT from the `users` row:
+Admins edit both keys via `PATCH /admin/config`. Changes propagate immediately (in-memory snapshot reload).
+
+**Default seeded values:**
+
+- **Client (2 items):** `full_name`, `interests`.
+- **Professional (9 items):** `full_name`, `handle`, `occupation`, `description`, `interests`, `bank_account`, `identity`, `selfie`, `rates`.
+
+**Items NOT stored on the `users` row** are derived from sibling tables:
 - `bank_account` ⇐ presence of a row in `bank_accounts` for this user (managed via `PUT /me/bank-account`).
-- `identity` ⇐ presence of any row in `kyc_submissions` for this user (created when `PATCH /onboarding/kyc/professional` is called with an `identity` field).
+- `identity` ⇐ presence of a `kyc_submissions` row **with** `document_upload_id` populated (created when `PATCH /onboarding/kyc/professional` is called with an `identity` object including `document_upload_key`).
+- `selfie` ⇐ `kyc_submissions.selfie_upload_key` populated (set when `PATCH /onboarding/kyc/professional` is called with a `selfie` field).
 - `rates` ⇐ presence of any active row in `professional_rates` for this user (managed via `POST /me/rates`).
+
+> **Renderer pairing.** The frontend should call `GET /onboarding/kyc/spec` (§2) which returns the admin-defined items for the caller's role with current values + per-item completeness. Don't try to reconstruct the list from `kyc_progress.completed_items` alone — `progress` only tells you *what's done*, not *what's required*.
 
 ### 7. CORS
 
@@ -193,11 +210,36 @@ No body, no query params.
 
 | Field | Type | Notes |
 |---|---|---|
-| `step` | enum | `"role_selection"` \| `"client_kyc"` \| `"professional_kyc"` \| `"complete"` |
+| `step` | enum | `"role_selection"` \| `"client_kyc"` \| `"professional_kyc"` \| `"kyc_rejected"` \| `"complete"` |
 | `role` | enum | `"client"` \| `"professional"` (defaults to `"client"` server-side) |
-| `kyc_progress.completed_items` | string[] | Subset of the role's KYC item list |
-| `kyc_progress.total_items` | int | `3` for clients, `8` for professionals |
+| `kyc_progress.completed_items` | string[] | Keys of items the user has completed (subset of `kyc.{role}_items`). |
+| `kyc_progress.total_items` | int | Number of `enabled && required` items in the role's config. Defaults to **2** for clients, **9** for professionals; can shift if an admin toggles items. |
 | `kyc_progress.percent` | int | `round(completed / total * 100)`. `0` when `total = 0` |
+| `kyc_rejection` | object \| null | Non-null only when `step === "kyc_rejected"`. See below. |
+
+**`kyc_rejection` shape (only when `step === "kyc_rejected"`):**
+
+```json
+{
+  "kyc_rejection": {
+    "reason_code": "document_unclear",
+    "note": "ID photo was blurry. Please reupload a sharper image.",
+    "reviewed_at": "2026-05-10T13:42:00.000Z",
+    "submission_id": "kyc_01HZ...",
+    "latest_submission_status": "rejected",
+    "item_keys": ["identity", "selfie"]
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `reason_code` | enum | `document_unclear` \| `identity_mismatch` \| `expired_document` \| `fraudulent` \| `other`. |
+| `note` | string \| null | Admin's free-text explanation. Shown verbatim on the user's rejection screen. |
+| `reviewed_at` | ISO date \| null | When the admin acted. |
+| `submission_id` | string | The latest `kyc_submissions` row ID. |
+| `latest_submission_status` | enum | `rejected` (user hasn't resubmitted yet) or `pending_review` (user resubmitted, awaiting re-review). The parent `step` stays `"kyc_rejected"` until admin acts again, so use this to switch the rejection UI between "show reason + Resubmit" and "show awaiting-review". |
+| `item_keys` | string[] | **Per-item resubmission set.** Empty array `[]` means whole-submission rejection — the user must redo every item (legacy behavior). Non-empty means **partial rejection**: the user only needs to re-upload the listed items. The user-facing KYC screen locks every item NOT in this set; the server also enforces this on PATCH (see §5). |
 
 **`step` derivation:**
 - `"complete"` only when **both** `users.kyc_status = 'approved'` AND `completed_items.length === total_items`. Status is derived from items, not blindly trusted — see "Status demotion" below.
@@ -242,7 +284,223 @@ Headers: `Retry-After: <seconds>`.
 
 ---
 
-## 2. POST `/api/v1/onboarding/role`
+## 2. GET `/api/v1/onboarding/kyc/spec`
+
+Returns the **full KYC item spec** for the caller's role: which items to render, what kind each is, the validation rules, the user's current saved value (when any), and a per-item `complete` flag. This is the canonical input for the KYC screen — render one tile/modal per item, seed forms with `value`, tick when `complete` is true.
+
+This endpoint *replaces* the legacy "infer items from `kyc_progress.completed_items` + frontend-hardcoded list" pattern. The list lives in `platform_config` and admins can reorder, relabel, or toggle items without a frontend deploy.
+
+**Auth:** Bearer access token required
+**Per-route rate limit:** none (global only)
+
+### Request
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <access_token>` |
+
+No body, no query params. Role is derived from the authenticated user.
+
+### Responses
+
+#### 200 OK
+
+```jsonc
+{
+  "data": {
+    "role": "professional",
+    "items": [
+      {
+        "key": "full_name",
+        "kind": "text",
+        "label": "Full name",
+        "subtitle": "Enter your full legal name as it appears on your ID.",
+        "required": true,
+        "enabled": true,
+        "validation": [
+          { "rule": "min_length", "value": 2 },
+          { "rule": "max_length", "value": 80 }
+        ],
+        "value": "Olarewaju Feranmi",
+        "complete": true
+      },
+      {
+        "key": "handle",
+        "kind": "handle",
+        "label": "Username",
+        "subtitle": "A unique handle others can find you by.",
+        "required": true,
+        "enabled": true,
+        "validation": [
+          {
+            "rule": "regex",
+            "value": "^[a-z0-9_]{3,20}$",
+            "message": "3–20 chars, lowercase letters, digits, or underscore."
+          }
+        ],
+        "value": null,
+        "complete": false
+      },
+      {
+        "key": "bank_account",
+        "kind": "bank",
+        "label": "Bank account",
+        "subtitle": "Where we send your payouts.",
+        "required": true,
+        "enabled": true,
+        "validation": [],
+        "value": {
+          "bank_code": "058",
+          "bank_name": "GTBank",
+          "account_number_masked": "******4421",
+          "account_name": "OLAREWAJU FERANMI"
+        },
+        "complete": true
+      },
+      {
+        "key": "identity",
+        "kind": "identity",
+        "label": "Identity verification",
+        "subtitle": "Verify your identity to keep the community safe.",
+        "required": true,
+        "enabled": true,
+        "validation": [
+          { "rule": "allowed_id_methods", "value": ["nin","bvn","passport","drivers_license"] },
+          {
+            "rule": "id_number_per_method",
+            "value": {
+              "nin":             { "rule": "regex", "value": "^[0-9]{11}$" },
+              "bvn":             { "rule": "regex", "value": "^[0-9]{11}$" },
+              "passport":        { "rule": "regex", "value": "^[A-Z0-9]{8,10}$" },
+              "drivers_license": { "rule": "regex", "value": "^[A-Z0-9]{8,12}$" }
+            }
+          }
+        ],
+        "value": {
+          "method": "nin",
+          "id_number_masked": "*******8901",
+          "document_upload_key": "8204e793-128e-48cb-a790-9fd9b2dbb61c.jpg"
+        },
+        "complete": true
+      },
+      {
+        "key": "selfie",
+        "kind": "selfie",
+        "label": "Selfie",
+        "subtitle": "Take a clear photo of your face. We compare it with your ID.",
+        "required": true,
+        "enabled": true,
+        "validation": [{ "rule": "allowed_extensions", "value": ["jpg","jpeg","png"] }],
+        "value": null,
+        "complete": false
+      },
+      {
+        "key": "rates",
+        "kind": "rates",
+        "label": "Rates",
+        "subtitle": "Set what you charge per call type and duration.",
+        "required": true,
+        "enabled": true,
+        "validation": [{ "rule": "min_items", "value": 1 }],
+        "value": [
+          { "id": "rt_01...", "call_type": "audio", "duration_minutes": 15, "price_kobo": 500000 }
+        ],
+        "complete": true
+      }
+    ],
+    "completed_count": 4,
+    "total_required": 9,
+    "all_complete": false,
+    "resubmission": null
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `role` | enum | `"client"` \| `"professional"` |
+| `items` | KycItemSpec[] | Only items where `enabled = true`. Disabled items are omitted entirely. |
+| `completed_count` | int | Number of `required && complete` items. |
+| `total_required` | int | Number of `required` items. |
+| `all_complete` | bool | `true` iff every required item is complete — equivalent to `completed_count === total_required`. Use this as the gate for `POST /onboarding/kyc/complete`. |
+| `resubmission` | object \| null | Set when the user is in a partial-rejection state. See below. |
+
+**`resubmission` shape (only when the user is in `kyc_rejected` with admin-flagged items):**
+
+```json
+{
+  "resubmission": {
+    "submission_id": "kyc_01HZ...",
+    "item_keys": ["identity", "selfie"],
+    "reason_code": "document_unclear",
+    "note": "ID photo was blurry."
+  }
+}
+```
+
+`null` when there's no active rejection scope. Whole-submission rejections (admin didn't pick specific items) and post-resubmit awaiting-review states also surface as `null` — there's nothing to scope. When non-null with a non-empty `item_keys`, the client should:
+
+- Render every `items[i]` whose `key` is **not** in `item_keys` as **locked / read-only** (the server also enforces this; see §4–§5 for the 403).
+- Scope the progress bar + the `kyc/complete` gate to just the items in the set.
+
+**Per-item shape — `KycItemSpec`:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `key` | string | Stable identifier — `full_name`, `handle`, `occupation`, `description`, `interests`, `bank_account`, `identity`, `selfie`, `rates`. |
+| `kind` | string | Determines which widget to render — `text`, `textarea`, `tags`, `handle`, `bank`, `identity`, `selfie`, `rates`, `image_upload`. |
+| `label` | string | Heading shown in the tile + modal. |
+| `subtitle` | string | Helper text under the label. |
+| `required` | bool | When `false`, item is shown but doesn't block `kyc/complete`. |
+| `enabled` | bool | Always `true` in the response (disabled items are filtered out server-side). |
+| `validation` | ValidationRule[] | Inline-validation rules the frontend interprets. See below. |
+| `value` | depends on kind | Currently-saved value, or `null`. Shape depends on `kind` — see "Per-kind value shapes" below. |
+| `complete` | bool | Server-computed. True when `value` is present AND passes the kind's completeness check (e.g. for `identity`, the doc upload key must also be set). |
+
+**`validation` rule kinds** (discriminated on `rule`):
+
+| `rule` | `value` shape | Use |
+|---|---|---|
+| `min_length` / `max_length` | int | String length bounds (`text`, `textarea`, `handle`). |
+| `min_items` / `max_items` | int | Array length bounds (`tags`, `rates`). |
+| `regex` | string (JS-compatible) | Frontend constructs `new RegExp(value)`. `message` is shown verbatim on mismatch. |
+| `numeric_only` | (no value) | Equivalent to `regex: '^[0-9]+$'`; frontend may also set `inputMode="numeric"`. |
+| `one_of` | string[] | Allowed string values (radio-style). |
+| `allowed_extensions` | string[] | File-picker filter for upload kinds. |
+| `allowed_id_methods` | string[] | Subset of `nin`/`bvn`/`passport`/`drivers_license` to show in the identity dropdown. |
+| `id_number_per_method` | `Record<method, { rule:'regex', value: string }>` | Per-method regex for the ID number field. |
+
+Backend re-validates everything on save regardless. Frontend rules exist for UX only.
+
+**Per-kind value shapes:**
+
+| `kind` | `value` shape | Save endpoint |
+|---|---|---|
+| `text` / `textarea` / `handle` | `string` | `PATCH /onboarding/kyc/professional` body `{ [key]: value }` (or `/onboarding/kyc/client`). |
+| `tags` | `string[]` | same |
+| `bank` | `{ bank_code, bank_name, account_number_masked, account_name }` | `PUT /me/bank-account` |
+| `identity` | `{ method, id_number_masked, document_upload_key }` | `PATCH /onboarding/kyc/professional` body `{ identity: { type, number, document_upload_key } }` |
+| `selfie` | `{ upload_key }` | `PATCH /onboarding/kyc/professional` body `{ selfie: { upload_key } }` |
+| `rates` | `{ id, call_type, duration_minutes, price_kobo }[]` | `POST /me/rates` (per rate) |
+| `image_upload` | `{ upload_key }` | item-specific (none today). |
+
+> **PII safety.** `value` only ever contains masked identifiers (account numbers, ID numbers). The full unmasked value lives only on the server. Edits replace the whole value (re-enter ID, re-resolve bank).
+
+#### 401 Unauthorized
+
+Both shapes from §1 apply.
+
+#### 429 Too Many Requests — global IP rate limit
+
+Standard shape; see §1.
+
+**Side-effects:** none. Pure read.
+
+For the long-form rationale and admin-editing surface, see `onboarding-kyc-spec.md`.
+
+---
+
+## 3. POST `/api/v1/onboarding/role`
 
 Sets the user's role. Once role is "confirmed" (any KYC progress made or `full_name` populated), it cannot change.
 
@@ -306,7 +564,27 @@ Trigger: switching role after `users.kyc_status !== 'none'` OR `users.full_name`
 
 ---
 
-## 3. PATCH `/api/v1/onboarding/kyc/client`
+### Partial-rejection scoping (PATCH endpoints)
+
+Both `PATCH /api/v1/onboarding/kyc/client` and `PATCH /api/v1/onboarding/kyc/professional` honor a per-item resubmission scope when the user is in a `kyc_rejected` step. If the latest rejection carries `kyc_rejection.item_keys = ["selfie", "identity"]` (see §1), the server **rejects** any PATCH that touches a key outside that set with a 403:
+
+```json
+{
+  "error": {
+    "code": "item_not_in_resubmit_set",
+    "message": "Request failed",
+    "field_errors": {
+      "item_keys": ["full_name"]
+    }
+  }
+}
+```
+
+Empty `item_keys` (whole-submission rejection) imposes no scope — the user may patch any DTO-supported field.
+
+The DTO-supported keys are: `full_name`, `handle`, `occupation`, `description`, `interests`, `identity`, `selfie` (pro), and `full_name`, `description`, `interests` (client). Items whose values live behind their own routes — `bank_account` (`/me/bank-accounts`) and `rates` (`/me/rates`) — are **not** scoped at the server boundary here; the user-facing UI hides those modals when out of scope, and the spec endpoint signals the lock state via `resubmission.item_keys`.
+
+## 4. PATCH `/api/v1/onboarding/kyc/client`
 
 Incremental save of client KYC fields. All fields optional. Body is `.strict()` — unknown keys rejected.
 
@@ -387,9 +665,9 @@ Trigger: `users.role !== 'client'`.
 
 ---
 
-## 4. PATCH `/api/v1/onboarding/kyc/professional`
+## 5. PATCH `/api/v1/onboarding/kyc/professional`
 
-Incremental save of professional KYC fields. **Bank account and rates are managed by their own endpoints** (`PUT /me/bank-account` and `POST /me/rates`).
+Incremental save of professional KYC fields. **Bank account and rates are managed by their own endpoints** (`PUT /me/bank-account` and `POST /me/rates`). Identity-document and selfie photos are uploaded via the file service first (see [`file-uploads-apis.md`](./file-uploads-apis.md)) — only the resulting `key` is sent here.
 
 **Auth:** Bearer access token, role must be `professional`
 **Per-route rate limit:** none
@@ -406,7 +684,10 @@ Incremental save of professional KYC fields. **Bank account and rates are manage
   "identity": {
     "type": "nin",
     "number": "12345678901",
-    "document_upload_id": "kyc/u_01jx.../12345678901.jpg"
+    "document_upload_key": "8204e793-128e-48cb-a790-9fd9b2dbb61c.jpg"
+  },
+  "selfie": {
+    "upload_key": "ba91d389-66ac-49ce-8c88-410ea73898e1.jpg"
   }
 }
 ```
@@ -421,7 +702,10 @@ Incremental save of professional KYC fields. **Bank account and rates are manage
 | `identity` | object | optional | See below |
 | `identity.type` | enum | yes (if `identity` sent) | `"nin"` \| `"bvn"` \| `"passport"` \| `"drivers_license"` |
 | `identity.number` | string | yes (if `identity` sent) | 4–40 chars |
-| `identity.document_upload_id` | string | optional | 1–120 chars |
+| `identity.document_upload_key` | string | optional* | File-service key (`<uuid>.<ext>` where ext ∈ `jpg|jpeg|png|webp|pdf`). *Required for the `identity` item to count as `complete` in `GET /onboarding/kyc/spec` — submissions without it stay at `incomplete`. |
+| `identity.document_upload_id` | string | optional | *Deprecated* alias for `document_upload_key`. New clients should use `document_upload_key`. |
+| `selfie` | object | optional | See below |
+| `selfie.upload_key` | string | yes (if `selfie` sent) | File-service key with extension ∈ `jpg|jpeg|png`. Updates the **most recent** `kyc_submissions` row's `selfie_upload_key`. If no submission exists yet, returns 422 `identity_required_first`. |
 
 > **Setting `handle` here also stamps `users.handle_changed_at`**, so the 30-day cooldown for `POST /me/handle` engages from this point onward.
 
@@ -434,12 +718,14 @@ Incremental save of professional KYC fields. **Bank account and rates are manage
   "data": {
     "kyc_progress": {
       "completed_items": ["full_name", "handle", "occupation", "interests", "identity"],
-      "total_items": 8,
-      "percent": 63
+      "total_items": 9,
+      "percent": 56
     }
   }
 }
 ```
+
+> `total_items` reflects the count of currently `enabled && required` items in `kyc.professional_items`. Default seeded value is 9 (after `selfie` was added in 0061); admins can change it.
 
 #### 400 Bad Request — validation
 
@@ -453,7 +739,8 @@ Two flavors:
     "message": "Validation failed",
     "field_errors": {
       "handle": ["String must contain at least 3 character(s)"],
-      "identity.type": ["Invalid enum value. Expected 'nin' | 'bvn' | 'passport' | 'drivers_license', received 'foo'"]
+      "identity.type": ["Invalid enum value. Expected 'nin' | 'bvn' | 'passport' | 'drivers_license', received 'foo'"],
+      "identity.document_upload_key": ["Invalid upload key (expected <uuid>.<ext>)."]
     }
   }
 }
@@ -492,6 +779,20 @@ Trigger: `users.role !== 'professional'`.
 
 Trigger: handle owned by another active user OR present in `handle_redirects` with non-expired `expires_at` (90-day window).
 
+#### 422 Unprocessable Entity — selfie sent without prior identity
+
+```json
+{
+  "error": {
+    "code": "identity_required_first",
+    "message": "Request failed",
+    "field_errors": { "selfie": ["Submit identity verification before adding a selfie."] }
+  }
+}
+```
+
+Trigger: body includes `selfie` but the user has no `kyc_submissions` row yet. Submit `identity` first (a single PATCH can include both fields).
+
 #### 429 Too Many Requests — global IP rate limit
 
 ```json
@@ -499,13 +800,14 @@ Trigger: handle owned by another active user OR present in `handle_redirects` wi
 ```
 
 **Side-effects:**
-- Updates supplied `users` columns.
+- Updates supplied `users` columns (`full_name`, `handle`, `occupation`, `description`, `interests`).
 - When `handle` is provided AND differs from current value, also stamps `users.handle_changed_at = now()`.
-- When `identity` is supplied, inserts a new row into `kyc_submissions` with `status = 'pending_review'`. Each call with `identity` creates a new audit-trail row (no upsert).
+- When `identity` is supplied, inserts a new row into `kyc_submissions` with `status = 'pending_review'` and `document_upload_id = <document_upload_key>` (legacy column name, new value semantic). Each call with `identity` creates a new audit-trail row (no upsert).
+- When `selfie` is supplied, **patches** `kyc_submissions.selfie_upload_key` on the user's most recent submission. Returns 422 `identity_required_first` if no submission exists. Selfie can be supplied alone (after identity), or in the same PATCH as identity.
 
 ---
 
-## 5. GET `/api/v1/onboarding/handle/check?handle=<handle>`
+## 6. GET `/api/v1/onboarding/handle/check?handle=<handle>`
 
 Real-time handle availability check. Designed to be called on every keystroke from the frontend (debounced).
 
@@ -585,7 +887,7 @@ Headers: `Retry-After: <seconds>`, `X-RateLimit-Remaining: 0`.
 
 ---
 
-## 6. POST `/api/v1/me/handle`
+## 7. POST `/api/v1/me/handle`
 
 Post-onboarding handle rename. Subject to a 30-day cooldown stored on `users.handle_changed_at`.
 
@@ -682,7 +984,7 @@ Headers: `Retry-After: <seconds>` (up to ~2_592_000 = 30 days when freshly stamp
 
 ---
 
-## 7. POST `/api/v1/onboarding/kyc/complete`
+## 8. POST `/api/v1/onboarding/kyc/complete`
 
 Submits KYC for review. With `kyc.auto_approve = true` (current MVP setting), this auto-approves and marks the user complete. The `pending_review` branch is wired but currently unreachable in MVP.
 
@@ -715,12 +1017,24 @@ Same as §1.
 #### 422 Unprocessable Entity — KYC incomplete
 
 ```json
-{ "error": { "code": "kyc_incomplete", "message": "Request failed" } }
+{
+  "error": {
+    "code": "kyc_incomplete",
+    "message": "Request failed",
+    "field_errors": {
+      "incomplete_items": ["handle", "selfie"]
+    }
+  }
+}
 ```
 
-Trigger: required items missing for the user's role.
-- Client missing `full_name`, `description`, OR `interests`.
-- Professional missing any of `full_name`, `handle`, `occupation`, `description`, `interests`, `bank_account`, `identity`, `rates`.
+`field_errors.incomplete_items` lists the exact `kyc.{role}_items` keys that are still missing — the frontend can highlight just those tiles.
+
+Trigger: any `enabled && required` item in `kyc.{role}_items` is incomplete. The default seeded set is:
+- Client: `full_name`, `interests`.
+- Professional: `full_name`, `handle`, `occupation`, `description`, `interests`, `bank_account`, `identity`, `selfie`, `rates`.
+
+Admins can disable items or mark them optional via `PATCH /admin/config` — the completion check follows the live config.
 
 #### 429 Too Many Requests — global IP rate limit
 
@@ -744,14 +1058,26 @@ Trigger: required items missing for the user's role.
 Step 1  →  POST /auth/register/* (auth API)            user account created
 Step 2  →  GET  /onboarding/status                     200, step="role_selection"
 Step 3  →  POST /onboarding/role                       200, next_step="<role>_kyc"
-Step 4a →  PATCH /onboarding/kyc/client                  ⎫
-                — or —                                   ⎬  …repeat until all items done
-Step 4b →  PATCH /onboarding/kyc/professional            ⎪
-           PUT  /me/bank-account     (profile API)       ⎪
-           POST /me/rates            (rates API)         ⎭
-Step 5  →  POST /onboarding/kyc/complete               200, kyc_status="approved"
-Step 6  →  GET  /onboarding/status                     200, step="complete"
+Step 4  →  GET  /onboarding/kyc/spec                   200, items[] with values+complete
+                — render one tile/modal per item; loop —
+Step 5a →  PATCH /onboarding/kyc/client                  ⎫
+                — or —                                   ⎬  …per-item save until all_complete
+Step 5b →  PATCH /onboarding/kyc/professional            ⎪
+           PUT  /me/bank-account       (profile API)     ⎪    bank_account
+           POST /me/rates              (rates API)       ⎪    rates
+                                                         ⎪
+           // ID document + selfie photos ──────────────  ⎪
+           GET  /get-upload-uri?ext=jpg (file service)   ⎪    → key + presigned PUT
+           PUT  <presigned uri>          (file service)  ⎪    → bytes uploaded
+           PATCH /onboarding/kyc/professional             ⎪
+             { identity: { …, document_upload_key },     ⎪    identity
+               selfie:   { upload_key } }                ⎭    selfie
+Step 6  →  POST /onboarding/kyc/complete               200, kyc_status="approved"
+                                                       OR 422 kyc_incomplete + missing keys
+Step 7  →  GET  /onboarding/status                     200, step="complete"
 ```
+
+> **Saves invalidate the spec.** Every save endpoint above invalidates the user's `kyc-spec` cache server-side; the frontend just refetches `/onboarding/kyc/spec` after each PATCH/PUT/POST and the affected tile turns green.
 
 ## Handle lifecycle
 
@@ -775,7 +1101,8 @@ After 30 days:
 
 Onboarding endpoints are NOT idempotent on the `Idempotency-Key` header (the middleware exists but isn't applied to these routes). Practical guidance:
 
-- `PATCH /onboarding/kyc/*` is naturally idempotent — re-sending the same body is safe.
+- `PATCH /onboarding/kyc/client` is naturally idempotent — re-sending the same body is safe.
+- `PATCH /onboarding/kyc/professional` is **mostly** idempotent — except that each `identity` field creates a new `kyc_submissions` row (audit trail), and each `selfie` patches only the most recent row. Sending the same `identity` twice creates two submission rows; sending the same `selfie` twice is a true no-op.
 - `POST /onboarding/role` is naturally idempotent for the same role.
 - `POST /me/handle` is **not** safe to blind-retry: a successful response stamps cooldown; a retry will hit 429.
 - `POST /onboarding/kyc/complete` re-stamps timestamps on each call but never re-rejects.

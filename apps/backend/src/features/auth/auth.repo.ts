@@ -3,11 +3,9 @@ import crypto from 'node:crypto';
 import { pool } from '@lib/db/pool.js';
 import { id, newRawId } from '@lib/ids.js';
 
-import type { OtpPurpose, OtpRow, RegTokenRow, SessionRow, UserRow } from './auth.types.js';
+import type { RegTokenRow, SessionRow, UserRow } from './auth.types.js';
 
 const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
-
-const generateOtp = (): string => String(crypto.randomInt(100000, 1000000));
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -110,81 +108,12 @@ export const setRegistrationTokenPassword = async (
   ]);
 };
 
-export const linkOtpToRegistrationToken = async (
-  tokenHash: string,
-  otpCodeId: string,
-): Promise<void> => {
-  await pool.query('UPDATE registration_tokens SET otp_code_id = $1 WHERE token_hash = $2', [
-    otpCodeId,
-    tokenHash,
-  ]);
-};
-
 export const consumeRegistrationToken = async (tokenHash: string): Promise<boolean> => {
   const res = await pool.query(
     'UPDATE registration_tokens SET consumed_at = now() WHERE token_hash = $1 AND consumed_at IS NULL',
     [tokenHash],
   );
   return (res.rowCount ?? 0) > 0;
-};
-
-// ── OTP codes ─────────────────────────────────────────────────────────────────
-
-export const createOtpCode = async (input: {
-  purpose: OtpPurpose;
-  subjectKey: string;
-  ttlSeconds: number;
-}): Promise<{ id: string; code: string }> => {
-  const code = generateOtp();
-  const codeHash = sha256(code);
-  const expiresAt = new Date(Date.now() + input.ttlSeconds * 1000);
-  const otpId = id('otp');
-
-  await pool.query(
-    `INSERT INTO otp_codes (id, purpose, subject_key, code_hash, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [otpId, input.purpose, input.subjectKey, codeHash, expiresAt],
-  );
-
-  return { id: otpId, code };
-};
-
-export const findActiveOtpCode = async (
-  purpose: OtpPurpose,
-  subjectKey: string,
-): Promise<OtpRow | null> => {
-  const res = await pool.query<OtpRow>(
-    `SELECT * FROM otp_codes
-     WHERE purpose = $1 AND subject_key = $2 AND consumed_at IS NULL AND expires_at > now()
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [purpose, subjectKey],
-  );
-  return res.rows[0] ?? null;
-};
-
-export const incrementOtpAttempts = async (otpId: string): Promise<void> => {
-  await pool.query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1', [otpId]);
-};
-
-export const consumeOtpCode = async (otpId: string): Promise<void> => {
-  await pool.query('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [otpId]);
-};
-
-export const consumeAllOtpCodesForSubject = async (
-  purpose: OtpPurpose,
-  subjectKey: string,
-): Promise<void> => {
-  await pool.query(
-    `UPDATE otp_codes SET consumed_at = now()
-     WHERE purpose = $1 AND subject_key = $2 AND consumed_at IS NULL`,
-    [purpose, subjectKey],
-  );
-};
-
-export const verifyOtpCode = (row: OtpRow, code: string): boolean => {
-  const expected = crypto.createHash('sha256').update(code).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(row.code_hash), Buffer.from(expected));
 };
 
 // ── Auth sessions ─────────────────────────────────────────────────────────────
@@ -197,8 +126,6 @@ export interface CreateSessionInput {
   ip?: string | undefined;
   deviceId?: string | undefined;
 }
-
-export type { OtpPurpose } from './auth.types.js';
 
 export const createAuthSession = async (input: CreateSessionInput): Promise<void> => {
   await pool.query(

@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agora · live call demo · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+    <style>
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .choice {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 24px;
+        cursor: pointer;
+        text-align: center;
+        transition: background 120ms;
+      }
+      .choice:hover {
+        background: var(--panel-2);
+      }
+      .choice h2 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        border: none;
+        padding: 0;
+      }
+      .choice p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .choice .icon {
+        font-size: 36px;
+        margin-bottom: 8px;
+      }
+
+      .form {
+        max-width: 480px;
+        margin: 24px auto;
+      }
+      .form h2 {
+        margin: 0 0 12px;
+      }
+
+      .call-room {
+        margin-top: 16px;
+      }
+      .call-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 14px;
+        margin-bottom: 12px;
+      }
+      .call-header .who {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .call-header .who code {
+        color: var(--ink);
+        font-size: 13px;
+      }
+      .call-header .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--muted);
+        font-size: 11px;
+        margin-right: 4px;
+      }
+      .call-header .pill.live {
+        background: rgba(107, 212, 154, 0.15);
+        color: var(--ok);
+      }
+
+      .video-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 8px;
+      }
+      .tile {
+        background: #000;
+        border-radius: 6px;
+        position: relative;
+        min-height: 200px;
+        overflow: hidden;
+      }
+      .tile .label {
+        position: absolute;
+        bottom: 6px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 3px;
+      }
+      .tile.audio-only {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 80px;
+        color: var(--muted);
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 13px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        justify-content: center;
+      }
+      .controls button {
+        padding: 10px 16px;
+      }
+
+      .copyable {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        background: var(--code-bg);
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        user-select: all;
+      }
+      .copyable:hover {
+        background: var(--panel-2);
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> · <span>agora</span> ·
+      <span>live call demo</span>
+    </nav>
+
+    <h1 id="title">Live call demo</h1>
+    <p class="tagline" id="tagline">
+      No login, no booking. Pick host or join, type a name, get on a call.
+    </p>
+
+    <!-- View 1: choose host or join -->
+    <div id="viewLanding" class="hero">
+      <a class="choice" id="chooseHost">
+        <div class="icon">🎙</div>
+        <h2>Host a call</h2>
+        <p>Create a new room. Share the room id with whoever joins.</p>
+      </a>
+      <a class="choice" id="chooseJoin">
+        <div class="icon">🚪</div>
+        <h2>Join a call</h2>
+        <p>You have a room id from a host. Drop in.</p>
+      </a>
+    </div>
+
+    <!-- View 2: host form -->
+    <div id="viewHost" class="form" style="display: none">
+      <h2>Host a call</h2>
+      <label for="hostName">Your name</label>
+      <input id="hostName" type="text" placeholder="e.g. Feranmi" />
+
+      <label for="hostMode">Call type</label>
+      <select id="hostMode">
+        <option value="audio">Audio only</option>
+        <option value="video">Audio + video</option>
+      </select>
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button class="ghost" id="hostBack">← Back</button>
+        <button id="hostStart">Start call</button>
+      </div>
+    </div>
+
+    <!-- View 3: join form -->
+    <div id="viewJoin" class="form" style="display: none">
+      <h2>Join a call</h2>
+      <label for="joinChannel">Room id</label>
+      <input id="joinChannel" type="text" placeholder="e.g. demo_party_42" />
+
+      <label for="joinName">Your name</label>
+      <input id="joinName" type="text" placeholder="e.g. Tola" />
+
+      <label for="joinMode">Call type</label>
+      <select id="joinMode">
+        <option value="audio">Audio only</option>
+        <option value="video">Audio + video</option>
+      </select>
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button class="ghost" id="joinBack">← Back</button>
+        <button id="joinStart">Join</button>
+      </div>
+    </div>
+
+    <!-- View 4: in call -->
+    <div id="viewCall" class="call-room" style="display: none">
+      <div class="call-header">
+        <div class="who">
+          <span class="pill" id="callTypePill">audio</span>
+          <span class="pill live" id="livePill">connecting…</span>
+          <span style="margin-left: 12px">
+            Room: <code class="copyable" id="roomDisplay" title="click to select"></code>
+          </span>
+          <span style="margin-left: 12px">You: <code id="nameDisplay"></code></span>
+        </div>
+        <div>
+          <button class="danger" id="leaveBtn">Leave</button>
+        </div>
+      </div>
+
+      <div class="video-grid" id="grid"></div>
+
+      <div class="controls">
+        <button class="ghost" id="muteBtn">Mute mic</button>
+        <button class="ghost" id="camBtn" style="display: none">Camera off</button>
+      </div>
+
+      <details style="margin-top: 16px">
+        <summary style="cursor: pointer; color: var(--muted); font-size: 12px">
+          Show event log
+        </summary>
+        <pre
+          id="log"
+          style="margin-top: 6px; font-size: 11px; max-height: 260px; overflow-y: auto"
+        ></pre>
+      </details>
+    </div>
+
+    <script type="module">
+      import { api } from '../shared/api.js';
+      import { createCallSession, createLog, subscribeRemote } from '../shared/agora.js';
+
+      const log = createLog('log');
+      const views = {
+        landing: document.getElementById('viewLanding'),
+        host: document.getElementById('viewHost'),
+        join: document.getElementById('viewJoin'),
+        call: document.getElementById('viewCall'),
+      };
+      const show = (name) => {
+        for (const [k, el] of Object.entries(views)) el.style.display = k === name ? '' : 'none';
+      };
+      const grid = document.getElementById('grid');
+      const tiles = new Map();
+      const remoteNames = new Map();
+
+      let session = null;
+      let micMuted = false;
+      let camOff = false;
+      let withVideo = false;
+
+      // ── Routing between views ───────────────────────────────────────────────
+      document.getElementById('chooseHost').addEventListener('click', () => show('host'));
+      document.getElementById('chooseJoin').addEventListener('click', () => show('join'));
+      document.getElementById('hostBack').addEventListener('click', () => show('landing'));
+      document.getElementById('joinBack').addEventListener('click', () => show('landing'));
+
+      // ── Mint a token + start the call ───────────────────────────────────────
+      async function startCall({ channel, name, mode }) {
+        withVideo = mode === 'video';
+        try {
+          const r = await api('/api/v1/dev/agora-token', {
+            method: 'POST',
+            body: { channel, display_name: name, with_video: withVideo },
+          });
+          if (!r.ok || !r.body?.data) {
+            alert(`Token mint failed (${r.status}): ${JSON.stringify(r.body)}`);
+            return;
+          }
+
+          const data = r.body.data;
+          show('call');
+          document.getElementById('roomDisplay').textContent = data.channel;
+          document.getElementById('nameDisplay').textContent = name;
+          document.getElementById('callTypePill').textContent = withVideo ? 'video' : 'audio';
+          document.getElementById('livePill').textContent = 'connecting…';
+          document.getElementById('camBtn').style.display = withVideo ? '' : 'none';
+          console.log({
+            appId: data.app_id,
+            channelName: data.channel,
+            uid: data.uid,
+            token: data.token,
+            withVideo,
+            log,
+          });
+          session = await createCallSession({
+            appId: data.app_id,
+            channelName: data.channel,
+            uid: data.uid,
+            token: data.token,
+            withVideo,
+            log,
+          });
+          document.getElementById('livePill').textContent = 'live';
+
+          // Local tile.
+          const localTile = ensureTile(data.uid, name, true);
+          if (withVideo && session.localVideo) {
+            session.localVideo.play(localTile);
+          }
+
+          session.client.on('user-published', async (user, mediaType) => {
+            try {
+              if (mediaType === 'video') {
+                const tile = ensureTile(user.uid, `uid ${user.uid}`, false);
+                await subscribeRemote(session.client, user, mediaType, tile, log);
+              } else {
+                await subscribeRemote(session.client, user, mediaType, null, log);
+                ensureTile(user.uid, `uid ${user.uid}`, false);
+              }
+            } catch (err) {
+              log.error('subscribe failed', { uid: user.uid, mediaType, err: String(err) });
+            }
+          });
+
+          session.client.on('user-unpublished', (user, mediaType) => {
+            if (mediaType === 'video') {
+              const tile = tiles.get(user.uid);
+              if (tile) {
+                tile.innerHTML = '';
+                addTileLabel(tile, `uid ${user.uid} (video off)`);
+              }
+            }
+          });
+
+          session.client.on('user-left', (user) => {
+            const tile = tiles.get(user.uid);
+            if (tile) {
+              tile.remove();
+              tiles.delete(user.uid);
+            }
+          });
+        } catch (err) {
+          log.error('startCall failed', { err: String(err) });
+          alert(`Could not start call: ${err.message ?? err}`);
+        }
+      }
+
+      function ensureTile(uid, label, isLocal) {
+        if (tiles.has(uid)) return tiles.get(uid);
+        const tile = document.createElement('div');
+        tile.className = 'tile' + (withVideo ? '' : ' audio-only');
+        addTileLabel(tile, isLocal ? `${label} (you)` : label);
+        if (!withVideo) {
+          const audioBadge = document.createElement('div');
+          audioBadge.textContent = '🔊 audio';
+          tile.appendChild(audioBadge);
+        }
+        grid.appendChild(tile);
+        tiles.set(uid, tile);
+        return tile;
+      }
+
+      function addTileLabel(tile, text) {
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = text;
+        tile.appendChild(label);
+      }
+
+      // ── Host form submit ────────────────────────────────────────────────────
+      document.getElementById('hostStart').addEventListener('click', () => {
+        const name = document.getElementById('hostName').value.trim();
+        const mode = document.getElementById('hostMode').value;
+        if (!name) {
+          alert('Name required');
+          return;
+        }
+        // Generate a random readable channel id. Sharable URL fragment too.
+        const channel = `demo_${Math.random().toString(36).slice(2, 10)}`;
+        location.hash = `room=${encodeURIComponent(channel)}`;
+        startCall({ channel, name, mode });
+      });
+
+      // ── Join form submit ────────────────────────────────────────────────────
+      document.getElementById('joinStart').addEventListener('click', () => {
+        const channel = document.getElementById('joinChannel').value.trim();
+        const name = document.getElementById('joinName').value.trim();
+        const mode = document.getElementById('joinMode').value;
+        if (!channel || !name) {
+          alert('Room id and name required');
+          return;
+        }
+        location.hash = `room=${encodeURIComponent(channel)}`;
+        startCall({ channel, name, mode });
+      });
+
+      // ── In-call controls ────────────────────────────────────────────────────
+      document.getElementById('muteBtn').addEventListener('click', async () => {
+        if (!session?.localAudio) return;
+        micMuted = !micMuted;
+        await session.localAudio.setMuted(micMuted);
+        document.getElementById('muteBtn').textContent = micMuted ? 'Unmute mic' : 'Mute mic';
+      });
+
+      document.getElementById('camBtn').addEventListener('click', async () => {
+        if (!session?.localVideo) return;
+        camOff = !camOff;
+        await session.localVideo.setMuted(camOff);
+        document.getElementById('camBtn').textContent = camOff ? 'Camera on' : 'Camera off';
+      });
+
+      document.getElementById('leaveBtn').addEventListener('click', async () => {
+        if (session) {
+          await session.leave();
+          session = null;
+        }
+        tiles.forEach((t) => t.remove());
+        tiles.clear();
+        location.hash = '';
+        show('landing');
+      });
+
+      // ── Bonus: if URL has #room=..., prefill the join form ─────────────────
+      const m = /^#room=(.+)$/.exec(location.hash);
+      if (m) {
+        document.getElementById('joinChannel').value = decodeURIComponent(m[1]);
+        show('join');
+      }
+    </script>
+  </body>
+</html>

@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. Discovery endpoints power the Home screen, the Search & Filter screen, and the Professional Detail screen. All endpoints require a Bearer access token. Read **Common conventions** in `onboarding-apis.md` once.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---
@@ -331,6 +331,8 @@ The window cannot exceed **30 days** — the server returns `422 value_out_of_ra
 | `availability.default_timezone` | `Africa/Lagos` |
 
 These are constants today; will be admin-tunable when the platform config table-backed reader ships. Per-pro overrides are explicitly deferred ("phase 3" per docs/professionals.md §6).
+
+**Pro-declared "do not book" windows.** A slot whose `[start_at, start_at + duration)` (interpreted in the request's `tz`) overlaps any of the pro's saved booking blocks is returned with `available: false` — same field, same shape as a booked-out slot. The pro manages this list via `PUT /me/booking-blocks` (see `profile-apis.md §16`). Empty list = no exclusions.
 
 **Errors**
 | Status | code | When |

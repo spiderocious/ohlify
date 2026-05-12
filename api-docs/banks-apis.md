@@ -2,7 +2,7 @@
 
 > Backend service for ohlify. Banks endpoints drive the bank-picker on the bank-account form and the server-side Paystack name-enquiry. All endpoints require a Bearer access token. Read **Common conventions** in `onboarding-apis.md` once, then jump to the endpoint of interest.
 
-**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8080` (local)
+**Base URL:** `https://api.ohlify.com` (prod) · `http://localhost:8082` (local)
 **Version prefix:** `/api/v1`
 
 ---

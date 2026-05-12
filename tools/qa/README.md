@@ -13,10 +13,39 @@ Helpers used by the [.claude/agents/qa-runner.md](../../.claude/agents/qa-runner
 | [`register-user.mjs`](register-user.mjs) | End-to-end registration. `node tools/qa/register-user.mjs <email> <phone> [pw]` → emits JSON with `{user_id, email, access_token, refresh_token}`. |
 | [`regression-smoke.sh`](regression-smoke.sh) | One happy-path call per endpoint group. `bash tools/qa/regression-smoke.sh [features...]`. Exits non-zero on any failure. |
 | [`sim-search.mjs`](sim-search.mjs) | Boundary search for `nameSimilarityPercent`. Finds inputs that score exactly N-1 / N / N+1 against a target. |
+| [`set-fullname.mjs`](set-fullname.mjs) | Direct UPDATE on `users.full_name` for boundary tests. CLI: `<user_id> "<name>"`. |
+| [`soft-delete-user.mjs`](soft-delete-user.mjs) | Toggle `users.deleted_at` for F-02 sweeps. CLI: `<user_id> delete\|restore`. |
+| [`sign-paystack.mjs`](sign-paystack.mjs) | Compute HMAC-SHA512 signature for a Paystack webhook body using `PAYSTACK_WEBHOOK_SECRET`. CLI: `'<json-body>'` or stdin. Stdout = hex digest. |
+| [`post-webhook.mjs`](post-webhook.mjs) | Build, sign, and POST a synthetic Paystack webhook. CLI: `charge.success\|charge.failed <reference> <amount_kobo> [<fees>] [<data_id>]` or `--raw '<json>'`. |
+| [`reset-payments.mjs`](reset-payments.mjs) | Wipe payments + journals + wallet_entries + system balances for a user, for clean state between funding tests. **Bypasses append-only triggers via `session_replication_role` — dev DB only.** CLI: `<user_id>`. |
+| [`inject-balanced-journal.mjs`](inject-balanced-journal.mjs) | Direct DB-level poster for arbitrary balanced multi-line journals. Relies on the deferred sum-to-zero trigger to catch mistakes. CLI: `'<json-of-{kind,idempotency_key,lines[],...}>'`. |
+| [`inject-call-settlement.mjs`](inject-call-settlement.mjs) | Posts a `call_settlement` journal (`pending_debits_pool -gross, payee +(gross-fee), platform_revenue +fee`) so QA can drive the post-settle clawback refund branch without §8 (calls). CLI: `<payer_user_id> <payee_user_id> <gross_kobo> <fee_kobo> <call_id>`. |
+| [`spin-call.mjs`](spin-call.mjs) | Spin a ready-to-test call end-to-end. Reuses cached caller+callee users (or registers fresh), tops up wallet, books, backdates, waits for `waiting_for_parties`. Emits `{ caller_jwt, callee_jwt, call_id, channel, ... }`. CLI: `ohlify-spin-call [--base URL] [--pretty] [--new-users]`. |
+| [`install-cli.mjs`](install-cli.mjs) | One-time installer. Symlinks `spin-call.mjs` → `~/.local/bin/ohlify-spin-call` (or `--to <dir>`). Run via `pnpm qa:install` once. |
+
+## CLI: `ohlify-spin-call`
+
+The `spin-call.mjs` helper is the fastest way to get a ready-to-test call. After `pnpm qa:install` (one-time) it's available globally:
+
+```bash
+# local dev (default), full JSON output
+ohlify-spin-call
+
+# pretty mode (just the 3 things you usually need)
+ohlify-spin-call --pretty
+
+# point at a different env (uses cached users per-target)
+ohlify-spin-call --base https://api.staging.ohlify.dev --pretty
+
+# force-register fresh users (don't reuse cache)
+ohlify-spin-call --new-users --pretty
+```
+
+User identity is cached in `tools/qa/.spin-call-state.json` (gitignored), keyed by base URL — so two consecutive runs reuse the same caller/callee. Each run also auto-cleans stale bookings between the cached caller+callee so the GiST exclusion has a clear slot.
 
 ## Conventions
 
-- All scripts assume the local stack: `postgresql://feranmi@localhost:5432/ohlify`, `redis://localhost:6379`, server at `http://localhost:8080`.
+- All scripts assume the local stack: `postgresql://feranmi@localhost:5432/ohlify`, `redis://localhost:6379`, server at `http://localhost:8082`.
 - Override via `DATABASE_URL`, `REDIS_URL`, `OHLIFY_BASE_URL` env vars.
 - ESM-only. Each script can be both imported (`import { redis } from './redis.mjs'`) and CLI-invoked.
 - New script? Add it here AND a one-line entry in the table above.
@@ -28,7 +57,7 @@ Helpers used by the [.claude/agents/qa-runner.md](../../.claude/agents/qa-runner
 TOKEN=$(node tools/qa/register-user.mjs qa@test.dev +2348011000999 | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # Hit a protected endpoint
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/me
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8082/api/v1/me
 
 # After register/initiate or sensitive-action/otp, patch OTPs to known value
 node tools/qa/patch-otps.mjs

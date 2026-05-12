@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 
+import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as categoriesService from '@features/categories/categories.service.js';
+import * as bookingBlocksRepo from '@features/profile/booking-blocks.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { getOrCompute } from '@lib/cache/responseCache.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
@@ -23,7 +25,6 @@ import type {
   ProfessionalDetailRow,
   ProfessionalListItem,
   ProfessionalListRow,
-  ReviewView,
 } from './professionals.types.js';
 
 const SHARE_SLUG_SUFFIX_LEN = 6;
@@ -32,7 +33,6 @@ const HOME_CACHE_TTL = 300;
 const LIST_CACHE_TTL = 120;
 const DETAIL_CACHE_TTL = 300;
 const RATES_CACHE_TTL = 300;
-const REVIEWS_CACHE_TTL = 300;
 
 const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -168,40 +168,69 @@ export const rates = async (professionalId: string) => {
 };
 
 // ── GET /professionals/:id/reviews ───────────────────────────────────────────
-
-// Reviews table doesn't ship until §10 (feedback + rating) lands. Return an
-// empty paginated page until then. Endpoint shape is final per spec §7.5.
-export const reviews = async (professionalId: string, _dto: ReviewsQueryDto) => {
+//
+// Delegates to the reviews feature now that §10 (reviews) has shipped. The
+// professional must still be visible (active + KYC-approved) for the page
+// to render — otherwise we'd surface reviews against a delisted pro.
+export const reviews = async (professionalId: string, dto: ReviewsQueryDto) => {
   const visible = await repo.isVisibleProfessional(professionalId);
   if (!visible) {
     return new ServiceError('not_found', MESSAGE_KEYS.PROFESSIONAL_NOT_FOUND, 404);
   }
-  const cacheKey = cacheKeys.reviewsEmpty(professionalId);
-  const page = await getOrCompute(cacheKey, REVIEWS_CACHE_TTL, () =>
-    Promise.resolve({
-      items: [] as ReviewView[],
-      meta: { next_cursor: null, has_more: false },
-    }),
-  );
-  return new ServiceSuccess(page, MESSAGE_KEYS.PROFESSIONAL_REVIEWS_FETCHED);
+  const { reviewsService } = await import('@features/reviews/index.js');
+  return reviewsService.listForProfessional(professionalId, {
+    ...(dto.cursor !== undefined ? { cursor: dto.cursor } : {}),
+    ...(dto.limit !== undefined ? { limit: dto.limit } : {}),
+    ...(dto.rating_min !== undefined ? { rating_min: dto.rating_min } : {}),
+    ...(dto.rating_max !== undefined ? { rating_max: dto.rating_max } : {}),
+  });
 };
 
 // ── GET /professionals/:id/availability ──────────────────────────────────────
 
 const parseDate = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
 
-const buildAvailability = (
+const buildAvailability = async (
+  professionalId: string,
   fromDate: Date,
   toDateExclusive: Date,
   tz: string,
-): AvailabilityResponse => {
+  bookingDurationMinutes: number | undefined,
+): Promise<AvailabilityResponse> => {
   const config = platformConfig.availability();
+
+  // Pull all live (pending/confirmed) bookings on the pro that overlap the
+  // requested window, including bookings that *start* before `fromDate` but
+  // run into it. Widen the lower bound by a safe upper bound on call length
+  // (4h) so we don't miss a booking-in-progress that started just before the
+  // window. Cheaper than reading config and the window query is already
+  // bounded above by the daily-end constraint.
+  const BOOKING_LOOKBACK_MS = 4 * 60 * 60 * 1000;
+  const fromForBookings = new Date(fromDate.getTime() - BOOKING_LOOKBACK_MS);
+  const [bookingsRaw, blockRows] = await Promise.all([
+    bookingsRepo.findBookingsInWindow(professionalId, fromForBookings, toDateExclusive),
+    // Pro-declared do-not-book windows. Slots whose wall-clock range
+    // intersects any block are surfaced as `available: false`.
+    bookingBlocksRepo.listForUser(professionalId),
+  ]);
+  const bookings = bookingsRaw.map((b) => ({
+    start: b.start_at,
+    end: new Date(b.start_at.getTime() + b.duration_minutes * 60_000),
+  }));
+  const blocks = blockRows.map((b) => ({
+    startMinute: b.start_minute,
+    endMinute: b.end_minute,
+  }));
+
   const days = buildSlotGrid({
     fromDate,
     toDateExclusive,
     config,
     tz,
     now: new Date(),
+    bookings,
+    blocks,
+    ...(bookingDurationMinutes !== undefined ? { bookingDurationMinutes } : {}),
   });
   return {
     timezone: tz,
@@ -257,7 +286,13 @@ export const availability = async (professionalId: string, dto: AvailabilityQuer
 
   // No cache: spec marks availability as 🔴 Cold (slot grid changes any moment
   // a booking is created/cancelled).
-  const result = buildAvailability(fromDate, toDateExclusive, tz);
+  const result = await buildAvailability(
+    professionalId,
+    fromDate,
+    toDateExclusive,
+    tz,
+    dto.duration_minutes,
+  );
   return new ServiceSuccess(result, MESSAGE_KEYS.PROFESSIONAL_AVAILABILITY_FETCHED);
 };
 

@@ -382,7 +382,134 @@ Clears the avatar.
 
 ---
 
-## 15. Errors reference
+## 15. `GET /me/booking-blocks`
+
+Returns the caller's recurring "do not book me here" windows. Each block is a `[start_minute, end_minute)` interval expressed as **minute-of-day** (0..1440) in the pro's local timezone (today: platform default `Africa/Lagos`).
+
+The result is the canonical list — sorted by `start_minute` ascending, with overlapping/touching ranges merged. The list is capped at 20 entries.
+
+**Auth:** required (any authenticated user; non-pros get an empty list since they can't be booked).
+
+**Request:** no body, no query params.
+
+**Response — 200:**
+
+```json
+{
+  "data": {
+    "blocks": [
+      { "start_minute": 780,  "end_minute": 840 },
+      { "start_minute": 1020, "end_minute": 1200 }
+    ]
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `blocks[].start_minute` | int | 0..1439, inclusive. Minute-of-day in the pro's local timezone. |
+| `blocks[].end_minute` | int | 1..1440, exclusive. Always greater than `start_minute`. |
+
+---
+
+## 16. `PUT /me/booking-blocks`
+
+Replaces the caller's entire booking-blocks list. PUT (not PATCH) because the body is the full state — atomic save, no per-row CRUD. Empty array clears all blocks.
+
+The server sorts + merges overlapping/adjacent windows server-side, so the response may be slimmer than what was sent. Always render from the response, not the local form state.
+
+**Auth:** required, role must be `professional` (clients get `403 role_mismatch`).
+
+**Request:**
+
+```json
+{
+  "blocks": [
+    { "start_minute": 780,  "end_minute": 840 },
+    { "start_minute": 1020, "end_minute": 1200 }
+  ]
+}
+```
+
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `blocks` | array | yes | 0–20 entries. |
+| `blocks[].start_minute` | int | yes | 0..1439. |
+| `blocks[].end_minute` | int | yes | 1..1440, must be `> start_minute`. |
+
+**Cross-midnight blocks are not supported in v1.** Split into two rows (e.g. `1320–1440` + `0–120` for 22:00–02:00).
+
+**Response — 200:** same shape as `GET /me/booking-blocks` (the merged + sorted authoritative list).
+
+**Errors:**
+
+| Code | When |
+|---|---|
+| `validation_error` (400) | Negative minutes, end ≤ start, or > 20 entries. |
+| `role_mismatch` (403) | Caller is not a professional. |
+| `token_invalid` (401) | User soft-deleted between auth and lookup. |
+
+**Side-effects:** Bookings already created for windows that now overlap a block keep their existing status — blocks only affect *future* slot availability. Future `POST /bookings` attempts targeting a blocked slot are rejected with `409 professional_unavailable` (same code used for double-booking).
+
+---
+
+## 17. `POST /me/device-tokens`
+
+Registers (upserts) a push notification device token for the current user. Drives the "incoming call" + "call is ready" pushes via FCM (Firebase Admin SDK; covers Android + iOS via FCM's APNs gateway).
+
+Same token coming back means we just bump `last_seen_at`. Same token under a different user moves ownership (phone changed hands; account switch on the same device).
+
+**Auth:** required.
+
+**Request:**
+
+```json
+{
+  "token": "fGv4...long-fcm-token...",
+  "platform": "ios",
+  "app_version": "1.4.2"
+}
+```
+
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `token` | string | yes | 8–4096 chars. FCM registration token (Android, iOS via FCM, or Web Push). |
+| `platform` | enum | yes | `ios` \| `android` \| `web`. |
+| `app_version` | string | optional | Up to 40 chars. Used for debugging delivery failures by build. |
+
+**Response — 200:**
+
+```json
+{ "data": { "registered": true } }
+```
+
+---
+
+## 18. `DELETE /me/device-tokens`
+
+Removes a single token for the current user. Call on logout, on FCM token rotation, and whenever the client decides the token is stale.
+
+**Auth:** required.
+
+**Request:**
+
+```json
+{ "token": "fGv4...long-fcm-token..." }
+```
+
+**Response — 200:**
+
+```json
+{ "data": { "deleted": true } }
+```
+
+**Notes:**
+- DELETE without prior POST is a no-op (200, `deleted: true`). Idempotent.
+- Server-side, dead tokens are also pruned automatically when FCM responds with `registration-token-not-registered` during a push fan-out.
+
+---
+
+## 19. Errors reference
 
 All error responses follow the standard envelope:
 ```json

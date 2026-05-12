@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wallet inspector · Ohlify test area</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <nav class="crumbs">
+      <a href="../index.html">test area</a> ·
+      <span>tools</span> ·
+      <span>wallet inspect</span>
+    </nav>
+
+    <h1>Wallet inspector</h1>
+    <p class="tagline">
+      Pull a user's wallet summary + recent journals via the admin read endpoints.
+      Read-only.
+    </p>
+
+    <div class="panel">
+      <div class="row">
+        <input id="userId" type="text" placeholder="u_..." />
+        <button id="loadUser">Load user wallet</button>
+      </div>
+
+      <div style="height: 12px"></div>
+      <div class="row">
+        <button class="ghost" id="loadAccounts">List all accounts</button>
+        <button class="ghost" id="loadRecon">Run reconciliation</button>
+      </div>
+    </div>
+
+    <h3>Response</h3>
+    <pre id="result">(no request yet)</pre>
+
+    <script type="module">
+      import { api, renderResult } from '../shared/api.js';
+
+      document.getElementById('loadUser').addEventListener('click', async () => {
+        const userId = document.getElementById('userId').value.trim();
+        if (!userId) return;
+        const r = await api(`/api/v1/admin/wallets/users/${encodeURIComponent(userId)}`, {
+          admin: true,
+        });
+        renderResult('result', r);
+      });
+
+      document.getElementById('loadAccounts').addEventListener('click', async () => {
+        const r = await api('/api/v1/admin/wallets/accounts', { admin: true });
+        renderResult('result', r);
+      });
+
+      document.getElementById('loadRecon').addEventListener('click', async () => {
+        const r = await api('/api/v1/admin/wallets/reconciliation/run', { admin: true });
+        renderResult('result', r);
+      });
+    </script>
+  </body>
+</html>

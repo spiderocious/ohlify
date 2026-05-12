@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "packages": {
+    "node": "20",
+    "pnpm": "9.15.9"
+  },
+  "steps": {
+    "install": {
+      "commands": [
+        "corepack enable",
+        "pnpm install --frozen-lockfile"
+      ],
+      "caches": [
+        ".pnpm-store"
+      ]
+    },
+    "build": {
+      "inputs": [{ "step": "install" }],
+      "commands": [
+        "pnpm nx build backend"
+      ]
+    }
+  },
+  "deploy": {
+    "inputs": [{ "step": "build" }],
+    "startCommand": "pnpm --filter @ohlify/backend start"
+  }
+}

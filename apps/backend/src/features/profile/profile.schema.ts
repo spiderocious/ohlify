@@ -79,6 +79,50 @@ export const PostAvatarSchema = z
   })
   .strict();
 
+// Booking blocks — recurring time-of-day windows the pro doesn't want
+// to be booked in. Saved as a full-list overwrite (PUT semantics).
+//
+// Minutes are minute-of-day (0..1440) in the pro's local timezone.
+// `end_minute` is exclusive; cross-midnight blocks aren't supported in
+// v1 — split into two rows if needed (e.g. 22:00–24:00 + 00:00–02:00).
+const BookingBlockSchema = z
+  .object({
+    start_minute: z.number().int().min(0).max(1439),
+    end_minute: z.number().int().min(1).max(1440),
+  })
+  .strict()
+  .refine((b) => b.end_minute > b.start_minute, {
+    message: 'end_minute must be greater than start_minute',
+    path: ['end_minute'],
+  });
+
+export const PutBookingBlocksSchema = z
+  .object({
+    blocks: z.array(BookingBlockSchema).max(20),
+  })
+  .strict();
+
+export type PutBookingBlocksDto = z.infer<typeof PutBookingBlocksSchema>;
+
+// Device tokens — push notification targets per device. POST upserts,
+// DELETE removes (on logout / token rotation).
+export const RegisterDeviceTokenSchema = z
+  .object({
+    token: z.string().min(8).max(4096),
+    platform: z.enum(['ios', 'android', 'web']),
+    app_version: z.string().max(40).optional(),
+  })
+  .strict();
+
+export const DeleteDeviceTokenSchema = z
+  .object({
+    token: z.string().min(8).max(4096),
+  })
+  .strict();
+
+export type RegisterDeviceTokenDto = z.infer<typeof RegisterDeviceTokenSchema>;
+export type DeleteDeviceTokenDto = z.infer<typeof DeleteDeviceTokenSchema>;
+
 export type PatchMeDto = z.infer<typeof PatchMeSchema>;
 export type ChangeEmailDto = z.infer<typeof ChangeEmailSchema>;
 export type ChangePhoneDto = z.infer<typeof ChangePhoneSchema>;

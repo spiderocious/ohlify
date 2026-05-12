@@ -1,0 +1,104 @@
+/**
+ * @ohlify/ui base stylesheet.
+ *
+ * Apps import this once at startup. It declares the CSS variables that the
+ * Tailwind preset reads, so swapping a palette later is `:root { --ohl-primary: ... }`
+ * and nothing rebuilds.
+ *
+ * Apps are responsible for loading the MonaSans webfont (e.g. via
+ * `@fontsource-variable/mona-sans/index.css`) before importing this file.
+ */
+
+:root {
+  --ohl-primary: #4a3fe5;
+  --ohl-primary-hover: #3b31d4;
+  --ohl-secondary: #e0defb;
+  --ohl-tertiary: #68707e;
+  --ohl-post: #0d6f82;
+  --ohl-callico: rgb(94 94 94 / 0.18);
+  --ohl-danger: #ff1e21;
+  --ohl-accent: #fbbf24;
+
+  --ohl-background: #ffffff;
+  --ohl-surface: #f9fafb;
+  --ohl-surface-light: #f7f7f7;
+  --ohl-surface-dark: #f7f6ff;
+
+  --ohl-border: #e5e7eb;
+  --ohl-error: #dc2626;
+  --ohl-success: #16a34a;
+  --ohl-warning: #d97706;
+
+  --ohl-text-primary: #111827;
+  --ohl-text-muted: #6b7280;
+  --ohl-text-deep-blue: #0f0872;
+  --ohl-text-silver: #807e7e;
+  --ohl-text-jet: #08082c;
+  --ohl-text-slate: #868c98;
+  --ohl-text-charcoal: #4f555f;
+  --ohl-text-forest: #1f6f15;
+  --ohl-text-navy: #181176;
+  --ohl-text-amber: #dc6803;
+  --ohl-text-disabled: #999d9c;
+  --ohl-text-white: #ffffff;
+  --ohl-text-black: #000000;
+
+  --ohl-toast-success-bg: #3fb12c;
+  --ohl-toast-error-bg: #d80027;
+  --ohl-toast-warning-bg: #92400e;
+  --ohl-toast-info-bg: #1e3a5f;
+  --ohl-toast-success-icon: #4ade80;
+  --ohl-toast-error-icon: #fca5a5;
+  --ohl-toast-warning-icon: #fcd34d;
+  --ohl-toast-info-icon: #93c5fd;
+
+  --ohl-nav-background: #f0eff8;
+  --ohl-nav-icon-inactive: #5c5a8a;
+}
+
+@keyframes ohlFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ohlPopIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ohlSlideDown {
+  from { opacity: 0; transform: translateY(-15%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ohlSlideUp {
+  from { opacity: 0; transform: translateY(15%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ohlSlideUpFull {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Mona Sans Variable',
+    'Mona Sans',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: var(--ohl-text-primary);
+  background: var(--ohl-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
