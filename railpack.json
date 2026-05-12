@@ -31,6 +31,6 @@
   },
   "deploy": {
     "inputs": [{ "step": "build" }],
-    "startCommand": "pnpm --filter @ohlify/backend start"
+    "startCommand": "node apps/backend/dist/server.js"
   }
 }
