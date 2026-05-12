@@ -46,6 +46,16 @@ const EnvSchema = z.object({
   // verification (dev only).
   AGORA_WEBHOOK_SECRET: z.string().optional(),
 
+  // FCM (Firebase Cloud Messaging) for push notifications. Covers Android
+  // + iOS — iOS uses FCM's APNs gateway so we don't need a separate APNs
+  // setup. When unset, the push provider falls back to a no-op + warns
+  // on each fan-out so calls still resolve cleanly without push.
+  //
+  // Set FCM_SERVICE_ACCOUNT_JSON to the base64-encoded service-account
+  // JSON (avoid newline hell in env-var UIs like Railway).
+  FCM_SERVICE_ACCOUNT_JSON_BASE64: z.string().optional(),
+  FCM_PROJECT_ID: z.string().optional(),
+
   // Admin TOTP secret encryption key. 32-byte hex (= 64 hex chars). Generate
   // via `openssl rand -hex 32`. Required for the admin auth slice — secrets
   // are encrypted at rest in admin_users.totp_secret_encrypted.

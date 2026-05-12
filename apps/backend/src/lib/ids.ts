@@ -32,6 +32,7 @@ type Prefix =
   | 'al' // admin audit log
   | 'adm' // admin user
   | 'rep' // user report
+  | 'blk' // booking block (pro do-not-book window)
   | 'faq'; // faq
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;

@@ -6,13 +6,34 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 
 import { ONBOARDING_MESSAGES } from './onboarding.messages.js';
 import * as repo from './onboarding.repo.js';
+import { KNOWN_KYC_ITEM_KEYS } from './onboarding.types.js';
 import type {
   KycItemConfig,
   KycItemKey,
   KycItemSpec,
+  KycResubmission,
   KycSpecResponse,
   KycSubmissionRow,
 } from './onboarding.types.js';
+
+const KNOWN_KEY_SET = new Set<string>(KNOWN_KYC_ITEM_KEYS);
+
+/**
+ * Same defensive read filter the status endpoint uses. Kept local so the
+ * spec module doesn't reach across into onboarding.service for a helper.
+ */
+const sanitizeItemKeys = (raw: string[] | null | undefined): KycItemKey[] => {
+  if (!raw || raw.length === 0) return [];
+  const out: KycItemKey[] = [];
+  const seen = new Set<string>();
+  for (const k of raw) {
+    if (!KNOWN_KEY_SET.has(k)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(k as KycItemKey);
+  }
+  return out;
+};
 
 // ── Per-item value/complete builders ─────────────────────────────────────────
 
@@ -165,6 +186,12 @@ export const getRequiredKycKeysForRole = (role: UserRole): KycItemKey[] => {
 /**
  * Snapshots the full KYC spec for a user — config + per-user values +
  * completeness flags — exactly what the frontend renders the screen from.
+ *
+ * When the user is currently in a `kyc_rejected` state with admin-flagged
+ * items, the response also carries a `resubmission` block telling the
+ * client which items to keep editable. We resolve that here (rather than
+ * making the client fetch /onboarding/status separately) so a single
+ * round-trip drives the screen.
  */
 export const buildKycSpec = async (
   user: UserRow,
@@ -176,6 +203,26 @@ export const buildKycSpec = async (
     .map((i) => buildItemSpec(i, user, agg));
   const requiredItems = built.filter((i) => i.required);
   const completedRequired = requiredItems.filter((i) => i.complete);
+
+  // Resubmission scoping: only relevant when the latest submission is
+  // still in `rejected` (user hasn't resubmitted yet). Once the user has
+  // PATCH'd anything, a new submission row is created with status
+  // `pending_review`, and we drop the scoping — at that point they're
+  // waiting for re-review and the rejected screen takes over the route.
+  let resubmission: KycResubmission | null = null;
+  if (user.kyc_status === 'rejected' && agg.identity?.status === 'rejected') {
+    const itemKeys = sanitizeItemKeys(agg.identity.reject_item_keys);
+    if (itemKeys.length > 0) {
+      resubmission = {
+        submission_id: agg.identity.id,
+        item_keys: itemKeys,
+        acknowledged_keys: sanitizeItemKeys(agg.identity.reject_acknowledged_keys),
+        reason_code: agg.identity.reject_reason_code ?? 'unknown',
+        note: agg.identity.reject_note,
+      };
+    }
+  }
+
   return {
     role: user.role,
     items: built,
@@ -183,6 +230,7 @@ export const buildKycSpec = async (
     total_required: requiredItems.length,
     all_complete:
       requiredItems.length > 0 && completedRequired.length === requiredItems.length,
+    resubmission,
   };
 };
 
@@ -210,4 +258,23 @@ export const findIncompleteKeys = async (user: UserRow): Promise<KycItemKey[]> =
     if (!built.complete) incomplete.push(item.key);
   }
   return incomplete;
+};
+
+/**
+ * Returns the active per-item resubmission set for a user, or null when
+ * none is in effect (status not rejected, no flagged items, or the user
+ * already resubmitted and is awaiting re-review).
+ *
+ * PATCH handlers consult this to enforce that out-of-set keys can't be
+ * silently rewritten. UI tells the same story but we still defend the
+ * server boundary.
+ */
+export const findActiveResubmitSet = async (
+  user: UserRow,
+): Promise<KycItemKey[] | null> => {
+  if (user.kyc_status !== 'rejected') return null;
+  const latest = await repo.findLatestKycSubmission(user.id);
+  if (!latest || latest.status !== 'rejected') return null;
+  const keys = sanitizeItemKeys(latest.reject_item_keys);
+  return keys.length === 0 ? null : keys;
 };

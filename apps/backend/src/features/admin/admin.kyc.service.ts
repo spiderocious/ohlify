@@ -1,3 +1,4 @@
+import { KNOWN_KYC_ITEM_KEYS, type KycItemKey } from '@features/onboarding/onboarding.types.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
@@ -12,6 +13,27 @@ import type {
   AdminRejectKycDto,
 } from './admin.write.schema.js';
 
+const KNOWN_KEY_SET = new Set<string>(KNOWN_KYC_ITEM_KEYS);
+
+/**
+ * Normalize the admin-supplied resubmission set. Drops unknown keys
+ * (admin-web is the source of truth for which keys apply per role, but
+ * we still defend against typos and stale clients), dedupes, and returns
+ * null for empty input so we persist a NULL column rather than '{}'.
+ */
+const normalizeItemKeys = (raw: string[] | undefined): KycItemKey[] | null => {
+  if (raw === undefined || raw.length === 0) return null;
+  const cleaned: KycItemKey[] = [];
+  const seen = new Set<string>();
+  for (const candidate of raw) {
+    if (!KNOWN_KEY_SET.has(candidate)) continue;
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    cleaned.push(candidate as KycItemKey);
+  }
+  return cleaned.length === 0 ? null : cleaned;
+};
+
 const toView = (row: repo.KycSubmissionAdminRow) => ({
   id: row.id,
   user_id: row.user_id,
@@ -24,6 +46,9 @@ const toView = (row: repo.KycSubmissionAdminRow) => ({
   reviewed_at: row.reviewed_at?.toISOString() ?? null,
   reject_reason_code: row.reject_reason_code,
   reject_note: row.reject_note,
+  // Always emit an array (never null) so admin-web can treat it as a set
+  // without nullish dances. Empty array = whole-submission rejection.
+  reject_item_keys: row.reject_item_keys ?? [],
   created_at: row.created_at.toISOString(),
 });
 
@@ -137,7 +162,15 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
         status: ['Submission already rejected'],
       });
     }
-    await repo.setRejected(client, submission.id, reviewedBy, dto.reason_code, dto.note);
+    const itemKeys = normalizeItemKeys(dto.item_keys);
+    await repo.setRejected(
+      client,
+      submission.id,
+      reviewedBy,
+      dto.reason_code,
+      dto.note,
+      itemKeys,
+    );
     await client.query(
       `UPDATE users
          SET kyc_status = 'rejected'::kyc_status,
@@ -156,6 +189,9 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
     // user-facing rejection screen pulls it via GET /onboarding/status,
     // so it's not duplicated into the worker payload where it could leak
     // into a third-party email-provider's dashboard logs).
+    //
+    // Included: `item_keys` so a future template can say "please update
+    // your selfie" instead of generic copy. Empty array = reject-all.
     await insertEvent(client, {
       aggregateType: OutboxAggregateType.USER,
       aggregateId: submission.user_id,
@@ -164,13 +200,19 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
         user_id: submission.user_id,
         submission_id: submission.id,
         reason_code: dto.reason_code,
+        item_keys: itemKeys ?? [],
         reviewed_at: new Date().toISOString(),
         reviewed_by: reviewedBy,
       },
     });
     await client.query('COMMIT');
     logger.info(
-      { submissionId, userId: submission.user_id, reasonCode: dto.reason_code },
+      {
+        submissionId,
+        userId: submission.user_id,
+        reasonCode: dto.reason_code,
+        itemKeyCount: itemKeys?.length ?? 0,
+      },
       'admin rejected KYC',
     );
     const fresh = await repo.findByIdForUpdate(client, submission.id);

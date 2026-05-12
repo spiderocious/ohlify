@@ -26,6 +26,7 @@ export type {
   KycItemKind,
   KycValidationRule,
   KycItemSpec,
+  KycResubmission,
   KycSpecResponse,
   KycBankValue,
   KycIdentityValue,
@@ -38,6 +39,8 @@ export type {
   Bank,
   Rate,
   NotificationPreferences,
+  BookingBlock,
+  BookingBlocksResponse,
 } from './profile/types.js';
 export { useMe } from './hooks/use-me.js';
 export { useCategories } from './hooks/use-categories.js';
@@ -65,6 +68,7 @@ export type {
   CallHistoryPage,
   FeeMode,
   JoinCallResponse,
+  JoinableCall,
 } from './calls/types.js';
 export type {
   WalletBalance,

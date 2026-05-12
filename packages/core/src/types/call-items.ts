@@ -25,6 +25,8 @@ export interface CompletedCallItem {
   amount: string;
   /** File-service key for the avatar. See `Professional.avatarKey`. */
   avatarKey?: string | null;
+  /** Free-form state pill text — "Completed", "Cancelled", "Missed", etc. */
+  stateLabel?: string;
 }
 
 export interface CompletedCallGroup {

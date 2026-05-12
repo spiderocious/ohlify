@@ -198,7 +198,8 @@ export const completeKycInTx = async (
             SET status = 'approved'::kyc_status,
                 reviewed_at = now(),
                 reject_reason_code = NULL,
-                reject_note = NULL
+                reject_note = NULL,
+                reject_acknowledged_keys = NULL
           WHERE id = (
             SELECT id FROM kyc_submissions
              WHERE user_id = $1
@@ -219,7 +220,8 @@ export const completeKycInTx = async (
                 reviewed_by = NULL,
                 reviewed_at = NULL,
                 reject_reason_code = NULL,
-                reject_note = NULL
+                reject_note = NULL,
+                reject_acknowledged_keys = NULL
           WHERE id = (
             SELECT id FROM kyc_submissions
              WHERE user_id = $1
@@ -273,6 +275,40 @@ export const findLatestKycSubmission = async (userId: string): Promise<KycSubmis
     [userId],
   );
   return res.rows[0] ?? null;
+};
+
+/**
+ * Append [keys] to the `reject_acknowledged_keys` array on the latest
+ * REJECTED kyc_submissions row for [userId]. Idempotent: existing keys
+ * stay (we use array_cat + a unique sub-select). Used by PATCH handlers
+ * to mark which flagged items the user has actually re-touched, so
+ * `kyc/complete` can prevent "submit without changing anything."
+ *
+ * No-op when there's no rejected row in flight.
+ */
+export const acknowledgeRejectedKeys = async (
+  userId: string,
+  keys: readonly string[],
+): Promise<void> => {
+  if (keys.length === 0) return;
+  await pool.query(
+    `UPDATE kyc_submissions
+        SET reject_acknowledged_keys = (
+          SELECT ARRAY(
+            SELECT DISTINCT unnest(
+              COALESCE(reject_acknowledged_keys, ARRAY[]::TEXT[]) || $2::TEXT[]
+            )
+          )
+        )
+      WHERE id = (
+        SELECT id FROM kyc_submissions
+         WHERE user_id = $1
+           AND status = 'rejected'
+         ORDER BY created_at DESC
+         LIMIT 1
+      )`,
+    [userId, [...keys]],
+  );
 };
 
 // ── Bank account presence (counts toward pro KYC, does NOT mutate) ────────────

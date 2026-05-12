@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as categoriesService from '@features/categories/categories.service.js';
+import * as bookingBlocksRepo from '@features/profile/booking-blocks.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { getOrCompute } from '@lib/cache/responseCache.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
@@ -206,14 +207,19 @@ const buildAvailability = async (
   // bounded above by the daily-end constraint.
   const BOOKING_LOOKBACK_MS = 4 * 60 * 60 * 1000;
   const fromForBookings = new Date(fromDate.getTime() - BOOKING_LOOKBACK_MS);
-  const bookingsRaw = await bookingsRepo.findBookingsInWindow(
-    professionalId,
-    fromForBookings,
-    toDateExclusive,
-  );
+  const [bookingsRaw, blockRows] = await Promise.all([
+    bookingsRepo.findBookingsInWindow(professionalId, fromForBookings, toDateExclusive),
+    // Pro-declared do-not-book windows. Slots whose wall-clock range
+    // intersects any block are surfaced as `available: false`.
+    bookingBlocksRepo.listForUser(professionalId),
+  ]);
   const bookings = bookingsRaw.map((b) => ({
     start: b.start_at,
     end: new Date(b.start_at.getTime() + b.duration_minutes * 60_000),
+  }));
+  const blocks = blockRows.map((b) => ({
+    startMinute: b.start_minute,
+    endMinute: b.end_minute,
   }));
 
   const days = buildSlotGrid({
@@ -223,6 +229,7 @@ const buildAvailability = async (
     tz,
     now: new Date(),
     bookings,
+    blocks,
     ...(bookingDurationMinutes !== undefined ? { bookingDurationMinutes } : {}),
   });
   return {

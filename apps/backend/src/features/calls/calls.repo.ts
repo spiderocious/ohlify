@@ -123,6 +123,10 @@ interface RawHistoryRow {
   booking_status: BookingStatus;
   caller_user_id: string;
   callee_user_id: string;
+  caller_full_name: string | null;
+  caller_avatar_url: string | null;
+  callee_full_name: string | null;
+  callee_avatar_url: string | null;
   rate_id: string;
   call_type: CallType;
   start_at: Date;
@@ -153,6 +157,10 @@ const HISTORY_SELECT = `
   b.status                 AS booking_status,
   b.caller_user_id         AS caller_user_id,
   b.callee_user_id         AS callee_user_id,
+  ur.full_name             AS caller_full_name,
+  ur.avatar_url            AS caller_avatar_url,
+  ue.full_name             AS callee_full_name,
+  ue.avatar_url            AS callee_avatar_url,
   b.rate_id                AS rate_id,
   b.call_type              AS call_type,
   b.start_at               AS start_at,
@@ -164,6 +172,17 @@ const HISTORY_SELECT = `
   b.cancelled_at           AS cancelled_at,
   b.cancelled_by_user_id   AS cancelled_by_user_id,
   b.created_at             AS booking_created_at
+`;
+
+// Both joins are LEFT JOINs so a soft-deleted user (deleted_at IS NOT NULL)
+// still surfaces the call row — name/avatar simply come back NULL and the
+// client falls back to a placeholder. Aliases: ur = "user-as-caller", ue =
+// "user-as-callee".
+const HISTORY_FROM = `
+  FROM calls c
+  JOIN bookings b ON b.id = c.booking_id
+  LEFT JOIN users ur ON ur.id = b.caller_user_id
+  LEFT JOIN users ue ON ue.id = b.callee_user_id
 `;
 
 const toHistoryRow = (r: RawHistoryRow): CallHistoryRow => ({
@@ -183,6 +202,10 @@ const toHistoryRow = (r: RawHistoryRow): CallHistoryRow => ({
   booking_status: r.booking_status,
   caller_user_id: r.caller_user_id,
   callee_user_id: r.callee_user_id,
+  caller_full_name: r.caller_full_name,
+  caller_avatar_url: r.caller_avatar_url,
+  callee_full_name: r.callee_full_name,
+  callee_avatar_url: r.callee_avatar_url,
   rate_id: r.rate_id,
   call_type: r.call_type,
   start_at: r.start_at,
@@ -233,8 +256,7 @@ export const listHistoryForUser = async (input: ListHistoryInput): Promise<CallH
 
   const res = await pool.query<RawHistoryRow>(
     `SELECT ${HISTORY_SELECT}
-       FROM calls c
-       JOIN bookings b ON b.id = c.booking_id
+     ${HISTORY_FROM}
       WHERE ${filters.join(' AND ')}
       ORDER BY b.start_at DESC, b.id DESC
       LIMIT $${params.length}`,
@@ -246,8 +268,7 @@ export const listHistoryForUser = async (input: ListHistoryInput): Promise<CallH
 export const findHistoryByCallId = async (callId: string): Promise<CallHistoryRow | null> => {
   const res = await pool.query<RawHistoryRow>(
     `SELECT ${HISTORY_SELECT}
-       FROM calls c
-       JOIN bookings b ON b.id = c.booking_id
+     ${HISTORY_FROM}
       WHERE c.id = $1
       LIMIT 1`,
     [callId],
@@ -393,6 +414,49 @@ export const findStuckInProgressCalls = async (
       LIMIT $2
       FOR UPDATE OF c SKIP LOCKED`,
     [staleAfterSeconds, limit],
+  );
+  return res.rows;
+};
+
+export interface JoinableCallRow extends CallRow {
+  caller_user_id: string;
+  callee_user_id: string;
+  start_at: Date;
+  duration_minutes: number;
+  peer_full_name: string | null;
+  peer_avatar_url: string | null;
+}
+
+/**
+ * Calls the user can join right now (`waiting_for_parties` or
+ * `in_progress`). Joined with `users` to bring in the OTHER party's
+ * display name + avatar so the client can render an incoming-call card
+ * without a second round-trip.
+ */
+export const listJoinableForUser = async (userId: string): Promise<JoinableCallRow[]> => {
+  const res = await pool.query<JoinableCallRow>(
+    `SELECT c.*,
+            b.caller_user_id,
+            b.callee_user_id,
+            b.start_at,
+            b.duration_minutes,
+            CASE
+              WHEN b.caller_user_id = $1 THEN ue.full_name
+              ELSE ur.full_name
+            END AS peer_full_name,
+            CASE
+              WHEN b.caller_user_id = $1 THEN ue.avatar_url
+              ELSE ur.avatar_url
+            END AS peer_avatar_url
+       FROM calls c
+       JOIN bookings b ON b.id = c.booking_id
+       LEFT JOIN users ur ON ur.id = b.caller_user_id
+       LEFT JOIN users ue ON ue.id = b.callee_user_id
+      WHERE (b.caller_user_id = $1 OR b.callee_user_id = $1)
+        AND c.status IN ('waiting_for_parties','in_progress')
+      ORDER BY b.start_at ASC
+      LIMIT 20`,
+    [userId],
   );
   return res.rows;
 };

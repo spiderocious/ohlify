@@ -36,6 +36,7 @@ export const ROUTES = route('', {
     PERSONAL_INFO: route('personal-info'),
     RATES: route('rates'),
     BANK_ACCOUNT: route('bank-account'),
+    BOOKING_BLOCKS: route('booking-blocks'),
     CHANGE_PASSWORD: route('change-password'),
     NOTIFICATIONS: route('notifications'),
     HELP_DESK: route('help-desk'),

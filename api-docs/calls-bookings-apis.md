@@ -157,6 +157,80 @@ Returns the (possibly updated) call view.
 Re-issues a fresh Agora token without changing call state. Mobile calls this
 ~5 min before the existing token's `expires_at`.
 
+### `POST /api/v1/calls/:id/decline`
+
+Callee-only. Within `bookings.polite_decline_window_seconds` (default 60s) of the booking's `start_at`, the callee may tap Decline:
+
+- **Inside the window:** caller gets a full refund, the pro is NOT struck. Call transitions straight to `no_show_callee`.
+- **Outside the window:** same money outcome (full refund) PLUS the pro gets a `no_show` strike — equivalent to ignoring the call.
+
+The result distinction lives in the `call_events` audit log (`payload.reason` is `polite_decline` or `no_show_grace`). Public response is identical.
+
+**Auth:** required; must be the booking's callee. Non-callees and unknown call ids get `404 call_not_found` (the 403 is hidden behind 404 so a hostile caller can't probe for call ids).
+
+**Request:** empty body.
+
+**Errors:**
+
+| Status | code | When |
+|---|---|---|
+| 404 | `call_not_found` | Unknown id, or caller is not this call's callee. |
+| 409 | `call_not_joinable` | Call isn't in `scheduled` or `waiting_for_parties`. |
+
+**Response — 200:** the (terminal) call view.
+
+### `GET /api/v1/calls/joinable`
+
+Returns the calls the current user can join right now — status `waiting_for_parties` or `in_progress`. Drives the customer-web sticky banner (polled every 15s) and used by mobile cold-start to recover a missed FCM push.
+
+**Auth:** required. **Response — 200:**
+
+```json
+{
+  "data": [
+    {
+      "call_id": "c_01H...",
+      "booking_id": "bk_01H...",
+      "status": "waiting_for_parties",
+      "agora_channel_name": "call_c_01H...",
+      "start_at": "2026-05-11T14:00:00.000Z",
+      "duration_minutes": 30,
+      "is_caller": true,
+      "peer_user_id": "u_01H...",
+      "peer_full_name": "Adedeji Bamidele",
+      "peer_avatar_url": "8204e793-….jpg"
+    }
+  ]
+}
+```
+
+Empty array when there's nothing joinable. Max 20 entries (sorted by `start_at` ascending).
+
+## Push notifications
+
+When `FCM_SERVICE_ACCOUNT_JSON_BASE64` + `FCM_PROJECT_ID` are configured, the outbox worker dispatches `push.call_joinable` events to every registered device for the target user. Payload sent to the device:
+
+```json
+{
+  "notification": { "title": "Your call is ready", "body": "Adedeji is waiting in the room." },
+  "data": {
+    "type": "call.joinable",
+    "call_id": "c_01H...",
+    "peer_user_id": "u_01H...",
+    "peer_full_name": "Adedeji Bamidele",
+    "peer_avatar_url": "8204e793-….jpg",
+    "kind": "audio",
+    "polite_decline_until": "2026-05-11T14:01:00.000Z"
+  }
+}
+```
+
+Fan-out happens at two points:
+1. When `bookings.service.createBooking` confirms a booking (advance notice).
+2. When `call-starter` worker flips the call to `waiting_for_parties` (= now joinable).
+
+When push isn't configured (the env vars are unset), the system still works — clients fall back to polling `/calls/joinable`.
+
 ## Strikes (professional-facing)
 
 ### `GET /api/v1/me/strikes`

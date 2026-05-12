@@ -59,6 +59,8 @@ export const ERROR_CODES = {
   ROLE_MISMATCH: 'role_mismatch',
   KYC_INCOMPLETE: 'kyc_incomplete',
   IDENTITY_REQUIRED_FIRST: 'identity_required_first',
+  ITEM_NOT_IN_RESUBMIT_SET: 'item_not_in_resubmit_set',
+  RESUBMIT_UNCHANGED: 'resubmit_unchanged',
   STRIKE_REASON_ROLE_MISMATCH: 'strike_reason_role_mismatch',
   USER_NOT_FOUND: 'user_not_found',
   // Profile

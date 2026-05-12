@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { AppButton, AppText } from '@ohlify/ui';
@@ -9,12 +10,14 @@ import { FilePreview } from '../../../shared/parts/file-preview.js';
 import { InfoCard } from '../../../shared/parts/info-card.js';
 import { PageHeader } from '../../../shared/parts/page-header.js';
 import { UserLink } from '../../../shared/parts/user-link.js';
-import { promptForReason, toastError, toastSuccess, confirm } from '../../../shared/lib/confirm.js';
+import { toastError, toastSuccess, confirm } from '../../../shared/lib/confirm.js';
 import { formatDateTime } from '../../../shared/format/datetime.js';
 import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
 import { ADMIN_ROUTES } from '../../../shared/routes/admin-routes.js';
 import { KycStatusPill } from '../../users/parts/user-status-pill.js';
-import { useApproveKyc, useRejectKyc } from '../api/use-kyc.js';
+import { useApproveKyc, useRejectKyc, type RejectKycPayload } from '../api/use-kyc.js';
+
+import { RejectKycDrawer } from './parts/reject-kyc-drawer.js';
 
 export function KycDetailScreen() {
   const { id = '' } = useParams<{ id: string }>();
@@ -28,6 +31,7 @@ export function KycDetailScreen() {
 
   const approve = useApproveKyc(id);
   const reject = useRejectKyc(id);
+  const [rejectOpen, setRejectOpen] = useState(false);
 
   const onApprove = async () => {
     if (
@@ -46,22 +50,20 @@ export function KycDetailScreen() {
     );
   };
 
-  const onReject = async () => {
-    const note = await promptForReason({
-      title: 'Reject KYC',
-      message: 'The user will see this reason. Be specific.',
-    });
-    if (!note) return;
-    reject.mutate(
-      { reason_code: 'other', note },
-      {
-        onSuccess: () => {
-          toastSuccess('KYC rejected');
-          navigate(ADMIN_ROUTES.KYC.absPath);
-        },
-        onError: (err) => toastError(err),
+  const onRejectSubmit = (payload: RejectKycPayload) => {
+    reject.mutate(payload, {
+      onSuccess: () => {
+        const partial = (payload.item_keys?.length ?? 0) > 0;
+        toastSuccess(
+          partial
+            ? `KYC rejected — user must resubmit ${payload.item_keys!.length} item(s)`
+            : 'KYC rejected',
+        );
+        setRejectOpen(false);
+        navigate(ADMIN_ROUTES.KYC.absPath);
       },
-    );
+      onError: (err) => toastError(err),
+    });
   };
 
   if (!submission) {
@@ -96,7 +98,12 @@ export function KycDetailScreen() {
         subtitle={`Submitted ${formatDateTime(submission.created_at)}`}
         actions={
           <>
-            <AppButton label="Reject" variant="outline" height={36} onPressed={onReject} />
+            <AppButton
+              label="Reject"
+              variant="outline"
+              height={36}
+              onPressed={() => setRejectOpen(true)}
+            />
             <AppButton label="Approve" variant="solid" height={36} onPressed={onApprove} />
           </>
         }
@@ -154,12 +161,37 @@ export function KycDetailScreen() {
             </DetailRow>
             <DetailRow label="Reviewed at">{formatDateTime(submission.reviewed_at)}</DetailRow>
             <DetailRow label="Reject reason">{submission.reject_reason_code ?? '—'}</DetailRow>
+            <DetailRow label="Items to resubmit">
+              {submission.reject_item_keys.length > 0 ? (
+                <span className="flex flex-wrap gap-1">
+                  {submission.reject_item_keys.map((k) => (
+                    <span
+                      key={k}
+                      className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                    >
+                      {k}
+                    </span>
+                  ))}
+                </span>
+              ) : submission.status === 'rejected' ? (
+                <span className="text-text-muted">All items (full resubmit)</span>
+              ) : (
+                '—'
+              )}
+            </DetailRow>
             <DetailRow label="Reject note">
               <span className="whitespace-pre-wrap">{submission.reject_note ?? '—'}</span>
             </DetailRow>
           </InfoCard>
         </div>
       </div>
+
+      <RejectKycDrawer
+        open={rejectOpen}
+        onClose={() => setRejectOpen(false)}
+        isSubmitting={reject.isPending}
+        onSubmit={onRejectSubmit}
+      />
     </>
   );
 }

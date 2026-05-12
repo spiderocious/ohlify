@@ -88,6 +88,7 @@ export function ProfileScreen() {
             onPersonalInfo={() => navigate(ROUTES.PROFILE.PERSONAL_INFO.absPath)}
             onRates={() => navigate(ROUTES.PROFILE.RATES.absPath)}
             onBankAccount={() => navigate(ROUTES.PROFILE.BANK_ACCOUNT.absPath)}
+            onBookingBlocks={() => navigate(ROUTES.PROFILE.BOOKING_BLOCKS.absPath)}
             onChangePassword={() => navigate(ROUTES.PROFILE.CHANGE_PASSWORD.absPath)}
             onNotifications={() => navigate(ROUTES.PROFILE.NOTIFICATIONS.absPath)}
             onHelpDesk={() => navigate(ROUTES.PROFILE.HELP_DESK.absPath)}

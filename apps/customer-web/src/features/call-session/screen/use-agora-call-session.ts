@@ -175,8 +175,54 @@ export function useAgoraCallSession({
       if (!cancelled) dispatch({ type: 'end' });
     });
 
+    // Reactive token renewal — Agora fires this ~30s before expiry.
+    // The 60s proactive timer (scheduleRenewal) is the primary path; this
+    // is the safety net for clock skew or expiry shifts after a renewal.
+    client.on('token-privilege-will-expire', async () => {
+      if (!onRenewToken) return;
+      try {
+        const newToken = await onRenewToken();
+        await client.renewToken(newToken);
+      } catch {
+        // Non-fatal — the proactive timer or a hard expire will trip
+        // and the user can rejoin. Logging happens elsewhere.
+      }
+    });
+
     const start = async () => {
       try {
+        // Pre-flight mic permission so we fail with a clean error
+        // BEFORE joining the channel (otherwise the user sees a
+        // half-joined call where audio just doesn't work).
+        // navigator.permissions.query is best-effort — older browsers
+        // (notably Safari < 16) throw; treat that as "proceed and let
+        // the SDK prompt".
+        try {
+          const perms = navigator.permissions;
+          if (perms) {
+            // The PermissionName type doesn't include 'microphone' in
+            // every TS lib version, but it's widely supported. Cast
+            // narrowly to avoid lib drift.
+            const result = await perms.query({
+              name: 'microphone' as PermissionName,
+            });
+            if (result.state === 'denied') {
+              throw new Error(
+                'Microphone access is blocked. Enable it in your browser settings and reload.',
+              );
+            }
+          }
+        } catch (permErr) {
+          // If the error came from our denied throw above, surface it.
+          if (
+            permErr instanceof Error &&
+            permErr.message.startsWith('Microphone access is blocked')
+          ) {
+            throw permErr;
+          }
+          // Otherwise (unsupported API), fall through — SDK will prompt.
+        }
+
         await client.join(
           joinData.agora_app_id,
           joinData.agora_channel_name,

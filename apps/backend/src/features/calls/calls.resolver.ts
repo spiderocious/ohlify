@@ -132,7 +132,14 @@ export const computeSettlement = (
 
 // ── Resolution: post journals + flip statuses + emit events ─────────────────
 
-export type ResolveReason = 'both_left' | 'no_show_grace' | 'stuck_call';
+export type ResolveReason =
+  | 'both_left'
+  | 'no_show_grace'
+  | 'stuck_call'
+  // Callee tapped Decline within the 60-second polite window. Settles
+  // like a no-show (caller gets a full refund) but the pro is NOT
+  // struck — they declined within the policy grace period.
+  | 'polite_decline';
 
 const decideNoShowStatus = (callerJoined: boolean, calleeJoined: boolean): CallStatus => {
   if (!callerJoined && !calleeJoined) return CallStatus.NO_SHOW_BOTH;
@@ -166,6 +173,12 @@ export const determineTerminalStatus = (call: CallRow, reason: ResolveReason): C
   if (reason === 'both_left') {
     return decideBothLeftStatus(call.caller_left_at, call.callee_left_at);
   }
+  if (reason === 'polite_decline') {
+    // Callee explicitly declined — same money outcome as a no-show, the
+    // pro just isn't struck for it. The status is fixed regardless of
+    // current join state (caller may or may not have already joined).
+    return CallStatus.NO_SHOW_CALLEE;
+  }
   return decideStuckCallStatus(call.caller_left_at, call.callee_left_at);
 };
 
@@ -181,6 +194,9 @@ const decideTerminalStatus = (call: CallRow, reason: ResolveReason): CallStatus 
   if (reason === 'no_show_grace' && call.caller_joined_at && call.callee_joined_at) {
     return determineTerminalStatus(call, 'both_left');
   }
+  // Polite decline: a callee who already joined and is now declining
+  // is a weird edge case (they could just hang up). Treat it as a
+  // standard no-show-callee — caller refund, no strike.
   return determineTerminalStatus(call, reason);
 };
 
@@ -247,7 +263,11 @@ const issueStrikeForResolution = async (
   call: CallRow,
   booking: BookingRow,
   status: CallStatus,
+  reason: ResolveReason,
 ): Promise<void> => {
+  // Polite decline within the 60s window — caller gets a refund, pro
+  // keeps a clean record. No strike on any party.
+  if (reason === 'polite_decline') return;
   // Pro-side strikes
   if (status === CallStatus.NO_SHOW_CALLEE) {
     await maybeIssueStrike(runner, {
@@ -354,7 +374,7 @@ export const resolveCall = async (
     },
   });
 
-  await issueStrikeForResolution(runner, call, booking, status);
+  await issueStrikeForResolution(runner, call, booking, status, reason);
 
   // Outbox: settled / no_show / completed.
   const eventType =

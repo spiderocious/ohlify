@@ -10,10 +10,13 @@ import {
   ChangeEmailSchema,
   ChangePhoneSchema,
   DeleteAccountSchema,
+  DeleteDeviceTokenSchema,
   NotificationPreferencesPatchSchema,
   PatchMeSchema,
   PostAvatarSchema,
   PutBankAccountSchema,
+  PutBookingBlocksSchema,
+  RegisterDeviceTokenSchema,
   VerifyOtpOnlySchema,
 } from './profile.schema.js';
 
@@ -54,6 +57,27 @@ export const register = (app: Express): void => {
   // Avatar (file_key from uploads microservice)
   meRouter.post('/avatar', validate(PostAvatarSchema), controller.setAvatar);
   meRouter.delete('/avatar', controller.removeAvatar);
+
+  // Booking blocks (pro-only — service enforces role)
+  meRouter.get('/booking-blocks', controller.getBookingBlocks);
+  meRouter.put(
+    '/booking-blocks',
+    validate(PutBookingBlocksSchema),
+    controller.putBookingBlocks,
+  );
+
+  // Device tokens — push notification targets. Re-POST is idempotent;
+  // DELETE removes a single token (used on logout).
+  meRouter.post(
+    '/device-tokens',
+    validate(RegisterDeviceTokenSchema),
+    controller.registerDeviceToken,
+  );
+  meRouter.delete(
+    '/device-tokens',
+    validate(DeleteDeviceTokenSchema),
+    controller.deleteDeviceToken,
+  );
 
   app.use('/api/v1/me', meRouter);
 };

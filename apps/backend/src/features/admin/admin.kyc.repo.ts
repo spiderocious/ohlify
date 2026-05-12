@@ -14,6 +14,8 @@ export interface KycSubmissionAdminRow {
   reviewed_at: Date | null;
   reject_reason_code: string | null;
   reject_note: string | null;
+  /** Per-item resubmission set; null/empty = whole-submission rejection. */
+  reject_item_keys: string[] | null;
   created_at: Date;
 }
 
@@ -42,7 +44,7 @@ export const list = async (q: ListKycQuery): Promise<KycSubmissionAdminRow[]> =>
   const res = await pool.query<KycSubmissionAdminRow>(
     `SELECT id, user_id, identity_type, identity_number, document_upload_id, selfie_upload_key,
             status::text AS status, reviewed_by, reviewed_at,
-            reject_reason_code, reject_note, created_at
+            reject_reason_code, reject_note, reject_item_keys, created_at
        FROM kyc_submissions
        ${where}
        ORDER BY created_at DESC, id DESC
@@ -59,7 +61,7 @@ export const findByIdForUpdate = async (
   const res = await client.query<KycSubmissionAdminRow>(
     `SELECT id, user_id, identity_type, identity_number, document_upload_id, selfie_upload_key,
             status::text AS status, reviewed_by, reviewed_at,
-            reject_reason_code, reject_note, created_at
+            reject_reason_code, reject_note, reject_item_keys, created_at
        FROM kyc_submissions
        WHERE id = $1
        FOR UPDATE`,
@@ -79,7 +81,9 @@ export const setApproved = async (
            reviewed_by = $2,
            reviewed_at = now(),
            reject_reason_code = NULL,
-           reject_note = NULL
+           reject_note = NULL,
+           reject_item_keys = NULL,
+           reject_acknowledged_keys = NULL
        WHERE id = $1`,
     [submissionId, reviewedBy],
   );
@@ -91,6 +95,12 @@ export const setRejected = async (
   reviewedBy: string | null,
   reasonCode: string,
   note: string | null,
+  /**
+   * Optional per-item resubmission set. NULL or empty = whole-submission
+   * rejection (legacy). The service is responsible for deduping + clamping
+   * to known KycItemKey values before passing here.
+   */
+  itemKeys: string[] | null,
 ): Promise<void> => {
   await client.query(
     `UPDATE kyc_submissions
@@ -98,8 +108,10 @@ export const setRejected = async (
            reviewed_by = $2,
            reviewed_at = now(),
            reject_reason_code = $3,
-           reject_note = $4
+           reject_note = $4,
+           reject_item_keys = $5,
+           reject_acknowledged_keys = NULL
        WHERE id = $1`,
-    [submissionId, reviewedBy, reasonCode, note],
+    [submissionId, reviewedBy, reasonCode, note, itemKeys],
   );
 };

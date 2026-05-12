@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
 
 import * as authRepo from '@features/auth/auth.repo.js';
+import * as deviceTokensRepo from '@features/profile/device-tokens.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
 import { notificationService } from '@lib/notifications/notification.service.js';
 import { OutboxEventType } from '@lib/outbox/events.js';
+import { getPushProvider, type PushNotification } from '@lib/push/index.js';
 
 // Polls the outbox table and "publishes" events. In Slice A there are no real
 // consumers — the worker simply marks rows published and logs them. Slice B
@@ -112,8 +114,69 @@ const dispatchToEmail = async (row: OutboxRow): Promise<void> => {
   }
 };
 
+/**
+ * Maps an outbox event to a push notification fan-out. Only fires for
+ * `push.*` events today — email goes through `dispatchToEmail`. The
+ * provider falls back to a no-op when FCM creds aren't set, so this is
+ * safe to call regardless.
+ */
+const dispatchToPush = async (row: OutboxRow): Promise<void> => {
+  if (row.event_type !== OutboxEventType.PUSH_CALL_JOINABLE) return;
+  const payload = row.payload;
+  const targetUserId = asString(payload['target_user_id']);
+  if (targetUserId === null) {
+    logger.warn(
+      { outboxId: row.id },
+      'push.call_joinable missing target_user_id — skipping',
+    );
+    return;
+  }
+  const tokens = await deviceTokensRepo.findActiveTokensForUser(targetUserId);
+  if (tokens.length === 0) return;
+
+  const peerName = asString(payload['peer_full_name']) ?? 'A caller';
+  const callId = asString(payload['call_id']) ?? '';
+  const notification: PushNotification = {
+    title: 'Your call is ready',
+    body: `${peerName} is waiting in the room.`,
+    category: 'call.joinable',
+    data: {
+      type: 'call.joinable',
+      call_id: callId,
+      peer_user_id: asString(payload['peer_user_id']) ?? '',
+      peer_full_name: peerName,
+      peer_avatar_url: asString(payload['peer_avatar_url']) ?? '',
+      kind: asString(payload['kind']) ?? 'audio',
+      // Polite-decline window opens at the booking's start_at — clients
+      // use this to grey-out / hide the decline button after expiry.
+      polite_decline_until: asString(payload['polite_decline_until']) ?? '',
+    },
+  };
+
+  const provider = await getPushProvider();
+  if (!provider.isEnabled()) return;
+  const result = await provider.sendToTokens(
+    tokens.map((t) => t.token),
+    notification,
+  );
+  // Prune dead tokens so the next event doesn't re-attempt them.
+  await Promise.all(
+    result.invalidTokens.map((t) => deviceTokensRepo.deleteByToken(t)),
+  );
+  logger.info(
+    {
+      outboxId: row.id,
+      callId,
+      delivered: result.delivered,
+      pruned: result.invalidTokens.length,
+    },
+    'push.call_joinable dispatched',
+  );
+};
+
 const publishOne = async (row: OutboxRow): Promise<void> => {
   await dispatchToEmail(row);
+  await dispatchToPush(row);
   logger.info(
     {
       outboxId: row.id,

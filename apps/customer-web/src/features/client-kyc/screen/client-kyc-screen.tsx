@@ -13,6 +13,7 @@ import type { ApiError } from '@ohlify/api';
 import { CLIENT_KYC_ITEMS, ClientKycProvider, useClientKyc } from '../providers/client-kyc-provider.js';
 import { ClientKycItemsList } from './parts/client-kyc-items-list.js';
 import { useCompleteKyc } from '../../professional-kyc/api/use-complete-kyc.js';
+import { useKycSpec } from '../../professional-kyc/api/use-kyc-spec.js';
 
 export function ClientKycScreen() {
   return (
@@ -26,7 +27,21 @@ function ClientKycScreenContent() {
   const navigate = useNavigate();
   const ctx = useClientKyc();
   const completeKyc = useCompleteKyc();
-  const allDone = ctx.completedCount === CLIENT_KYC_ITEMS.length;
+  // Hit the spec endpoint just for the `resubmission` block. Client-KYC
+  // values are local state in the provider; we don't need the spec items
+  // themselves, only the partial-rejection scope.
+  const { data: spec } = useKycSpec();
+  const resubmitKeys = spec?.resubmission?.item_keys ?? null;
+  const acknowledgedKeys = spec?.resubmission?.acknowledged_keys ?? null;
+  const isPartial = resubmitKeys !== null && resubmitKeys.length > 0;
+  // Same dirty-resubmit gate as the pro screen — every flagged key must
+  // be acknowledged on the server before we let the user submit.
+  const dirtyResubmitOk =
+    !isPartial
+      ? true
+      : (resubmitKeys ?? []).every((k) => acknowledgedKeys?.includes(k) ?? false);
+  const allDone =
+    ctx.completedCount === CLIENT_KYC_ITEMS.length && dirtyResubmitOk;
 
   const handleProceed = () => {
     completeKyc.mutate(undefined, {
@@ -65,18 +80,18 @@ function ClientKycScreenContent() {
           />
           <div className="mt-5">
             <AppText variant="body" align="start" color="var(--ohl-text-muted)">
-              Setup steps
+              {isPartial ? 'Items to update' : 'Setup steps'}
             </AppText>
           </div>
           <div className="mt-2.5">
-            <ClientKycItemsList />
+            <ClientKycItemsList resubmitKeys={resubmitKeys} />
           </div>
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-xl px-4 pb-4 pt-2 lg:max-w-2xl">
         <AppButton
-          label="Proceed"
+          label={isPartial ? 'Resubmit for review' : 'Proceed'}
           expanded
           radius={100}
           isDisabled={!allDone || completeKyc.isPending}

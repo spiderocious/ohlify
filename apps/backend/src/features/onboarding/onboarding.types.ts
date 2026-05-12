@@ -39,11 +39,26 @@ export interface KycRejection {
   reviewed_at: string | null;
   submission_id: string;
   latest_submission_status: KycStatus;
+  /**
+   * Per-item resubmission set. Empty array = whole-submission rejection
+   * (user must redo every item — current behavior). Non-empty = partial
+   * rejection; the user-facing KYC screen locks every other item.
+   *
+   * Always an array (never null) so clients can branch on `.length`.
+   */
+  item_keys: KycItemKey[];
 }
 
 export interface OnboardingStatus {
   step: OnboardingStep;
   role: UserRole | null;
+  /**
+   * Mirrors `users.kyc_status` so clients can render UI that depends on
+   * the raw status without a second request. Notably the sticky "KYC
+   * under review" banner that persists across the tabbed shell while
+   * the admin queue catches up.
+   */
+  kyc_status: KycStatus;
   kyc_progress: KycProgress;
   kyc_rejection: KycRejection | null;
 }
@@ -66,6 +81,14 @@ export interface KycSubmissionRow {
   reviewed_at: Date | null;
   reject_reason_code: string | null;
   reject_note: string | null;
+  /** Per-item resubmission set; null/empty = whole-submission rejection. */
+  reject_item_keys: string[] | null;
+  /**
+   * Subset of `reject_item_keys` the user has actually patched since
+   * the rejection. `kyc/complete` requires this to cover the full set
+   * before letting the resubmit through.
+   */
+  reject_acknowledged_keys: string[] | null;
   created_at: Date;
 }
 
@@ -159,12 +182,39 @@ export interface KycItemSpec extends KycItemConfig {
   complete: boolean;
 }
 
+/**
+ * Set when the latest submission was rejected and admin scoped the
+ * rejection to specific items. The frontend uses this to lock every item
+ * NOT in `item_keys` so the user only re-uploads what was flagged.
+ *
+ * `null` here means "no active rejection in progress" — render the spec
+ * normally. Empty `item_keys` (admin rejected the whole submission, or
+ * the user is currently in `pending_review` after resubmitting) is
+ * surfaced as `null` too: there's nothing to scope writes to in that
+ * case, so all items remain editable.
+ */
+export interface KycResubmission {
+  submission_id: string;
+  item_keys: KycItemKey[];
+  /**
+   * Subset of `item_keys` the user has already touched since the
+   * rejection. Drives client-side gating: Proceed is disabled until
+   * every flagged key (or its passive counterpart — `bank_account`,
+   * `rates`) is in this set.
+   */
+  acknowledged_keys: KycItemKey[];
+  reason_code: string;
+  note: string | null;
+}
+
 export interface KycSpecResponse {
   role: UserRole;
   items: KycItemSpec[];
   completed_count: number;
   total_required: number;
   all_complete: boolean;
+  /** See `KycResubmission`. `null` when there's no rejection to scope. */
+  resubmission: KycResubmission | null;
 }
 
 // Legacy: kept temporarily so call sites that still reference the hardcoded

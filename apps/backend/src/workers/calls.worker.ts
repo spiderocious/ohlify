@@ -1,5 +1,7 @@
 import type { PoolClient } from 'pg';
 
+import * as authRepo from '@features/auth/auth.repo.js';
+import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
 import { resolveCall } from '@features/calls/calls.resolver.js';
 import { CallStatus } from '@features/calls/calls.types.js';
@@ -81,6 +83,53 @@ const tickStarter = async (): Promise<void> => {
             start_at: row.start_at.toISOString(),
           },
         });
+
+        // Push fan-out: notify both parties the call is joinable. Same
+        // tx so the push events only commit if the status flip does —
+        // a rollback won't leave spurious "your call is ready" pushes.
+        const booking = await bookingsRepo.findByIdForUpdate(client, row.booking_id);
+        if (booking) {
+          const [caller, callee] = await Promise.all([
+            authRepo.findUserById(booking.caller_user_id),
+            authRepo.findUserById(booking.callee_user_id),
+          ]);
+          const politeDeclineUntil = new Date(
+            row.start_at.getTime() +
+              platformConfig.bookings().polite_decline_window_seconds * 1000,
+          ).toISOString();
+          // Notify the callee — they're the one we need to actually pull
+          // into the channel.
+          await insertEvent(client, {
+            aggregateType: OutboxAggregateType.CALL,
+            aggregateId: row.id,
+            eventType: OutboxEventType.PUSH_CALL_JOINABLE,
+            payload: {
+              call_id: row.id,
+              target_user_id: booking.callee_user_id,
+              peer_user_id: booking.caller_user_id,
+              peer_full_name: caller?.full_name ?? null,
+              peer_avatar_url: caller?.avatar_url ?? null,
+              kind: booking.call_type,
+              polite_decline_until: politeDeclineUntil,
+            },
+          });
+          // Caller too — quieter UX ("Connecting you to {pro}…") but
+          // useful when the caller has a different device foregrounded.
+          await insertEvent(client, {
+            aggregateType: OutboxAggregateType.CALL,
+            aggregateId: row.id,
+            eventType: OutboxEventType.PUSH_CALL_JOINABLE,
+            payload: {
+              call_id: row.id,
+              target_user_id: booking.caller_user_id,
+              peer_user_id: booking.callee_user_id,
+              peer_full_name: callee?.full_name ?? null,
+              peer_avatar_url: callee?.avatar_url ?? null,
+              kind: booking.call_type,
+              polite_decline_until: politeDeclineUntil,
+            },
+          });
+        }
       });
     }
     await client.query('COMMIT');

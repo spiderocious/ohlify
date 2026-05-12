@@ -1,5 +1,7 @@
 import * as authRepo from '@features/auth/auth.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
+import * as bookingBlocksRepo from '@features/profile/booking-blocks.repo.js';
+import { bookingHitsBlock } from '@features/professionals/availability.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { maybeIssueStrike } from '@features/strikes/strikes.service.js';
 import { StrikeReason, SubjectRole } from '@features/strikes/strikes.types.js';
@@ -101,6 +103,32 @@ const isBookingRaceError = (err: unknown): boolean => {
   return code === '23P01' || code === '40P01';
 };
 
+/**
+ * Reads the pro's recurring booking blocks and returns a 409 ServiceError
+ * if the requested booking interval overlaps any of them. Read-only —
+ * blocks are stable for the duration of a single create call, so no lock
+ * is needed. Returns `null` when the slot is clear.
+ */
+const checkBookingBlocksGuard = async (
+  proId: string,
+  startAt: Date,
+  durationMinutes: number,
+): Promise<ServiceError | null> => {
+  const blockRows = await bookingBlocksRepo.listForUser(proId);
+  if (blockRows.length === 0) return null;
+  const blocks = blockRows.map((b) => ({
+    startMinute: b.start_minute,
+    endMinute: b.end_minute,
+  }));
+  const cfg = platformConfig.availability();
+  if (!bookingHitsBlock(startAt, durationMinutes, blocks, cfg.default_timezone)) {
+    return null;
+  }
+  return new ServiceError('professional_unavailable', BOOKING_MESSAGES.CONFLICT, 409, {
+    start_at: ['Slot overlaps a time the professional has blocked'],
+  });
+};
+
 // ── POST /bookings ──────────────────────────────────────────────────────────
 
 export const createBooking = async (ctx: CreateContext) => {
@@ -134,6 +162,18 @@ export const createBooking = async (ctx: CreateContext) => {
       callee_user_id: [`Professional is currently ${callee.status} and not accepting bookings`],
     });
   }
+  // KYC gate: discovery already filters on kyc_status='approved' (see
+  // PROFESSIONAL_VISIBLE_PREDICATE in professionals.repo.ts), but the home
+  // + list responses are cached up to 300s. Without this check, anyone
+  // who saw a now-rejected pro in their cached /home (or has the user_id
+  // from a deeplink / share-slug / older session) could still book them
+  // and move money against an unverified professional. Same error code
+  // as the status check above so the client UX is unchanged.
+  if (callee.kyc_status !== 'approved') {
+    return new ServiceError('professional_unavailable', BOOKING_MESSAGES.CONFLICT, 409, {
+      callee_user_id: ['Professional is not currently accepting bookings'],
+    });
+  }
 
   // Rate must belong to the callee + be active.
   const rate = await ratesRepo.findByIdForUser(ctx.dto.rate_id, ctx.dto.callee_user_id);
@@ -149,6 +189,15 @@ export const createBooking = async (ctx: CreateContext) => {
       start_at: ['start_at must be in the future'],
     });
   }
+
+  // Same 409 as a double-book overlap so the client UX is identical
+  // ("this slot isn't bookable").
+  const blockedErr = await checkBookingBlocksGuard(
+    ctx.dto.callee_user_id,
+    startAt,
+    rate.duration_minutes,
+  );
+  if (blockedErr !== null) return blockedErr;
 
   const cfg = platformConfig.wallet();
   const breakdown = computeBookingPrice(

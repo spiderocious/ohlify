@@ -27,9 +27,19 @@ export function useApproveKyc(id: string) {
   );
 }
 
+/**
+ * `item_keys` scopes the rejection to specific KYC items the user must
+ * resubmit. Empty/omitted = whole-submission rejection (legacy).
+ */
+export interface RejectKycPayload {
+  reason_code: string;
+  note: string;
+  item_keys?: string[];
+}
+
 export function useRejectKyc(id: string) {
   const qc = useQueryClient();
-  return useAdminMutation<{ reason_code: string; note: string }>(
+  return useAdminMutation<RejectKycPayload>(
     { method: 'post', url: () => ADMIN_EP.KYC_REJECT(id) },
     { onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'kyc'] }) },
   );

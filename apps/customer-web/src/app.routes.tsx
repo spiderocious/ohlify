@@ -156,6 +156,11 @@ const BankAccountScreen = lazy(() =>
     default: m.BankAccountScreen,
   })),
 );
+const BookingBlocksScreen = lazy(() =>
+  import('./features/profile/screen/booking-blocks-screen.js').then((m) => ({
+    default: m.BookingBlocksScreen,
+  })),
+);
 const ChangePasswordScreen = lazy(() =>
   import('./features/profile/screen/change-password-screen.js').then((m) => ({
     default: m.ChangePasswordScreen,
@@ -298,6 +303,10 @@ const routes: RouteObject[] = [
                       {
                         path: ROUTES.PROFILE.BANK_ACCOUNT.relativePath,
                         element: lazyRoute(<BankAccountScreen />),
+                      },
+                      {
+                        path: ROUTES.PROFILE.BOOKING_BLOCKS.relativePath,
+                        element: lazyRoute(<BookingBlocksScreen />),
                       },
                       {
                         path: ROUTES.PROFILE.CHANGE_PASSWORD.relativePath,

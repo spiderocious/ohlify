@@ -1,18 +1,24 @@
-import { IconPhone, IconUser, IconVideo } from '@icons';
+import { IconPhone, IconVideo } from '@icons';
 import { Repeat, Show } from 'meemaw';
 
 import type { CompletedCallGroup, CompletedCallItem } from '@ohlify/core';
-import { AppEmptyState, AppText } from '@ohlify/ui';
+import { AppEmptyState, AppFilePreview, AppText } from '@ohlify/ui';
 
 interface CompletedCallsListProps {
   groups: ReadonlyArray<CompletedCallGroup>;
   onTap: (call: CompletedCallItem) => void;
+  /** Empty-state message override. */
+  emptyMessage?: string;
 }
 
 /** Mirrors mobile/lib/features/calls/screen/parts/completed_calls_list.dart. */
-export function CompletedCallsList({ groups, onTap }: CompletedCallsListProps) {
+export function CompletedCallsList({
+  groups,
+  onTap,
+  emptyMessage = 'No completed calls yet.',
+}: CompletedCallsListProps) {
   return (
-    <Show when={groups.length > 0} fallback={<AppEmptyState message="No completed calls yet." />}>
+    <Show when={groups.length > 0} fallback={<AppEmptyState message={emptyMessage} />}>
       <div className="space-y-5">
         <Repeat each={groups as CompletedCallGroup[]}>
           {(g) => (
@@ -27,47 +33,59 @@ export function CompletedCallsList({ groups, onTap }: CompletedCallsListProps) {
               </AppText>
               <div className="mt-2 space-y-2">
                 <Repeat each={g.calls as CompletedCallItem[]}>
-                  {(c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => onTap(c)}
-                      className="flex w-full items-center gap-3 rounded-2xl bg-background p-3 text-left"
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface">
-                        <IconUser size={18} color="var(--ohl-text-muted)" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <AppText variant="body" weight={600} align="start" maxLines={1}>
-                          {c.name}
-                        </AppText>
+                  {(c) => {
+                    const isVideo = c.callType === 'video';
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => onTap(c)}
+                        className="flex w-full items-center gap-3 rounded-2xl bg-background p-3 text-left transition hover:bg-surface-light"
+                      >
+                        <AppFilePreview
+                          fileKey={c.avatarKey ?? null}
+                          kind="image"
+                          width={40}
+                          height={40}
+                          radius={20}
+                          alt={c.name}
+                          fallback={
+                            isVideo ? (
+                              <IconVideo size={18} color="var(--ohl-text-muted)" />
+                            ) : (
+                              <IconPhone size={18} color="var(--ohl-text-muted)" />
+                            )
+                          }
+                        />
+                        <div className="min-w-0 flex-1">
+                          <AppText variant="body" weight={600} align="start" maxLines={1}>
+                            {c.name}
+                          </AppText>
+                          <AppText
+                            variant="bodyNormal"
+                            align="start"
+                            color="var(--ohl-text-muted)"
+                            maxLines={1}
+                            className="mt-0.5"
+                          >
+                            {c.stateLabel ? `${c.stateLabel} · ` : ''}
+                            {c.time} · {c.duration}
+                          </AppText>
+                        </div>
+                        <span className="text-text-muted">
+                          {isVideo ? <IconVideo size={16} /> : <IconPhone size={16} />}
+                        </span>
                         <AppText
                           variant="bodyNormal"
-                          align="start"
-                          color="var(--ohl-text-muted)"
-                          maxLines={1}
-                          className="mt-0.5"
+                          align="end"
+                          weight={600}
+                          color="var(--ohl-text-jet)"
                         >
-                          {c.time} · {c.duration}
+                          {c.amount}
                         </AppText>
-                      </div>
-                      <span className="text-text-muted">
-                        {c.callType === 'video' ? (
-                          <IconVideo size={16} />
-                        ) : (
-                          <IconPhone size={16} />
-                        )}
-                      </span>
-                      <AppText
-                        variant="bodyNormal"
-                        align="end"
-                        weight={600}
-                        color="var(--ohl-text-jet)"
-                      >
-                        {c.amount}
-                      </AppText>
-                    </button>
-                  )}
+                      </button>
+                    );
+                  }}
                 </Repeat>
               </div>
             </div>

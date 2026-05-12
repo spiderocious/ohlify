@@ -77,6 +77,13 @@ export interface BookingsConfig {
   inside_window_penalty_bps: number;
   network_flap_window_seconds: number;
   token_expires_seconds: number;
+  /**
+   * How many seconds after a call becomes joinable (status flips to
+   * `waiting_for_parties`) the callee may decline politely — caller
+   * gets a full refund, the pro is NOT struck. Beyond this window
+   * declines fall back to the standard no-show flow (refund + strike).
+   */
+  polite_decline_window_seconds: number;
 }
 
 export interface ProfessionalConfig {
@@ -149,6 +156,7 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     inside_window_penalty_bps: 3000,
     network_flap_window_seconds: 60,
     token_expires_seconds: 3600,
+    polite_decline_window_seconds: 60,
   },
   professional: {
     strike_on_no_show: true,
@@ -386,6 +394,13 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       token_expires_seconds: num(
         get('bookings.token_expires_seconds', d.bookings.token_expires_seconds),
         d.bookings.token_expires_seconds,
+      ),
+      polite_decline_window_seconds: num(
+        get(
+          'bookings.polite_decline_window_seconds',
+          d.bookings.polite_decline_window_seconds,
+        ),
+        d.bookings.polite_decline_window_seconds,
       ),
     },
     professional: {

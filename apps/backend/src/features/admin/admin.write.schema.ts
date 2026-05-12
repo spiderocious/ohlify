@@ -269,6 +269,20 @@ export const AdminRejectKycSchema = z
       'other',
     ]),
     note: z.string().min(1).max(2000),
+    /**
+     * Optional per-item resubmission set. When omitted or empty, the
+     * rejection covers the whole submission and the user must redo every
+     * item (current behavior). When non-empty, only those keys need to be
+     * resubmitted; other items render as locked on the user's KYC screen.
+     *
+     * Admins pick from the same `KycItemKey` union the user-facing spec
+     * exposes (full_name, handle, occupation, description, interests,
+     * bank_account, identity, selfie, rates). The set isn't role-checked
+     * here — admin-web only renders the keys that apply to the target
+     * user's role, and the user-facing PATCH guards a request that tries
+     * to write outside the set anyway.
+     */
+    item_keys: z.array(z.string().min(1).max(64)).max(20).optional(),
   })
   .strict();
 

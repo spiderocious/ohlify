@@ -17,6 +17,11 @@ export const OutboxEventType = {
   KYC_REJECTED: 'kyc.rejected',
   // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- event type, not a credential
   PASSWORD_RESET_REQUESTED_BY_ADMIN: 'auth.password_reset.requested_by_admin',
+  // Push: a call is joinable. Fired when bookings.service confirms a
+  // booking AND again when call-starter flips to waiting_for_parties.
+  // The outbox push handler fans out to every device token registered
+  // for `target_user_id` (the callee).
+  PUSH_CALL_JOINABLE: 'push.call_joinable',
 } as const;
 
 export type OutboxEventType = (typeof OutboxEventType)[keyof typeof OutboxEventType];

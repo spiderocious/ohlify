@@ -27,6 +27,7 @@ export const EP = {
   ME_RATES:                     `${BASE}/me/rates`,
   ME_RATE:                      (id: string) => `${BASE}/me/rates/${id}`,
   ME_NOTIFICATION_PREFS:        `${BASE}/me/notification-preferences`,
+  ME_BOOKING_BLOCKS:            `${BASE}/me/booking-blocks`,
   ME_STRIKES:                   `${BASE}/me/strikes`,
   ME_DELETE:                    `${BASE}/me`,
 
@@ -59,6 +60,8 @@ export const EP = {
   CALL_JOIN:                    (id: string) => `${BASE}/calls/${id}/join`,
   CALL_LEAVE:                   (id: string) => `${BASE}/calls/${id}/leave`,
   CALL_RENEW_TOKEN:             (id: string) => `${BASE}/calls/${id}/renew-token`,
+  CALL_DECLINE:                 (id: string) => `${BASE}/calls/${id}/decline`,
+  CALLS_JOINABLE:               `${BASE}/calls/joinable`,
   CALL_RATING:                  (id: string) => `${BASE}/calls/${id}/rating`,
   CALL_FEEDBACK:                (id: string) => `${BASE}/calls/${id}/feedback`,
   CALLS_STATS:                  `${BASE}/calls/stats`,

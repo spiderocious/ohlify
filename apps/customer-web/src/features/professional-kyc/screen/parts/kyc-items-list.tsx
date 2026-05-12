@@ -91,10 +91,31 @@ function summaryFor(item: KycItemSpec): string {
 
 interface KycItemsListProps {
   items: KycItemSpec[];
+  /**
+   * When set, only items whose key is in this set are editable. All other
+   * tiles render as locked (dimmed, no tap). Used during partial KYC
+   * resubmits — the spec endpoint surfaces this via `resubmission`.
+   *
+   * Pass `null` (the default) to leave every tile editable.
+   */
+  resubmitKeys?: readonly KycItemKey[] | null;
 }
 
-export function KycItemsList({ items }: KycItemsListProps) {
+export function KycItemsList({ items, resubmitKeys = null }: KycItemsListProps) {
   const saveKyc = useSaveProfessionalKyc();
+  const flaggedSet =
+    resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
+
+  // In a partial-rejection state, surface the items the user needs to act
+  // on first. Locked tiles still render so the user can see the rest of
+  // their submission isn't being asked for, but they sink to the bottom.
+  const orderedItems =
+    flaggedSet === null
+      ? items
+      : [
+          ...items.filter((i) => flaggedSet.has(i.key)),
+          ...items.filter((i) => !flaggedSet.has(i.key)),
+        ];
 
   const open = (item: KycItemSpec) => {
     switch (item.kind) {
@@ -122,16 +143,24 @@ export function KycItemsList({ items }: KycItemsListProps) {
 
   return (
     <div className="space-y-3">
-      {items.map((item) => (
-        <KycItemTile
-          key={item.key}
-          Icon={ICONS[item.key] ?? IconFileText}
-          title={item.label}
-          subtitle={summaryFor(item)}
-          completed={item.complete}
-          onTap={() => open(item)}
-        />
-      ))}
+      {orderedItems.map((item) => {
+        const flagged = flaggedSet !== null && flaggedSet.has(item.key);
+        const locked = flaggedSet !== null && !flagged;
+        // Flagged items must NOT render as complete even if their last
+        // value was on file — the admin asked the user to act on them.
+        const completed = flagged ? false : item.complete;
+        return (
+          <KycItemTile
+            key={item.key}
+            Icon={ICONS[item.key] ?? IconFileText}
+            title={item.label}
+            subtitle={flagged ? item.subtitle : summaryFor(item)}
+            completed={completed}
+            locked={locked}
+            onTap={() => open(item)}
+          />
+        );
+      })}
     </div>
   );
 }

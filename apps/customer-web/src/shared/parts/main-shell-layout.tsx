@@ -4,6 +4,9 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@ohlify/core';
 import { AppHeader, AppShell, appMainNavItems } from '@ohlify/ui';
 
+import { JoinableCallBanner } from './joinable-call-banner.js';
+import { KycReviewBanner } from './kyc-review-banner.js';
+
 const TAB_PATHS = [
   ROUTES.HOME.absPath,
   ROUTES.CALLS.absPath,
@@ -41,13 +44,20 @@ export function MainShellLayout() {
         if (path) navigate(path);
       }}
       header={
-        <Show when={isHome}>
-          <AppHeader
-            notificationCount={1}
-            onNotification={() => navigate(ROUTES.NOTIFICATIONS.absPath)}
-            shareUrl="https://ohlify.com/jocelyn-aminoff"
-          />
-        </Show>
+        <>
+          {/* Joinable-call banner sits above KYC review because an
+              actionable incoming call should out-rank an info-only
+              "your KYC is under review" notice. */}
+          <JoinableCallBanner />
+          <KycReviewBanner />
+          <Show when={isHome}>
+            <AppHeader
+              notificationCount={1}
+              onNotification={() => navigate(ROUTES.NOTIFICATIONS.absPath)}
+              shareUrl="https://ohlify.com/jocelyn-aminoff"
+            />
+          </Show>
+        </>
       }
     >
       <Outlet />

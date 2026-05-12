@@ -35,6 +35,10 @@ export const MESSAGE_KEYS = {
   BANK_ACCOUNT_FETCHED: 'profile.bank_account.fetched',
   BANK_ACCOUNT_UPDATED: 'profile.bank_account.updated',
   BANK_ACCOUNT_REMOVED: 'profile.bank_account.removed',
+  BOOKING_BLOCKS_FETCHED: 'profile.booking_blocks.fetched',
+  BOOKING_BLOCKS_UPDATED: 'profile.booking_blocks.updated',
+  DEVICE_TOKEN_REGISTERED: 'profile.device_token.registered',
+  DEVICE_TOKEN_DELETED: 'profile.device_token.deleted',
   // Onboarding
   ONBOARDING_STATUS_FETCHED: 'onboarding.status.fetched',
   ROLE_SET: 'onboarding.role.set',
@@ -127,6 +131,8 @@ export const MESSAGE_KEYS = {
   CALL_TOKEN_RENEWED: 'call.token.renewed',
   CALL_NOT_FOUND_KEY: 'call.not_found',
   CALL_NOT_JOINABLE_KEY: 'call.not_joinable',
+  CALL_DECLINED: 'call.declined',
+  CALLS_JOINABLE_FETCHED: 'calls.joinable.fetched',
   // Strikes
   STRIKES_LIST_FETCHED: 'strikes.list.fetched',
   STRIKE_FETCHED: 'strike.fetched',

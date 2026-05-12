@@ -17,12 +17,34 @@ const ICONS: Record<ClientKycItem, LucideIcon> = {
   description: IconFileText,
 };
 
+/**
+ * Client-side KYC item keys are camelCase (`fullName`) but the backend
+ * resubmit set uses the canonical KycItemKey strings (`full_name`). This
+ * map bridges the two so the parent screen can pass `resubmission.item_keys`
+ * straight through without translation.
+ */
+const SERVER_KEY_BY_LOCAL: Record<ClientKycItem, string> = {
+  fullName: 'full_name',
+  interests: 'interests',
+  description: 'description',
+};
+
+interface ClientKycItemsListProps {
+  /**
+   * Server-side keys (`full_name`, `interests`, `description`) the user
+   * may resubmit. When non-empty, every other tile renders as locked.
+   */
+  resubmitKeys?: readonly string[] | null;
+}
+
 const successToast = (message: string) =>
   DrawerService.toast(message, { type: 'success' });
 
-export function ClientKycItemsList() {
+export function ClientKycItemsList({ resubmitKeys = null }: ClientKycItemsListProps = {}) {
   const ctx = useClientKyc();
   const saveKyc = useSaveClientKyc();
+  const lockedSet =
+    resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
 
   const summaryFor = (item: ClientKycItem): string | null => {
     switch (item) {
@@ -123,16 +145,20 @@ export function ClientKycItemsList() {
 
   return (
     <div className="space-y-3">
-      {CLIENT_KYC_ITEMS.map((item) => (
-        <KycItemTile
-          key={item}
-          Icon={ICONS[item]}
-          title={CLIENT_KYC_TITLES[item]}
-          subtitle={summaryFor(item) ?? CLIENT_KYC_SUBTITLES[item]}
-          completed={ctx.isComplete(item)}
-          onTap={() => open(item)}
-        />
-      ))}
+      {CLIENT_KYC_ITEMS.map((item) => {
+        const locked = lockedSet !== null && !lockedSet.has(SERVER_KEY_BY_LOCAL[item]);
+        return (
+          <KycItemTile
+            key={item}
+            Icon={ICONS[item]}
+            title={CLIENT_KYC_TITLES[item]}
+            subtitle={summaryFor(item) ?? CLIENT_KYC_SUBTITLES[item]}
+            completed={ctx.isComplete(item)}
+            locked={locked}
+            onTap={() => open(item)}
+          />
+        );
+      })}
     </div>
   );
 }

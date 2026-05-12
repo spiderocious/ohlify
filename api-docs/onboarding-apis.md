@@ -210,11 +210,36 @@ No body, no query params.
 
 | Field | Type | Notes |
 |---|---|---|
-| `step` | enum | `"role_selection"` \| `"client_kyc"` \| `"professional_kyc"` \| `"complete"` |
+| `step` | enum | `"role_selection"` \| `"client_kyc"` \| `"professional_kyc"` \| `"kyc_rejected"` \| `"complete"` |
 | `role` | enum | `"client"` \| `"professional"` (defaults to `"client"` server-side) |
 | `kyc_progress.completed_items` | string[] | Keys of items the user has completed (subset of `kyc.{role}_items`). |
 | `kyc_progress.total_items` | int | Number of `enabled && required` items in the role's config. Defaults to **2** for clients, **9** for professionals; can shift if an admin toggles items. |
 | `kyc_progress.percent` | int | `round(completed / total * 100)`. `0` when `total = 0` |
+| `kyc_rejection` | object \| null | Non-null only when `step === "kyc_rejected"`. See below. |
+
+**`kyc_rejection` shape (only when `step === "kyc_rejected"`):**
+
+```json
+{
+  "kyc_rejection": {
+    "reason_code": "document_unclear",
+    "note": "ID photo was blurry. Please reupload a sharper image.",
+    "reviewed_at": "2026-05-10T13:42:00.000Z",
+    "submission_id": "kyc_01HZ...",
+    "latest_submission_status": "rejected",
+    "item_keys": ["identity", "selfie"]
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `reason_code` | enum | `document_unclear` \| `identity_mismatch` \| `expired_document` \| `fraudulent` \| `other`. |
+| `note` | string \| null | Admin's free-text explanation. Shown verbatim on the user's rejection screen. |
+| `reviewed_at` | ISO date \| null | When the admin acted. |
+| `submission_id` | string | The latest `kyc_submissions` row ID. |
+| `latest_submission_status` | enum | `rejected` (user hasn't resubmitted yet) or `pending_review` (user resubmitted, awaiting re-review). The parent `step` stays `"kyc_rejected"` until admin acts again, so use this to switch the rejection UI between "show reason + Resubmit" and "show awaiting-review". |
+| `item_keys` | string[] | **Per-item resubmission set.** Empty array `[]` means whole-submission rejection — the user must redo every item (legacy behavior). Non-empty means **partial rejection**: the user only needs to re-upload the listed items. The user-facing KYC screen locks every item NOT in this set; the server also enforces this on PATCH (see §5). |
 
 **`step` derivation:**
 - `"complete"` only when **both** `users.kyc_status = 'approved'` AND `completed_items.length === total_items`. Status is derived from items, not blindly trusted — see "Status demotion" below.
@@ -385,7 +410,8 @@ No body, no query params. Role is derived from the authenticated user.
     ],
     "completed_count": 4,
     "total_required": 9,
-    "all_complete": false
+    "all_complete": false,
+    "resubmission": null
   }
 }
 ```
@@ -397,6 +423,25 @@ No body, no query params. Role is derived from the authenticated user.
 | `completed_count` | int | Number of `required && complete` items. |
 | `total_required` | int | Number of `required` items. |
 | `all_complete` | bool | `true` iff every required item is complete — equivalent to `completed_count === total_required`. Use this as the gate for `POST /onboarding/kyc/complete`. |
+| `resubmission` | object \| null | Set when the user is in a partial-rejection state. See below. |
+
+**`resubmission` shape (only when the user is in `kyc_rejected` with admin-flagged items):**
+
+```json
+{
+  "resubmission": {
+    "submission_id": "kyc_01HZ...",
+    "item_keys": ["identity", "selfie"],
+    "reason_code": "document_unclear",
+    "note": "ID photo was blurry."
+  }
+}
+```
+
+`null` when there's no active rejection scope. Whole-submission rejections (admin didn't pick specific items) and post-resubmit awaiting-review states also surface as `null` — there's nothing to scope. When non-null with a non-empty `item_keys`, the client should:
+
+- Render every `items[i]` whose `key` is **not** in `item_keys` as **locked / read-only** (the server also enforces this; see §4–§5 for the 403).
+- Scope the progress bar + the `kyc/complete` gate to just the items in the set.
 
 **Per-item shape — `KycItemSpec`:**
 
@@ -518,6 +563,26 @@ Both shapes from §1 apply (`unauthorized` for header/JWT issues, `token_invalid
 Trigger: switching role after `users.kyc_status !== 'none'` OR `users.full_name` is non-null. The same role can be re-set without conflict.
 
 ---
+
+### Partial-rejection scoping (PATCH endpoints)
+
+Both `PATCH /api/v1/onboarding/kyc/client` and `PATCH /api/v1/onboarding/kyc/professional` honor a per-item resubmission scope when the user is in a `kyc_rejected` step. If the latest rejection carries `kyc_rejection.item_keys = ["selfie", "identity"]` (see §1), the server **rejects** any PATCH that touches a key outside that set with a 403:
+
+```json
+{
+  "error": {
+    "code": "item_not_in_resubmit_set",
+    "message": "Request failed",
+    "field_errors": {
+      "item_keys": ["full_name"]
+    }
+  }
+}
+```
+
+Empty `item_keys` (whole-submission rejection) imposes no scope — the user may patch any DTO-supported field.
+
+The DTO-supported keys are: `full_name`, `handle`, `occupation`, `description`, `interests`, `identity`, `selfie` (pro), and `full_name`, `description`, `interests` (client). Items whose values live behind their own routes — `bank_account` (`/me/bank-accounts`) and `rates` (`/me/rates`) — are **not** scoped at the server boundary here; the user-facing UI hides those modals when out of scope, and the spec endpoint signals the lock state via `resubmission.item_keys`.
 
 ## 4. PATCH `/api/v1/onboarding/kyc/client`
 

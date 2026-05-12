@@ -39,6 +39,7 @@ export {
   Lock as IconLock,
   LogOut as IconLogout,
   Mail as IconMail,
+  Pencil as IconEdit,
   Menu as IconMenu,
   MessageCircle as IconChat,
   Mic as IconMic,

@@ -68,6 +68,11 @@ export interface CallHistoryItem {
   booking_id: string;
   caller_user_id: string;
   callee_user_id: string;
+  /** The other user relative to the viewer. Computed server-side. */
+  peer_user_id: string;
+  peer_name: string | null;
+  /** File-service KEY (not URL). Render via `<AppFilePreview fileKey={...}>`. */
+  peer_avatar_url: string | null;
   rate_id: string;
   call_type: 'audio' | 'video';
   start_at: string;
@@ -108,4 +113,23 @@ export interface JoinCallResponse {
   duration_minutes: number;
   remote_user_id: string;
   total_paid_kobo: number;
+}
+
+/**
+ * A call that's joinable right now (`waiting_for_parties` or
+ * `in_progress`). Returned by `GET /calls/joinable` — web polls every
+ * 15s, mobile uses this on cold-start to recover a missed FCM push.
+ */
+export interface JoinableCall {
+  call_id: string;
+  booking_id: string;
+  status: 'waiting_for_parties' | 'in_progress';
+  agora_channel_name: string;
+  start_at: string | null;
+  duration_minutes: number;
+  /** True when the current user is the booking's caller. */
+  is_caller: boolean;
+  peer_user_id: string;
+  peer_full_name: string | null;
+  peer_avatar_url: string | null;
 }

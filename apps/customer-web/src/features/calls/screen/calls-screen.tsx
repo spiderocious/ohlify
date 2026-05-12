@@ -16,8 +16,6 @@ import { useCancelBooking } from '../api/use-cancel-booking.js';
 import { CallStatsSummary } from './parts/call-stats-summary.js';
 import { CompletedCallsList } from './parts/completed-calls-list.js';
 import { ScheduledCallsList } from './parts/scheduled-calls-list.js';
-import { CancelledCallsList } from './parts/cancelled-calls-list.js';
-import { AllCallsList, type AllCallGroup, type AllCallItem } from './parts/all-calls-list.js';
 
 const SELF_ID = 'me';
 
@@ -52,110 +50,88 @@ function isCancelled(h: CallHistoryItem): boolean {
   return h.booking_status.startsWith('cancelled_');
 }
 
-function isCompleted(h: CallHistoryItem): boolean {
-  return h.call_status === 'completed';
+function isScheduled(h: CallHistoryItem): boolean {
+  return (
+    h.booking_status === 'confirmed' && !TERMINAL_CALL_STATUSES.has(h.call_status)
+  );
 }
 
-function isScheduled(h: CallHistoryItem): boolean {
-  return h.booking_status === 'confirmed' && !TERMINAL_CALL_STATUSES.has(h.call_status);
+// Everything that's no longer "upcoming" — completed, cancelled, no-show,
+// disconnected, fulfilled. Anything that wouldn't appear in the Scheduled tab.
+function isHistorical(h: CallHistoryItem): boolean {
+  return !isScheduled(h);
 }
 
 function stateLabel(h: CallHistoryItem): string {
   if (isCancelled(h)) return 'Cancelled';
-  if (isCompleted(h)) return 'Completed';
+  if (h.call_status === 'completed') return 'Completed';
+  if (h.booking_status === 'fulfilled') return 'Completed';
   if (h.call_status === 'in_progress') return 'In progress';
   if (
     h.call_status === 'no_show_caller' ||
     h.call_status === 'no_show_callee' ||
     h.call_status === 'no_show_both'
-  )
+  ) {
     return 'Missed';
-  if (h.call_status === 'disconnected_caller' || h.call_status === 'disconnected_callee')
+  }
+  if (
+    h.call_status === 'disconnected_caller' ||
+    h.call_status === 'disconnected_callee'
+  ) {
     return 'Disconnected';
-  return 'Scheduled';
+  }
+  return 'Pending';
 }
 
-// Sort key for "past" groupings — prefer the moment that actually closed the
-// row (ended_at, then cancelled_at) and fall back to start_at.
+// Sort key for past groupings — prefer the moment that closed the row
+// (ended_at, then cancelled_at) and fall back to start_at.
 function pastSortIso(h: CallHistoryItem): string {
   return h.ended_at ?? h.cancelled_at ?? h.start_at;
+}
+
+function displayName(h: CallHistoryItem): string {
+  return h.peer_name && h.peer_name.trim().length > 0 ? h.peer_name : 'Unknown';
 }
 
 function toScheduledItem(h: CallHistoryItem): ScheduledCallItem {
   const canReschedule = new Date(h.start_at).getTime() - Date.now() > 30 * 60 * 1000;
   return {
     id: h.call_id,
-    name: h.callee_user_id,
-    role: '',
+    name: displayName(h),
+    role: h.call_type === 'video' ? 'Video call' : 'Audio call',
     rating: 0,
     callType: h.call_type,
     time: formatCallTime(h.start_at),
     date: formatCallDate(h.start_at),
     duration: `${h.duration_minutes} mins`,
     canReschedule,
+    avatarKey: h.peer_avatar_url,
   };
 }
 
-function toCompletedItem(h: CallHistoryItem): CompletedCallItem {
-  const minutes = h.connected_seconds ? Math.round(h.connected_seconds / 60) : h.duration_minutes;
+function toHistoricalItem(h: CallHistoryItem): CompletedCallItem {
+  const minutes = h.connected_seconds
+    ? Math.round(h.connected_seconds / 60)
+    : h.duration_minutes;
+  const closedIso = pastSortIso(h);
   return {
     id: h.call_id,
-    name: h.callee_user_id,
+    name: displayName(h),
     callType: h.call_type,
-    time: h.ended_at ? formatCallTime(h.ended_at) : formatCallTime(h.start_at),
+    time: formatCallTime(closedIso),
     duration: `${minutes} mins`,
     amount: formatNaira(h.total_paid_kobo),
-  };
-}
-
-function toCancelledItem(h: CallHistoryItem): CompletedCallItem {
-  return {
-    id: h.call_id,
-    name: h.callee_user_id,
-    callType: h.call_type,
-    time: formatCallTime(h.cancelled_at ?? h.start_at),
-    duration: `${h.duration_minutes} mins`,
-    amount: formatNaira(h.total_paid_kobo),
-  };
-}
-
-function toAllItem(h: CallHistoryItem): AllCallItem {
-  return {
-    id: h.call_id,
-    name: h.callee_user_id,
-    callType: h.call_type,
-    time: formatCallTime(pastSortIso(h)),
+    avatarKey: h.peer_avatar_url,
     stateLabel: stateLabel(h),
-    amount: formatNaira(h.total_paid_kobo),
   };
 }
 
-function groupCompletedByDate(items: CallHistoryItem[]): CompletedCallGroup[] {
+function groupHistoricalByDate(items: CallHistoryItem[]): CompletedCallGroup[] {
   const groups = new Map<string, CompletedCallItem[]>();
   items.forEach((h) => {
     const key = formatGroupDate(pastSortIso(h));
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(toCompletedItem(h));
-  });
-  return Array.from(groups.entries()).map(([date, calls]) => ({ date, calls }));
-}
-
-function groupCancelledByDate(items: CallHistoryItem[]): CompletedCallGroup[] {
-  const groups = new Map<string, CompletedCallItem[]>();
-  items.forEach((h) => {
-    const key = formatGroupDate(pastSortIso(h));
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(toCancelledItem(h));
-  });
-  return Array.from(groups.entries()).map(([date, calls]) => ({ date, calls }));
-}
-
-function groupAllByDate(items: CallHistoryItem[]): AllCallGroup[] {
-  const groups = new Map<string, AllCallItem[]>();
-  items.forEach((h) => {
-    const key = formatGroupDate(pastSortIso(h));
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(toAllItem(h));
+    groups.get(key)!.push(toHistoricalItem(h));
   });
   return Array.from(groups.entries()).map(([date, calls]) => ({ date, calls }));
 }
@@ -169,13 +145,10 @@ export function CallsScreen() {
   const all = historyPage?.data ?? [];
 
   const scheduled = all.filter(isScheduled);
-  const completed = all.filter(isCompleted);
-  const cancelled = all.filter(isCancelled);
+  const historical = all.filter(isHistorical);
 
   const scheduledItems: ScheduledCallItem[] = scheduled.map(toScheduledItem);
-  const completedGroups: CompletedCallGroup[] = groupCompletedByDate(completed);
-  const cancelledGroups: CompletedCallGroup[] = groupCancelledByDate(cancelled);
-  const allGroups: AllCallGroup[] = groupAllByDate(all);
+  const historicalGroups: CompletedCallGroup[] = groupHistoricalByDate(historical);
 
   const stats: CallStats = {
     total: all.length,
@@ -223,10 +196,6 @@ export function CallsScreen() {
           <AppTabView
             tabs={[
               {
-                label: 'All calls',
-                child: <AllCallsList groups={allGroups} onTap={(c) => navToDetails(c.id)} />,
-              },
-              {
                 label: 'Scheduled',
                 child: (
                   <ScheduledCallsList
@@ -242,16 +211,8 @@ export function CallsScreen() {
                 label: 'Completed',
                 child: (
                   <CompletedCallsList
-                    groups={completedGroups}
-                    onTap={(c) => navToDetails(c.id)}
-                  />
-                ),
-              },
-              {
-                label: 'Cancelled',
-                child: (
-                  <CancelledCallsList
-                    groups={cancelledGroups}
+                    groups={historicalGroups}
+                    emptyMessage="No past calls yet."
                     onTap={(c) => navToDetails(c.id)}
                   />
                 ),

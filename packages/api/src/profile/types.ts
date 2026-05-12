@@ -54,3 +54,19 @@ export interface NotificationPreferences {
   email: { enabled: boolean; updated_at: string };
   push:  { enabled: boolean; updated_at: string };
 }
+
+/**
+ * A pro-declared "do not book me here" recurring window. Minutes are
+ * minute-of-day (0..1440) in the pro's local timezone (today: platform
+ * default `Africa/Lagos`). `end_minute` is exclusive and must be > start.
+ *
+ * Cross-midnight blocks aren't allowed in v1 — split into two rows.
+ */
+export interface BookingBlock {
+  start_minute: number;
+  end_minute: number;
+}
+
+export interface BookingBlocksResponse {
+  blocks: BookingBlock[];
+}

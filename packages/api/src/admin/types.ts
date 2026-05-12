@@ -113,6 +113,8 @@ export interface AdminUserKycInline {
   reviewed_at: string | null;
   reject_reason_code: string | null;
   reject_note: string | null;
+  /** Per-item resubmission set; empty = whole-submission rejection. */
+  reject_item_keys: string[];
   created_at: string;
 }
 
@@ -184,6 +186,8 @@ export interface AdminKycSubmission {
   reviewed_at: string | null;
   reject_reason_code: string | null;
   reject_note: string | null;
+  /** Per-item resubmission set; empty = whole-submission rejection. */
+  reject_item_keys: string[];
   created_at: string;
 }
 

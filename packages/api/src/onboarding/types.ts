@@ -32,11 +32,26 @@ export interface KycRejection {
   reviewed_at: string | null;
   submission_id: string;
   latest_submission_status: KycStatus;
+  /**
+   * Per-item resubmission set. Empty array = whole-submission rejection
+   * (user must redo every item). Non-empty = partial rejection; the user
+   * UI locks every other item.
+   *
+   * Always an array (never null) so clients can branch on `.length`.
+   */
+  item_keys: KycItemKey[];
 }
 
 export interface OnboardingStatusResponse {
   step: OnboardingStep;
   role: 'client' | 'professional' | null;
+  /**
+   * Raw `users.kyc_status`. Used by the sticky "under review" banner
+   * that sits on the tabbed shell while the admin queue catches up.
+   * Distinct from `step`, which lumps `pending_review` and `approved`
+   * together as `'complete'` once items are filled.
+   */
+  kyc_status: KycStatus;
   kyc_progress: KycProgress;
   kyc_rejection: KycRejection | null;
 }
@@ -140,12 +155,38 @@ export interface KycItemSpec {
   complete: boolean;
 }
 
+/**
+ * Set on the spec response when the user is currently in a `kyc_rejected`
+ * state with admin-flagged items. The frontend uses this to lock every
+ * item NOT in `item_keys` — only the flagged ones remain editable.
+ *
+ * `null` means "no active rejection scope" — render the spec normally.
+ * Whole-submission rejections (or users awaiting re-review after a
+ * resubmit) are also surfaced as `null` since there's nothing to scope.
+ */
+export interface KycResubmission {
+  submission_id: string;
+  item_keys: KycItemKey[];
+  /**
+   * Subset of `item_keys` the user has already touched since the
+   * rejection. Drives the Proceed gate — once every flagged key is
+   * acknowledged, the user can resubmit. `bank_account` and `rates`
+   * are passively acknowledged on the server (existence of data is
+   * proof) and don't appear here even after the user updates them.
+   */
+  acknowledged_keys: KycItemKey[];
+  reason_code: string;
+  note: string | null;
+}
+
 export interface KycSpecResponse {
   role: 'client' | 'professional';
   items: KycItemSpec[];
   completed_count: number;
   total_required: number;
   all_complete: boolean;
+  /** See `KycResubmission`. `null` when there's no rejection to scope. */
+  resubmission: KycResubmission | null;
 }
 
 // Per-kind value shapes — type-narrow on `kind` to consume.

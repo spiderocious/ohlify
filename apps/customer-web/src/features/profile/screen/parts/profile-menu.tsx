@@ -1,6 +1,7 @@
 import {
   IconBuilding,
   IconChevronRight,
+  IconClock,
   IconDelete,
   IconFileText,
   IconHelp,
@@ -20,6 +21,7 @@ interface ProfileMenuProps {
   onPersonalInfo: () => void;
   onRates: () => void;
   onBankAccount: () => void;
+  onBookingBlocks: () => void;
   onChangePassword: () => void;
   onNotifications: () => void;
   onHelpDesk: () => void;
@@ -41,6 +43,7 @@ export function ProfileMenu(props: ProfileMenuProps) {
     { Icon: IconUser, label: 'Personal information', onTap: props.onPersonalInfo },
     { Icon: IconTag, label: 'Rates', onTap: props.onRates },
     { Icon: IconBuilding, label: 'Bank account', onTap: props.onBankAccount },
+    { Icon: IconClock, label: 'Booking blocks', onTap: props.onBookingBlocks },
     { Icon: IconLock, label: 'Change password', onTap: props.onChangePassword },
     { Icon: IconSettings, label: 'Notifications', onTap: props.onNotifications },
     { Icon: IconHelp, label: 'Help desk', onTap: props.onHelpDesk },

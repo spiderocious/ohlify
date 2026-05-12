@@ -94,6 +94,12 @@ export interface CallHistoryRow {
   booking_status: BookingStatus;
   caller_user_id: string;
   callee_user_id: string;
+  // Display fields joined in from `users` for both sides. The service layer
+  // collapses these into peer_* on the view based on the viewer's user id.
+  caller_full_name: string | null;
+  caller_avatar_url: string | null;
+  callee_full_name: string | null;
+  callee_avatar_url: string | null;
   rate_id: string;
   call_type: CallType;
   start_at: Date;
@@ -114,6 +120,12 @@ export interface CallHistoryView {
   // commercial (booking)
   caller_user_id: string;
   callee_user_id: string;
+  // The user on the OTHER side of this call from the viewer's perspective.
+  // Always one of the two userIds above; name/avatar may be null if the
+  // counterparty was soft-deleted. Avatar is a file-service KEY, not a URL.
+  peer_user_id: string;
+  peer_name: string | null;
+  peer_avatar_url: string | null;
   rate_id: string;
   call_type: CallType;
   start_at: string;

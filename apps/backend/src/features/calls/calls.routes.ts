@@ -13,13 +13,15 @@ export const register = (app: Express): void => {
   const router = Router();
   router.use(requireAuth, requireActiveUser);
 
-  // History routes MUST come before `/:id` so `/history` is not matched as an id.
+  // History + joinable routes MUST come before `/:id` so they're not
+  // matched as ids.
   router.get(
     '/history',
     validate(ListCallHistoryQuerySchema, 'query'),
     controller.listHistory,
   );
   router.get('/history/:id', controller.getHistoryItem);
+  router.get('/joinable', controller.listJoinable);
 
   router.get('/', validate(ListCallsQuerySchema, 'query'), controller.list);
   router.get('/:id', controller.get);
@@ -34,6 +36,7 @@ export const register = (app: Express): void => {
     rateLimitMiddleware((req) => `call-renew:${req.userId ?? 'anon'}`, 30, 600),
     controller.renewToken,
   );
+  router.post('/:id/decline', controller.decline);
 
   app.use('/api/v1/calls', router);
 };

@@ -36,11 +36,38 @@ const toView = (row: CallRow): CallView => ({
   created_at: row.created_at.toISOString(),
 });
 
-const toHistoryView = (row: CallHistoryRow): CallHistoryView => ({
+// Picks the OTHER side of the call relative to the viewer. If the viewer
+// matches neither side (shouldn't happen — we authorize before serving)
+// we fall back to the callee, which preserves the most useful info for
+// a customer-driven booking.
+const pickPeer = (
+  row: CallHistoryRow,
+  viewerUserId: string,
+): { id: string; name: string | null; avatar: string | null } => {
+  if (row.caller_user_id === viewerUserId) {
+    return {
+      id: row.callee_user_id,
+      name: row.callee_full_name,
+      avatar: row.callee_avatar_url,
+    };
+  }
+  return {
+    id: row.caller_user_id,
+    name: row.caller_full_name,
+    avatar: row.caller_avatar_url,
+  };
+};
+
+const toHistoryView = (row: CallHistoryRow, viewerUserId: string): CallHistoryView => {
+  const peer = pickPeer(row, viewerUserId);
+  return {
   call_id: row.call_id,
   booking_id: row.booking_id,
   caller_user_id: row.caller_user_id,
   callee_user_id: row.callee_user_id,
+  peer_user_id: peer.id,
+  peer_name: peer.name,
+  peer_avatar_url: peer.avatar,
   rate_id: row.rate_id,
   call_type: row.call_type,
   start_at: row.start_at.toISOString(),
@@ -63,7 +90,8 @@ const toHistoryView = (row: CallHistoryRow): CallHistoryView => ({
   refund_journal_id: row.refund_journal_id,
   ended_at: row.ended_at?.toISOString() ?? null,
   created_at: row.booking_created_at.toISOString(),
-});
+  };
+};
 
 // ── GET /calls ──────────────────────────────────────────────────────────────
 
@@ -149,7 +177,7 @@ export const listCallHistory = async (dto: ListCallHistoryQueryDto, userId: stri
       : null;
   return new ServiceSuccess(
     {
-      items: page.map(toHistoryView),
+      items: page.map((r) => toHistoryView(r, userId)),
       meta: { next_cursor: nextCursor, has_more: hasMore },
     },
     CALL_MESSAGES.HISTORY_LIST_FETCHED,
@@ -163,7 +191,7 @@ export const getCallHistoryItem = async (callId: string, userId: string) => {
   if (!row || (row.caller_user_id !== userId && row.callee_user_id !== userId)) {
     return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
   }
-  return new ServiceSuccess(toHistoryView(row), CALL_MESSAGES.HISTORY_FETCHED);
+  return new ServiceSuccess(toHistoryView(row, userId), CALL_MESSAGES.HISTORY_FETCHED);
 };
 
 // ── POST /calls/:id/join ────────────────────────────────────────────────────
@@ -313,6 +341,100 @@ export const renewToken = async (callId: string, userId: string) => {
 };
 
 // ── POST /calls/:id/leave ───────────────────────────────────────────────────
+
+// ── POST /calls/:id/decline (callee polite-decline) ─────────────────────────
+//
+// Within `bookings.polite_decline_window_seconds` of the call's
+// `start_at`, the callee may tap Decline. Caller gets a full refund,
+// the pro keeps a clean record. Outside the window we fall through to
+// the standard no-show treatment (refund + strike), same as if the pro
+// had simply not shown up.
+
+export const declineCall = async (callId: string, userId: string) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const call = await repo.findByIdForUpdate(client, callId);
+    if (!call) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    const booking = await bookingsRepo.findByIdForUpdate(client, call.booking_id);
+    if (!booking || booking.callee_user_id !== userId) {
+      // Decline is callee-only. Hide the 403 behind 404 to avoid leaking
+      // that a call with this id exists for some other user pair.
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
+    }
+    if (
+      call.status !== CallStatus.SCHEDULED &&
+      call.status !== CallStatus.WAITING_FOR_PARTIES
+    ) {
+      await client.query('ROLLBACK');
+      return new ServiceError('call_not_joinable', CALL_MESSAGES.NOT_JOINABLE, 409, {
+        status: ['Call is not in a declinable state'],
+      });
+    }
+
+    // Polite window starts at booking.start_at (the same instant the
+    // call-starter cron flips the call to `waiting_for_parties`). Using
+    // start_at — rather than the flip timestamp — keeps the window
+    // honest even if the cron is briefly late.
+    const cfg = platformConfig.bookings();
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - booking.start_at.getTime()) / 1000),
+    );
+    const reason: 'polite_decline' | 'no_show_grace' =
+      elapsedSeconds <= cfg.polite_decline_window_seconds
+        ? 'polite_decline'
+        : 'no_show_grace';
+
+    await repo.recordEvent(client, {
+      callId: call.id,
+      eventType: 'callee_declined',
+      payload: { user_id: userId, source: 'api', elapsed_seconds: elapsedSeconds, reason },
+    });
+    await resolveCall(client, call.id, reason);
+
+    await client.query('COMMIT');
+    const fresh = await repo.findById(call.id);
+    return new ServiceSuccess(toView(fresh!), CALL_MESSAGES.DECLINED);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, callId }, 'declineCall tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ── GET /calls/joinable ─────────────────────────────────────────────────────
+//
+// Returns the calls that are *right now* ready for the user to join —
+// status `waiting_for_parties` or `in_progress`. Drives the web client's
+// sticky "Join now" banner (polled every 15s in MainShellLayout). The
+// list endpoint already supports a status filter; this is a narrow,
+// caller-or-callee aware view so the client can identify their role
+// without a second round-trip.
+
+export const listJoinableCalls = async (userId: string) => {
+  const rows = await repo.listJoinableForUser(userId);
+  const items = rows.map((r) => ({
+    call_id: r.id,
+    booking_id: r.booking_id,
+    status: r.status,
+    agora_channel_name: r.agora_channel_name,
+    start_at: r.start_at?.toISOString() ?? null,
+    duration_minutes: r.duration_minutes,
+    is_caller: r.caller_user_id === userId,
+    peer_user_id:
+      r.caller_user_id === userId ? r.callee_user_id : r.caller_user_id,
+    peer_full_name: r.peer_full_name,
+    peer_avatar_url: r.peer_avatar_url,
+  }));
+  return new ServiceSuccess({ items }, CALL_MESSAGES.JOINABLE_FETCHED);
+};
 
 export const leaveCall = async (callId: string, userId: string) => {
   const client = await pool.connect();

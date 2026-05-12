@@ -47,3 +47,14 @@ export const renewToken: RequestHandler = asyncHandler(async (req: Request, res:
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
+
+export const decline: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.declineCall(String(req.params['id']), req.userId!);
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const listJoinable: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.listJoinableCalls(req.userId!);
+  ResponseUtil.ok(res, r.data.items);
+});

@@ -7,6 +7,17 @@ export interface BookingInterval {
   end: Date;
 }
 
+/**
+ * A pro's recurring "do-not-book" window expressed as minute-of-day in
+ * the request's `tz`. `endMinute` is exclusive. A slot at wall-clock
+ * `m` (with duration D minutes) overlaps the block when
+ * `m < endMinute AND m + D > startMinute`.
+ */
+export interface BookingBlockMinutes {
+  startMinute: number;
+  endMinute: number;
+}
+
 interface BuildSlotsInput {
   // The window is interpreted as midnight-to-midnight in `tz`. `fromDate` and
   // `toDateExclusive` carry the date components only (their UTC clock parts
@@ -19,6 +30,10 @@ interface BuildSlotsInput {
   // Live pending/confirmed bookings on the callee that overlap the window.
   // Slots that intersect any of these are marked unavailable.
   bookings?: BookingInterval[];
+  // Pro-declared recurring time-of-day exclusions. Same merge semantics as
+  // bookings — any slot whose wall-clock duration intersects a block is
+  // marked unavailable. Empty array (or omitted) means no exclusions.
+  blocks?: BookingBlockMinutes[];
   // The duration the caller intends to book. A slot at `slot_start` is
   // available only if `[slot_start, slot_start + bookingDurationMinutes)`
   // (a) fits inside the daily window and (b) doesn't overlap any booking.
@@ -40,6 +55,7 @@ export const buildSlotGrid = ({
   tz,
   now,
   bookings = [],
+  blocks = [],
   bookingDurationMinutes,
 }: BuildSlotsInput): AvailabilityDay[] => {
   const days: AvailabilityDay[] = [];
@@ -78,7 +94,15 @@ export const buildSlotGrid = ({
         (b) => slotStart < b.end && slotEnd > b.start,
       );
 
-      const available = slotStart >= minBookableAt && fitsInWindow && !overlapsBooking;
+      // Pro-declared exclusion: compare in wall-clock minutes within the
+      // current day. The booking's wall-clock range is [m, m + duration).
+      const slotEndMinute = m + durationMinutes;
+      const overlapsBlock = blocks.some(
+        (block) => m < block.endMinute && slotEndMinute > block.startMinute,
+      );
+
+      const available =
+        slotStart >= minBookableAt && fitsInWindow && !overlapsBooking && !overlapsBlock;
 
       slots.push({
         start_at: slotStart.toISOString(),
@@ -157,6 +181,55 @@ const formatYMD = (y: number, m: number, d: number): string => {
   const mm = String(m + 1).padStart(2, '0');
   const dd = String(d).padStart(2, '0');
   return `${yy}-${mm}-${dd}`;
+};
+
+/**
+ * Given a UTC instant + IANA tz, returns the wall-clock minute-of-day in
+ * that tz. Used to evaluate whether a booking attempt at a specific UTC
+ * instant falls inside a pro's recurring block (`{startMinute, endMinute}`).
+ *
+ * Example: 2026-05-10T12:00:00Z in Africa/Lagos (UTC+1) → 13*60 = 780.
+ */
+export const wallClockMinuteInTz = (instant: Date, tz: string): number => {
+  const offsetMin = ianaOffsetMinutes(tz, instant);
+  const local = new Date(instant.getTime() + offsetMin * 60_000);
+  return local.getUTCHours() * 60 + local.getUTCMinutes();
+};
+
+/**
+ * True when the booking interval `[startAt, startAt + durationMinutes)`
+ * intersects any of [blocks] interpreted in the given IANA tz. Same
+ * algorithm `buildSlotGrid` uses, exposed for the booking-create guard.
+ *
+ * Blocks are recurring (every day), so an interval that crosses midnight
+ * is checked as two halves; in v1 the schema rejects cross-midnight
+ * blocks so we only need to walk forward minute-of-day until we exceed
+ * 1440 minutes.
+ */
+export const bookingHitsBlock = (
+  startAt: Date,
+  durationMinutes: number,
+  blocks: ReadonlyArray<BookingBlockMinutes>,
+  tz: string,
+): boolean => {
+  if (blocks.length === 0) return false;
+  const startMinute = wallClockMinuteInTz(startAt, tz);
+  // Booking duration walks forward in wall-clock minutes. If the booking
+  // crosses midnight, the second half wraps into the next day's 0..N
+  // range; check both halves.
+  const total = startMinute + durationMinutes;
+  if (total <= 1440) {
+    return blocks.some(
+      (b) => startMinute < b.endMinute && total > b.startMinute,
+    );
+  }
+  const firstEnd = 1440;
+  const secondEnd = total - 1440;
+  return blocks.some(
+    (b) =>
+      (startMinute < b.endMinute && firstEnd > b.startMinute) ||
+      (0 < b.endMinute && secondEnd > b.startMinute),
+  );
 };
 
 export const validateIanaTz = (tz: string): boolean => {

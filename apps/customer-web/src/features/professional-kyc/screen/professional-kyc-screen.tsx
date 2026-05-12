@@ -49,6 +49,14 @@ export function ProfessionalKycScreen() {
             missing ? `Still incomplete: ${missing}` : 'Some items are still missing.',
             { type: 'error' },
           );
+        } else if (e.code === 'resubmit_unchanged') {
+          const stale = (e.field_errors?.['item_keys'] ?? []).join(', ');
+          DrawerService.toast(
+            stale
+              ? `Update ${stale} before resubmitting.`
+              : 'Update the flagged items before resubmitting.',
+            { type: 'error' },
+          );
         } else {
           DrawerService.toast('Could not complete KYC. Please try again.', { type: 'error' });
         }
@@ -57,8 +65,36 @@ export function ProfessionalKycScreen() {
   };
 
   const visibleItems = spec.items.filter((i) => i.enabled);
-  const requiredItems = visibleItems.filter((i) => i.required);
+  // When the user is in a partial-rejection state, scope progress + the
+  // Proceed gate to ONLY the items the admin flagged. Items outside the
+  // set are locked and shouldn't pull the progress bar back to "10/12".
+  const resubmitKeys = spec.resubmission?.item_keys ?? null;
+  const acknowledgedKeys = spec.resubmission?.acknowledged_keys ?? null;
+  const scopedItems =
+    resubmitKeys && resubmitKeys.length > 0
+      ? visibleItems.filter((i) => resubmitKeys.includes(i.key))
+      : visibleItems;
+  const requiredItems = scopedItems.filter((i) => i.required);
   const completedRequired = requiredItems.filter((i) => i.complete).length;
+  // For partial resubmits the user must actually touch every flagged
+  // key — `acknowledged_keys` reflects what the server has registered as
+  // patched since the rejection. `bank_account` and `rates` count
+  // automatically when the data exists (server treats them as passive).
+  const PASSIVELY_ACKNOWLEDGED = new Set(['bank_account', 'rates']);
+  const dirtyResubmitOk =
+    resubmitKeys === null || resubmitKeys.length === 0
+      ? true
+      : resubmitKeys.every((k) => {
+          if (acknowledgedKeys?.includes(k)) return true;
+          if (PASSIVELY_ACKNOWLEDGED.has(k)) {
+            const item = visibleItems.find((i) => i.key === k);
+            return item?.complete === true;
+          }
+          return false;
+        });
+  const allRequiredComplete =
+    requiredItems.length > 0 && completedRequired === requiredItems.length;
+  const canProceed = allRequiredComplete && dirtyResubmitOk;
 
   return (
     <main className="flex min-h-screen flex-col bg-surface-light">
@@ -81,26 +117,32 @@ export function ProfessionalKycScreen() {
           <KycProgressHeader
             completed={completedRequired}
             total={requiredItems.length}
-            percent={spec.total_required === 0 ? 0 : Math.round((completedRequired / requiredItems.length) * 100)}
+            percent={
+              requiredItems.length === 0
+                ? 0
+                : Math.round((completedRequired / requiredItems.length) * 100)
+            }
           />
           <div className="mt-5">
             <AppText variant="body" align="start" color="var(--ohl-text-muted)">
-              Setup steps
+              {resubmitKeys && resubmitKeys.length > 0 ? 'Items to update' : 'Setup steps'}
             </AppText>
           </div>
           <div className="mt-2.5">
-            <KycItemsList items={visibleItems} />
+            <KycItemsList items={visibleItems} resubmitKeys={resubmitKeys} />
           </div>
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-xl px-4 pb-4 pt-2 lg:max-w-2xl">
         <AppButton
-          label="Proceed"
+          label={
+            resubmitKeys && resubmitKeys.length > 0 ? 'Resubmit for review' : 'Proceed'
+          }
           expanded
           radius={100}
-          isDisabled={!spec.all_complete || completeKyc.isPending}
-          onPressed={spec.all_complete ? handleProceed : undefined}
+          isDisabled={!canProceed || completeKyc.isPending}
+          onPressed={canProceed ? handleProceed : undefined}
         />
       </div>
     </main>
