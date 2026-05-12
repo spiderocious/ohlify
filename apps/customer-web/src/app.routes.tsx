@@ -1,15 +1,33 @@
 import { lazy, Suspense, type ReactElement } from 'react';
-import { createBrowserRouter, Navigate, Outlet as RouterOutlet, type RouteObject } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  Navigate,
+  Outlet as RouterOutlet,
+  type RouteObject,
+} from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
+import { AppLoader, AppText } from '@ohlify/ui';
 import { AppEntrypoint } from './app.entrypoint.js';
 import { AuthGuard } from './shared/guards/auth-guard.js';
 import { OnboardingGuard } from './shared/guards/onboarding-guard.js';
 import { RegisterProvider } from './features/auth-register/providers/register-provider.js';
 import { ForgotPasswordProvider } from './features/auth-forgot-password/providers/forgot-password-provider.js';
 
-function RegisterLayout() { return <RegisterProvider><RouterOutlet /></RegisterProvider>; }
-function ForgotPasswordLayout() { return <ForgotPasswordProvider><RouterOutlet /></ForgotPasswordProvider>; }
+function RegisterLayout() {
+  return (
+    <RegisterProvider>
+      <RouterOutlet />
+    </RegisterProvider>
+  );
+}
+function ForgotPasswordLayout() {
+  return (
+    <ForgotPasswordProvider>
+      <RouterOutlet />
+    </ForgotPasswordProvider>
+  );
+}
 
 const SplashScreen = lazy(() =>
   import('./features/splash/screen/splash-screen.js').then((m) => ({ default: m.SplashScreen })),
@@ -47,9 +65,9 @@ const ForgotPasswordScreen = lazy(() =>
   })),
 );
 const ForgotPasswordVerifyOtpScreen = lazy(() =>
-  import(
-    './features/auth-forgot-password/screen/forgot-password-verify-otp-screen.js'
-  ).then((m) => ({ default: m.ForgotPasswordVerifyOtpScreen })),
+  import('./features/auth-forgot-password/screen/forgot-password-verify-otp-screen.js').then(
+    (m) => ({ default: m.ForgotPasswordVerifyOtpScreen }),
+  ),
 );
 const ResetPasswordScreen = lazy(() =>
   import('./features/auth-forgot-password/screen/reset-password-screen.js').then((m) => ({
@@ -199,10 +217,23 @@ const CallRatingScreen = lazy(() =>
   })),
 );
 
-function lazyRoute(element: ReactElement): ReactElement {
+function RouteFallback() {
   return (
-    <Suspense fallback={<div className="p-6 text-text-muted">Loading…</div>}>{element}</Suspense>
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-surface-light"
+    >
+      <AppLoader size={36} />
+      <AppText variant="body" align="center" color="var(--ohl-text-muted)">
+        Loading…
+      </AppText>
+    </div>
   );
+}
+
+function lazyRoute(element: ReactElement): ReactElement {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
 }
 
 const routes: RouteObject[] = [
