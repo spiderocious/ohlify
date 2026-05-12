@@ -5,14 +5,21 @@
     "node": "20",
     "pnpm": "9.15.9"
   },
+  "caches": {
+    "pnpm-store": {
+      "directory": "/root/.local/share/pnpm/store",
+      "type": "shared"
+    }
+  },
   "steps": {
     "install": {
       "commands": [
         "corepack enable",
+        "pnpm config set store-dir /root/.local/share/pnpm/store",
         "pnpm install --frozen-lockfile"
       ],
       "caches": [
-        ".pnpm-store"
+        "pnpm-store"
       ]
     },
     "build": {
