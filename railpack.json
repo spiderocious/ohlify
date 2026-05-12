@@ -30,7 +30,10 @@
     }
   },
   "deploy": {
-    "inputs": [{ "step": "build" }],
+    "base": { "image": "node:20-slim" },
+    "inputs": [
+      { "step": "build", "include": ["."] }
+    ],
     "startCommand": "node apps/backend/dist/server.js"
   }
 }
