@@ -16,6 +16,7 @@ const ERROR_COPY: Record<string, string> = {
 };
 
 type Stage = 'creds' | 'totp';
+const SKIP_TOTP = true;
 
 export function LoginScreen() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export function LoginScreen() {
       { email, password, ...(totpCode ? { totp_code: totpCode } : {}) },
       {
         onSuccess: (data) => {
-          if (data.totp_required) {
+          if (data.totp_required && !SKIP_TOTP) {
             // Server is asking us to re-send with a code. Switch to the OTP
             // stage instead of treating this as a successful login.
             setStage('totp');

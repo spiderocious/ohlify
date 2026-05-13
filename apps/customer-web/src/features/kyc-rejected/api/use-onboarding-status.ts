@@ -20,6 +20,11 @@ export function useOnboardingStatus() {
         .json<{ data: OnboardingStatusResponse }>()
         .then((r) => r.data),
     staleTime: 30_000,
+    // The rejection screen needs to react to admin decisions taken
+    // while the tab was backgrounded — focusing the tab triggers a
+    // refetch so the under-review face appears (or vanishes) without
+    // a manual reload.
+    refetchOnWindowFocus: true,
   });
 }
 

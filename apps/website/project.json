@@ -1,0 +1,29 @@
+{
+  "name": "website",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/website/src",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm dev", "cwd": "apps/website" }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm build", "cwd": "apps/website" },
+      "dependsOn": ["^build"]
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm start", "cwd": "apps/website" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm typecheck", "cwd": "apps/website" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm lint", "cwd": "apps/website" }
+    }
+  }
+}

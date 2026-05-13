@@ -1,0 +1,53 @@
+[
+  {
+    "id": "p_demo_1",
+    "name": "Dr. Adedeji Okonkwo",
+    "role": "Cardiologist",
+    "tagline": "12 years · Heart and vascular",
+    "rating": 4.9,
+    "reviewCount": 312,
+    "avatarTone": "ember",
+    "rates": [
+      { "kind": "audio", "minutes": 15, "naira": 7500 },
+      { "kind": "video", "minutes": 30, "naira": 15000 }
+    ]
+  },
+  {
+    "id": "p_demo_2",
+    "name": "Funmi Bello",
+    "role": "Career coach",
+    "tagline": "Ex-McKinsey · 1,000+ hours",
+    "rating": 4.8,
+    "reviewCount": 184,
+    "avatarTone": "violet",
+    "rates": [
+      { "kind": "audio", "minutes": 30, "naira": 12000 },
+      { "kind": "video", "minutes": 60, "naira": 22000 }
+    ]
+  },
+  {
+    "id": "p_demo_3",
+    "name": "Chinwe Adekunle",
+    "role": "Immigration lawyer",
+    "tagline": "Bar 2014 · UK / Canada / US",
+    "rating": 4.9,
+    "reviewCount": 96,
+    "avatarTone": "emerald",
+    "rates": [
+      { "kind": "audio", "minutes": 30, "naira": 18000 },
+      { "kind": "video", "minutes": 60, "naira": 35000 }
+    ]
+  },
+  {
+    "id": "p_demo_4",
+    "name": "Tunde Bakare",
+    "role": "Tax accountant",
+    "tagline": "ICAN · SMEs and freelancers",
+    "rating": 4.7,
+    "reviewCount": 64,
+    "avatarTone": "amber",
+    "rates": [
+      { "kind": "audio", "minutes": 15, "naira": 5000 }
+    ]
+  }
+]

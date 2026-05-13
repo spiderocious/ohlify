@@ -1,0 +1,239 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Editorial color story, anchored to the @ohlify/ui brand palette.
+ * The marketing site overrides the cool product surface with a softer
+ * off-white (cream→nude bridge) but anchors all accents to the real
+ * brand violet (--ohl-primary, #4a3fe5) so colours stay in sync with
+ * the customer-web app.
+ */
+:root {
+  --ink: #0d0c0a;
+  --ink-soft: #2a2520;
+
+  /* Soft off-white that complements violet without competing with it. */
+  --paper: #fbfaf7;
+  --paper-elev: #ffffff;
+  --paper-line: #ece8df;
+  --muted: #6b6256;
+
+  /* Brand. Bound to the @ohlify/ui token for source-of-truth parity. */
+  --accent: var(--ohl-primary, #4a3fe5);
+  --accent-soft: var(--ohl-secondary, #e0defb);
+  --highlight: var(--ohl-accent, #fbbf24);
+
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  background: var(--paper);
+}
+
+body {
+  font-family: 'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Display face for marketing headlines. MonaSans stays the body face. */
+.font-display {
+  font-family: 'Fraunces Variable', 'Fraunces', ui-serif, Georgia, serif;
+  font-feature-settings: 'ss01';
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.eyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.divider-rule {
+  height: 1px;
+  background: var(--paper-line);
+}
+
+/* Reveal-on-scroll. Honored only when motion is allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(10px);
+    transition:
+      opacity 600ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Vertical noun ticker. v1 broke because `display: inline-flex` defaults
+ * to `flex-direction: row` — the five spans stacked side-by-side and
+ * the `translateY` slid across whitespace. v2 stacks them in a column
+ * inside a clip mask so each word reveals in turn.
+ *
+ * 25s loop, five entries, 1.6s settle on each word. If you change the
+ * entry count, update the keyframes step percentages — the math is
+ * `100 / count` for each word's translateY.
+ */
+.noun-ticker {
+  display: inline-block;
+  vertical-align: top;
+  height: 1.1em;
+  line-height: 1.1;
+  overflow: hidden;
+  position: relative;
+  /* Width:auto means the wrapper grows to the widest noun; we set a
+   * min via the longest word at render time. No `width: max-content`
+   * because that would jitter mid-cycle. */
+}
+.noun-ticker > .noun-ticker__track {
+  display: flex;
+  flex-direction: column;
+  animation: noun-tick 25s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  will-change: transform;
+}
+.noun-ticker > .noun-ticker__track > span {
+  display: block;
+  height: 1.1em;
+  white-space: nowrap;
+}
+@keyframes noun-tick {
+  0%,   16% { transform: translateY(0); }
+  20%,  36% { transform: translateY(-1.1em); }
+  40%,  56% { transform: translateY(-2.2em); }
+  60%,  76% { transform: translateY(-3.3em); }
+  80%,  96% { transform: translateY(-4.4em); }
+  100%      { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .noun-ticker > .noun-ticker__track { animation: none; }
+}
+
+/*
+ * Phone hardware mockup. 272×560 default — chosen to give the hero
+ * typography breathing room.
+ */
+.phone-frame {
+  position: relative;
+  width: 272px;
+  height: 560px;
+  border-radius: 40px;
+  background: var(--ink);
+  box-shadow:
+    0 50px 100px -40px rgba(13, 12, 10, 0.45),
+    0 20px 30px -20px rgba(13, 12, 10, 0.25),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.05);
+  padding: 8px;
+}
+.phone-frame::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96px;
+  height: 24px;
+  background: #050505;
+  border-radius: 24px;
+  z-index: 2;
+}
+.phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 32px;
+  overflow: hidden;
+  background: var(--paper-elev);
+}
+
+.phone-frame--lg {
+  width: 320px;
+  height: 660px;
+  border-radius: 44px;
+}
+.phone-frame--lg::before {
+  width: 110px;
+  height: 28px;
+}
+.phone-frame--lg .phone-screen {
+  border-radius: 36px;
+}
+
+.surface-invert {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.section-rule {
+  position: relative;
+}
+.section-rule::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(280px, 80vw, 1080px);
+  height: 1px;
+  background: var(--paper-line);
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/*
+ * Hero waves. SVG layer behind the content, organic blobs that drift
+ * slowly across the viewport on `translate` + `scale`. Three blob
+ * paths, three offset durations, all in violet at 8–14% alpha so the
+ * type stays legible. GPU-only animation, no JS, no Framer.
+ */
+.hero-waves {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.hero-waves__blob {
+  position: absolute;
+  filter: blur(40px);
+  opacity: 0.55;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-waves__blob--a { animation: blob-drift-a 32s ease-in-out infinite; }
+  .hero-waves__blob--b { animation: blob-drift-b 38s ease-in-out infinite; }
+  .hero-waves__blob--c { animation: blob-drift-c 44s ease-in-out infinite; }
+}
+@keyframes blob-drift-a {
+  0%, 100% { transform: translate3d(-4%, 0, 0) scale(1); }
+  50%      { transform: translate3d(6%, 8%, 0) scale(1.08); }
+}
+@keyframes blob-drift-b {
+  0%, 100% { transform: translate3d(2%, -2%, 0) scale(1.02); }
+  50%      { transform: translate3d(-6%, 4%, 0) scale(0.95); }
+}
+@keyframes blob-drift-c {
+  0%, 100% { transform: translate3d(0, 4%, 0) scale(0.98); }
+  50%      { transform: translate3d(5%, -3%, 0) scale(1.06); }
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "q": "Who can I book on Ohlify?",
+    "a": "Verified professionals across healthcare, law, finance, coaching, design, engineering, and more. Every professional completes a KYC check — identity, credentials, and a video selfie — before they can take their first booking."
+  },
+  {
+    "q": "How much does a call cost?",
+    "a": "Each professional sets their own rate per call type and duration. You see the price up-front before you confirm a booking. No surprise add-ons; no subscriptions."
+  },
+  {
+    "q": "What happens if my professional doesn't show up?",
+    "a": "You're refunded automatically. Our system tracks join states for both parties — if the professional hasn't joined within the grace window, the booking is voided, your money returns to your wallet, and the professional receives a strike on their record."
+  },
+  {
+    "q": "Is my payment secure?",
+    "a": "Payments are processed by Paystack and held in an escrow ledger that follows double-entry accounting. We never store your card details. Refunds happen automatically over the same channel."
+  },
+  {
+    "q": "Can I cancel a booking?",
+    "a": "Yes. Cancel outside the cancellation window for a full refund. Inside the window, a small penalty may apply — the exact rules sit on each professional's profile."
+  },
+  {
+    "q": "How do professionals get paid?",
+    "a": "When a call ends successfully, the professional's share lands in their in-app wallet. They withdraw to their verified bank account and we settle within minutes."
+  },
+  {
+    "q": "Where is Ohlify available?",
+    "a": "We're starting in Nigeria with Nigerian payment rails, but the product is built for global use. New countries roll out as we onboard payment partners."
+  },
+  {
+    "q": "How do I become a professional on Ohlify?",
+    "a": "Tap \"Earn on Ohlify\" anywhere on the site. You'll complete a short KYC (ID, bank account, role, rates) and our review team usually approves within 24 hours."
+  }
+]

@@ -1,0 +1,14 @@
+[build]
+  base = "apps/website"
+  command = "pnpm install --filter @ohlify/website... && pnpm --filter @ohlify/website build"
+  publish = ".next"
+
+# Native Next.js support on Netlify. The plugin handles middleware,
+# image optimization, and route hashing automatically. No additional
+# redirects/headers blocks needed — the marketing site's middleware
+# owns the share-slug → app.ohlify.com hop.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  node_bundler = "esbuild"
