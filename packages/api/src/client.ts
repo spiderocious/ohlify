@@ -14,6 +14,7 @@ let _baseUrl = window?.BASE_URL;
 let refreshPromise: Promise<void> | null = null;
 
 export function configureApiClient(baseUrl: string) {
+  console.log('Configuring API client with base URL:', baseUrl);
   if (!baseUrl) {
     throw new Error('configureApiClient called without a base URL — check VITE_API_URL');
   }
@@ -22,7 +23,8 @@ export function configureApiClient(baseUrl: string) {
 
 export const apiClient: KyInstance = ky.create({
   get prefixUrl() {
-    return _baseUrl;
+    console.log('Using API base URL:', _baseUrl);
+    return window?.BASE_URL || _baseUrl;
   },
   headers: { 'Content-Type': 'application/json' },
   hooks: {
