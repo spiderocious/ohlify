@@ -521,18 +521,44 @@ Sets the user's role. Once role is "confirmed" (any KYC progress made or `full_n
 
 ### Responses
 
-#### 200 OK
+#### 200 OK (role changed — tokens included)
 
 ```json
 {
   "data": {
     "role": "professional",
-    "next_step": "professional_kyc"
+    "next_step": "professional_kyc",
+    "tokens": {
+      "access_token": "eyJhbGc...",
+      "refresh_token": "rt_...",
+      "expires_in": 900
+    }
   }
 }
 ```
 
 `next_step` is `"professional_kyc"` for `role: "professional"` and `"client_kyc"` for `role: "client"`.
+
+**Tokens contract (read carefully).** When the role actually changes, the server:
+
+1. Flips `users.role` in the DB.
+2. **Revokes every prior `auth_sessions` row** for this user.
+3. Mints a fresh access + refresh token pair from the post-flip user row.
+
+The `tokens` field is **only present when the role changed**. A no-op same-role call (e.g. user re-confirms `client` while already `client`) omits `tokens` entirely and the existing access token stays valid.
+
+When `tokens` IS present, the client **MUST save them before the next request.** The role lives in the access-token payload (`payload.role`), so any `requireRole`-gated endpoint hit with the OLD token will return `401 session_revoked` (or 403 against a stale token that hasn't been revoked yet). See [`docs/role-jwt-stale-handoff.md`](../docs/role-jwt-stale-handoff.md) for the full rationale.
+
+#### 200 OK (no-op same-role call — no tokens)
+
+```json
+{
+  "data": {
+    "role": "client",
+    "next_step": "client_kyc"
+  }
+}
+```
 
 #### 400 Bad Request — validation
 

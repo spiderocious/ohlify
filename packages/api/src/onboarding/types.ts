@@ -56,6 +56,31 @@ export interface OnboardingStatusResponse {
   kyc_rejection: KycRejection | null;
 }
 
+/**
+ * Response from `POST /api/v1/onboarding/role`.
+ *
+ * `tokens` is **present only when the role actually changed.** A
+ * same-role no-op call (e.g. user re-confirms `client` while already
+ * `client`) omits it — the existing access token is still valid and
+ * we don't want to needlessly invalidate it.
+ *
+ * When `tokens` IS present, the previously-issued access + refresh
+ * tokens have been revoked server-side. The client MUST persist these
+ * new tokens BEFORE making the next request, or every subsequent
+ * `requireRole`-gated endpoint will 401 (`session_revoked`).
+ *
+ * See `docs/role-jwt-stale-handoff.md` for the full rationale.
+ */
+export interface OnboardingSetRoleResponse {
+  role: 'client' | 'professional';
+  next_step: OnboardingStep;
+  tokens?: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+}
+
 export type IdentityType = 'nin' | 'bvn' | 'passport' | 'drivers_license';
 
 /**

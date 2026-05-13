@@ -1,16 +1,14 @@
 import crypto from 'node:crypto';
 
+import * as authRepo from '@features/auth/auth.repo.js';
+import { mintTokens } from '@features/auth/auth.service.js';
 import type { UserRow } from '@features/auth/auth.types.js';
 import { invalidateProfessionalCaches } from '@features/professionals/professionals.cache.js';
 import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { HANDLE_REGEX, RESERVED_HANDLES } from '@shared/constants/reserved-handles.js';
 
-import {
-  buildKycSpec,
-  findActiveResubmitSet,
-  findIncompleteKeys,
-} from './onboarding.kyc-spec.js';
+import { buildKycSpec, findActiveResubmitSet, findIncompleteKeys } from './onboarding.kyc-spec.js';
 import { ONBOARDING_MESSAGES } from './onboarding.messages.js';
 import * as repo from './onboarding.repo.js';
 import type {
@@ -53,7 +51,6 @@ const sanitizeItemKeys = (raw: string[] | null | undefined): KycItemKey[] => {
 const HANDLE_CHECK_CACHE_TTL = 60;
 const HANDLE_CHANGE_COOLDOWN_DAYS = 30;
 const HANDLE_REDIRECT_DAYS = 90;
-
 
 // ── Status / progress helpers ────────────────────────────────────────────────
 //
@@ -147,7 +144,11 @@ export const getStatus = async (userId: string) => {
 
 // ── POST /onboarding/role ────────────────────────────────────────────────────
 
-export const setRole = async (dto: SetRoleDto, userId: string) => {
+export const setRole = async (
+  dto: SetRoleDto,
+  userId: string,
+  meta: { userAgent?: string | undefined; ip?: string | undefined } = {},
+) => {
   const user = await repo.findUserById(userId);
   if (!user) {
     return new ServiceError('token_invalid', ONBOARDING_MESSAGES.ROLE_SET, 401);
@@ -160,13 +161,39 @@ export const setRole = async (dto: SetRoleDto, userId: string) => {
     return new ServiceError('role_already_set', ONBOARDING_MESSAGES.ROLE_SET, 409);
   }
 
-  if (user.role !== dto.role) {
-    await repo.setUserRole(userId, dto.role);
-  }
-
   const nextStep: OnboardingStep = dto.role === 'professional' ? 'professional_kyc' : 'client_kyc';
 
-  return new ServiceSuccess({ role: dto.role, next_step: nextStep }, ONBOARDING_MESSAGES.ROLE_SET);
+  // No-op same-role call: skip the flip + token rotation entirely. The
+  // user's existing access token is still valid; re-minting here would
+  // needlessly invalidate it (and any other open session — rare during
+  // onboarding, but real and harmless to avoid).
+  if (user.role === dto.role) {
+    return new ServiceSuccess(
+      { role: dto.role, next_step: nextStep },
+      ONBOARDING_MESSAGES.ROLE_SET,
+    );
+  }
+
+  // Role actually changing: flip the column, revoke every prior session
+  // (the user is mid-onboarding — they don't have parallel sessions to
+  // preserve, and any lingering ones carry the stale role in their
+  // baked JWT), and mint a fresh token pair from the post-flip row. The
+  // client MUST save these tokens before the next request or every
+  // `requireRole`-gated endpoint will 403. See docs/role-jwt-stale-handoff.md.
+  await repo.setUserRole(userId, dto.role);
+  await authRepo.revokeAllUserSessions(userId);
+  const fresh = await repo.findUserById(userId);
+  if (!fresh) {
+    // Race: user was soft-deleted between the role flip and the re-read.
+    // Treat as auth failure — the client should clear its session.
+    return new ServiceError('token_invalid', ONBOARDING_MESSAGES.ROLE_SET, 401);
+  }
+  const tokens = await mintTokens(fresh, meta);
+
+  return new ServiceSuccess(
+    { role: dto.role, next_step: nextStep, tokens },
+    ONBOARDING_MESSAGES.ROLE_SET,
+  );
 };
 
 // ── PATCH /onboarding/kyc/client ─────────────────────────────────────────────
@@ -318,6 +345,7 @@ export const patchProfessionalKyc = async (dto: ProfessionalKycPatchDto, userId:
   // `document_upload_key` field; fall back to the legacy `document_upload_id`
   // for old slice clients (both store into the same column).
   if (dto.identity !== undefined) {
+    // eslint-disable-next-line sonarjs/deprecation
     const docKey = dto.identity.document_upload_key ?? dto.identity.document_upload_id;
     await repo.upsertKycSubmission({
       userId,
@@ -571,16 +599,11 @@ export const completeKyc = async (userId: string) => {
     if (latest?.status === 'rejected' && flagged.length > 0) {
       const acknowledged = new Set<string>(latest.reject_acknowledged_keys ?? []);
       const passive = new Set<string>(PASSIVELY_ACKNOWLEDGED);
-      const stillNeeded = flagged.filter(
-        (k) => !acknowledged.has(k) && !passive.has(k),
-      );
+      const stillNeeded = flagged.filter((k) => !acknowledged.has(k) && !passive.has(k));
       if (stillNeeded.length > 0) {
-        return new ServiceError(
-          'resubmit_unchanged',
-          ONBOARDING_MESSAGES.KYC_SUBMITTED,
-          422,
-          { item_keys: stillNeeded.map(String) },
-        );
+        return new ServiceError('resubmit_unchanged', ONBOARDING_MESSAGES.KYC_SUBMITTED, 422, {
+          item_keys: stillNeeded.map(String),
+        });
       }
     }
   }

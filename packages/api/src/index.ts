@@ -17,6 +17,7 @@ export type {
   KycStatus,
   KycProgress,
   KycRejection,
+  OnboardingSetRoleResponse,
   OnboardingStatusResponse,
   IdentityType,
   HandleCheckResponse,
@@ -80,13 +81,7 @@ export type {
   WithdrawalResponse,
   TransactionType as WalletTransactionType,
 } from './wallet/types.js';
-export type {
-  ContentBlock,
-  LegalDocument,
-  Faq,
-  HelpContact,
-  PublicConfig,
-} from './misc/types.js';
+export type { ContentBlock, LegalDocument, Faq, HelpContact, PublicConfig } from './misc/types.js';
 
 // Admin surface — endpoints, client, session, and all admin response types.
 // Exported under explicit names so customer-side imports never accidentally

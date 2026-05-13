@@ -37,7 +37,17 @@ const RESEND_MAX_PER_HOUR = 5;
 
 const sha256 = (value: string): string => crypto.createHash('sha256').update(value).digest('hex');
 
-const mintTokens = async (
+/**
+ * Mints a fresh access + refresh token pair for [user] and registers a
+ * matching row in `auth_sessions`. Exported so other features can re-mint
+ * after mutations that change something the JWT bakes in — today the
+ * only such mutation is `setRole` in onboarding (role lives in the
+ * access-token payload; without a re-mint every `requireRole` check
+ * silently 403s until the user logs out). When adding a new mutation
+ * that touches `users.role` (or any other JWT-baked field), call this
+ * here too.
+ */
+export const mintTokens = async (
   user: UserRow,
   meta: { userAgent?: string | undefined; ip?: string | undefined },
 ): Promise<TokenPair> => {
@@ -276,12 +286,8 @@ export const login = async (
   // duplicate the full step machine here — but we do flag rejection
   // explicitly so the client can short-circuit to the rejection screen
   // without an extra round-trip when it's a clear-cut case.
-  const onboardingStep =
-    user.kyc_status === 'rejected'
-      ? 'kyc_rejected'
-      : user.full_name
-        ? 'complete'
-        : 'profile';
+  const nextOnboardingStep = user.full_name ? 'complete' : 'profile';
+  const onboardingStep = user.kyc_status === 'rejected' ? 'kyc_rejected' : nextOnboardingStep;
 
   return new ServiceSuccess(
     {

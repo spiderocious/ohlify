@@ -16,6 +16,18 @@ export const findUserById = async (userId: string): Promise<UserRow | null> => {
   return res.rows[0] ?? null;
 };
 
+/**
+ * **CALLERS:** when you mutate `users.role`, you MUST also re-mint the
+ * user's access token (see `setRole` in onboarding.service.ts for the
+ * canonical pattern: revoke prior sessions → `mintTokens` from the
+ * fresh user row → return tokens in the response so clients save them
+ * before the next request).
+ *
+ * The role lives in the access-token payload (`payload.role`); stale
+ * tokens silently 403 on every `requireRole`-gated endpoint until the
+ * user logs out or hits `/auth/refresh`. See
+ * `docs/role-jwt-stale-handoff.md` for the full story.
+ */
 export const setUserRole = async (
   userId: string,
   role: 'client' | 'professional',
@@ -171,16 +183,17 @@ export const updateLatestSelfieKey = async (
  * they had to PATCH KYC to get here for the items to be complete) the
  * submission update is a no-op.
  */
-export const completeKycInTx = async (
-  userId: string,
-  status: KycStatus,
-): Promise<void> => {
+export const completeKycInTx = async (userId: string, status: KycStatus): Promise<void> => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const isApproved = status === 'approved';
-    const userSets: string[] = ['kyc_status = $1', 'kyc_submitted_at = now()', 'updated_at = now()'];
+    const userSets: string[] = [
+      'kyc_status = $1',
+      'kyc_submitted_at = now()',
+      'updated_at = now()',
+    ];
     const userParams: unknown[] = [status];
     if (isApproved) {
       userSets.push('kyc_reviewed_at = now()');

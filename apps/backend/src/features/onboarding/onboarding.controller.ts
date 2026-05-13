@@ -2,6 +2,7 @@ import type { Request, Response, RequestHandler } from 'express';
 
 import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
+import { requestMeta } from '@lib/http/request-meta.js';
 import { ResponseUtil } from '@lib/response.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
@@ -22,7 +23,7 @@ export const getStatus: RequestHandler = asyncHandler(async (req: Request, res: 
 });
 
 export const setRole: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.setRole(req.body as SetRoleDto, req.userId!);
+  const r = await service.setRole(req.body as SetRoleDto, req.userId!, requestMeta(req));
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

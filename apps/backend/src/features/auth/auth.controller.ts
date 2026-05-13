@@ -2,6 +2,7 @@ import type { Request, Response, RequestHandler } from 'express';
 
 import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
+import { requestMeta } from '@lib/http/request-meta.js';
 import { ResponseUtil } from '@lib/response.js';
 
 import type {
@@ -37,7 +38,7 @@ export const registerSetPassword: RequestHandler = asyncHandler(
 );
 
 export const registerVerify: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.registerVerify(req.body as RegisterVerifyDto, meta(req));
+  const r = await service.registerVerify(req.body as RegisterVerifyDto, requestMeta(req));
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
 });
@@ -49,13 +50,13 @@ export const resendOtp: RequestHandler = asyncHandler(async (req: Request, res: 
 });
 
 export const login: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.login(req.body as LoginDto, meta(req));
+  const r = await service.login(req.body as LoginDto, requestMeta(req));
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
 
 export const refresh: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.refresh(req.body as RefreshDto, meta(req));
+  const r = await service.refresh(req.body as RefreshDto, requestMeta(req));
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
@@ -104,8 +105,3 @@ export const requestSensitiveActionOtp: RequestHandler = asyncHandler(
     else ResponseUtil.ok(res, r.data);
   },
 );
-
-const meta = (req: Request): { ip?: string; userAgent?: string } => ({
-  ...(req.ip !== undefined ? { ip: req.ip } : {}),
-  ...(req.headers['user-agent'] !== undefined ? { userAgent: req.headers['user-agent'] } : {}),
-});
