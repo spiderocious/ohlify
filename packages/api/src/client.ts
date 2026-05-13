@@ -6,15 +6,11 @@ const storage = createTokenStorage();
 
 declare global {
   interface Window {
-    CONFIG: {
-      INJECT: {
-        baseUrl?: string;
-      };
-    };
+    BASE_URL: string;
   }
 }
 
-let _baseUrl = window.CONFIG.INJECT.baseUrl || 'http://localhost:8082/';
+let _baseUrl = window?.BASE_URL || 'http://localhost:8082/';
 let refreshPromise: Promise<void> | null = null;
 
 export function configureApiClient(baseUrl: string) {

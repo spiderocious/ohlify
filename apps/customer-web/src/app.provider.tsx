@@ -6,8 +6,8 @@ import '@ohlify/api/mocks/registry';
 import { AppConfigProvider } from './shared/providers/app-config-provider.js';
 
 const useMocks = import.meta.env['VITE_USE_MOCKS'] === '1';
-window.CONFIG.INJECT.baseUrl = import.meta.env['VITE_API_URL'];
-console.log(import.meta.env, "meta env", window.CONFIG.INJECT.baseUrl);
+window.BASE_URL = import.meta.env['VITE_API_URL'];
+console.log(import.meta.env, "meta env", window?.BASE_URL);
 
 if (!useMocks) {
   configureApiClient(import.meta.env['VITE_API_URL']);
