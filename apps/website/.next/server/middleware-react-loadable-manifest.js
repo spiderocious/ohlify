@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"src/components/demo/lazy-interactive-demo.tsx -> ./interactive-demo\":{\"id\":\"src/components/demo/lazy-interactive-demo.tsx -> ./interactive-demo\",\"files\":[\"static/chunks/_app-pages-browser_src_components_demo_interactive-demo_tsx.js\"]}}"
