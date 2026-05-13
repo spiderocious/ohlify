@@ -26,6 +26,6 @@
     }
   },
   "deploy": {
-    "startCommand": "node --import tsx apps/backend/node_modules/node-pg-migrate/bin/node-pg-migrate -m apps/backend/migrations --migration-file-language ts up && node apps/backend/dist/server.js"
+    "startCommand": "node --import tsx/esm apps/backend/node_modules/node-pg-migrate/bin/node-pg-migrate -m apps/backend/migrations --migration-file-language ts up && node apps/backend/dist/server.js"
   }
 }
