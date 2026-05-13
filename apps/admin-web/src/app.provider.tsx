@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { configureAdminApiClient } from '@ohlify/api';
 
-const apiBase = import.meta.env['VITE_API_URL'] ?? 'http://localhost:8082';
+const apiBase = import.meta.env['VITE_API_URL'];
 configureAdminApiClient(apiBase);
 
 interface AppProviderProps {
