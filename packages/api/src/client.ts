@@ -22,14 +22,14 @@ export function configureApiClient(baseUrl: string) {
 }
 
 const meta = import.meta as any;
-console.log('Using API base URL:', meta.env['VITE_API_URL'], _baseUrl);
+console.log(meta?.env, 'Using API base URL:', meta?.env?.['VITE_API_URL'], _baseUrl);
 
 export const apiClient: KyInstance = ky.create({
   // get prefixUrl() {
   //   console.log('Using API base URL:', _baseUrl);
   //   return window?.BASE_URL || _baseUrl;
   // },
-  prefixUrl: meta.env['VITE_API_URL'] || _baseUrl,
+  prefixUrl: meta?.env?.['VITE_API_URL'] || _baseUrl,
   headers: { 'Content-Type': 'application/json' },
   hooks: {
     beforeRequest: [
