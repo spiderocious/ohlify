@@ -6,11 +6,21 @@ import '@ohlify/api/mocks/registry';
 import { AppConfigProvider } from './shared/providers/app-config-provider.js';
 
 const useMocks = import.meta.env['VITE_USE_MOCKS'] === '1';
-window.BASE_URL = import.meta.env['VITE_API_URL'];
-console.log(import.meta.env, "meta env", window?.BASE_URL);
 
+// Configure the API client AT MODULE LOAD, before any component renders or any
+// query hook fires. Without this, hooks that import { apiClient } from
+// '@ohlify/api' would proxy through to an uninitialized singleton and throw.
 if (!useMocks) {
-  configureApiClient(import.meta.env['VITE_API_URL']);
+  const baseUrl = import.meta.env['VITE_API_URL'];
+  if (!baseUrl) {
+    // Fail fast in dev/preview/prod alike — silently routing to the document
+    // origin (the bug this whole refactor exists to kill) is far worse than a
+    // visible error at boot.
+    throw new Error(
+      'VITE_API_URL is not set. Configure it in your environment before building.',
+    );
+  }
+  configureApiClient(baseUrl);
 }
 
 interface AppProviderProps {
@@ -30,9 +40,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppConfigProvider>
-        {children}
-      </AppConfigProvider>
+      <AppConfigProvider>{children}</AppConfigProvider>
     </QueryClientProvider>
   );
 }

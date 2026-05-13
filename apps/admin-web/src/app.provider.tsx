@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { configureAdminApiClient } from '@ohlify/api';
 
 const apiBase = import.meta.env['VITE_API_URL'];
-window.CONFIG.INJECT.baseUrl = apiBase;
+if (!apiBase) {
+  throw new Error('VITE_API_URL is not set for admin-web.');
+}
 configureAdminApiClient(apiBase);
 
 interface AppProviderProps {
