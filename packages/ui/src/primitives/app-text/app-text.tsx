@@ -177,6 +177,7 @@ export function AppText({
         }
       : {}),
     ...style,
+    display: "block"
   };
 
   return (

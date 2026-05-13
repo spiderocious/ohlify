@@ -25,7 +25,7 @@ export function KycReviewBanner() {
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800">
         <IconClock size={14} />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex-col gap-0.5 lg:gap-1">
         <AppText
           variant="bodySmall"
           weight={700}
