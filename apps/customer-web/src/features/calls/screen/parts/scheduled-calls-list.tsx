@@ -4,6 +4,8 @@ import { Repeat, Show } from 'meemaw';
 import type { ScheduledCallItem } from '@ohlify/core';
 import { AppButton, AppEmptyState, AppFilePreview, AppTag, AppText } from '@ohlify/ui';
 
+import { usePrefetchCallHistoryItem } from '../../../../shared/prefetch/index.js';
+
 interface ScheduledCallsListProps {
   calls: ReadonlyArray<ScheduledCallItem>;
   onCancel: (call: ScheduledCallItem) => void;
@@ -50,6 +52,7 @@ interface CardProps {
 
 function ScheduledCallCard({ call, onCancel, onReschedule, onJoin, onTap }: CardProps) {
   const isVideo = call.callType === 'video';
+  const prefetch = usePrefetchCallHistoryItem(call.id);
   return (
     <div
       role="button"
@@ -61,6 +64,8 @@ function ScheduledCallCard({ call, onCancel, onReschedule, onJoin, onTap }: Card
           onTap();
         }
       }}
+      onMouseEnter={prefetch.onMouseEnter}
+      onFocus={prefetch.onFocus}
       className="cursor-pointer rounded-3xl border border-border bg-surface-dark p-1.5 transition hover:border-primary/30"
     >
       {/* Inner white card — details only */}
@@ -128,9 +133,7 @@ function CardHeader({ call, isVideo }: CardHeaderProps) {
       <div className="flex items-center gap-2">
         <span className="inline-flex items-center gap-1">
           <IconStar size={14} fill="var(--ohl-text-amber)" color="var(--ohl-text-amber)" />
-          <span className="font-sans text-sm font-bold text-text-amber">
-            {call.rating}
-          </span>
+          <span className="font-sans text-sm font-bold text-text-amber">{call.rating}</span>
         </span>
         <span className="h-4 w-px bg-border" />
         <AppTag
@@ -139,11 +142,7 @@ function CardHeader({ call, isVideo }: CardHeaderProps) {
           color={isVideo ? '#489B08' : '#8F089B'}
           size="medium"
           startIcon={
-            isVideo ? (
-              <IconVideo size={14} color="#fff" />
-            ) : (
-              <IconPhone size={14} color="#fff" />
-            )
+            isVideo ? <IconVideo size={14} color="#fff" /> : <IconPhone size={14} color="#fff" />
           }
         />
       </div>
@@ -203,8 +202,5 @@ function CardActions({ canReschedule, onCancel, onReschedule, onJoin }: CardActi
       </div>
     );
   }
-  return (
-    <AppButton label="Join call" expanded radius={100} height={44} onPressed={onJoin} />
-  );
+  return <AppButton label="Join call" expanded radius={100} height={44} onPressed={onJoin} />;
 }
-

@@ -4,6 +4,8 @@ import { Repeat, Show } from 'meemaw';
 import type { CompletedCallGroup, CompletedCallItem } from '@ohlify/core';
 import { AppEmptyState, AppFilePreview, AppText } from '@ohlify/ui';
 
+import { usePrefetchCallHistoryItem } from '../../../../shared/prefetch/index.js';
+
 interface CompletedCallsListProps {
   groups: ReadonlyArray<CompletedCallGroup>;
   onTap: (call: CompletedCallItem) => void;
@@ -33,59 +35,7 @@ export function CompletedCallsList({
               </AppText>
               <div className="mt-2 space-y-2">
                 <Repeat each={g.calls as CompletedCallItem[]}>
-                  {(c) => {
-                    const isVideo = c.callType === 'video';
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => onTap(c)}
-                        className="flex w-full items-center gap-3 rounded-2xl bg-background p-3 text-left transition hover:bg-surface-light"
-                      >
-                        <AppFilePreview
-                          fileKey={c.avatarKey ?? null}
-                          kind="image"
-                          width={40}
-                          height={40}
-                          radius={20}
-                          alt={c.name}
-                          fallback={
-                            isVideo ? (
-                              <IconVideo size={18} color="var(--ohl-text-muted)" />
-                            ) : (
-                              <IconPhone size={18} color="var(--ohl-text-muted)" />
-                            )
-                          }
-                        />
-                        <div className="min-w-0 flex-1">
-                          <AppText variant="body" weight={600} align="start" maxLines={1}>
-                            {c.name}
-                          </AppText>
-                          <AppText
-                            variant="bodyNormal"
-                            align="start"
-                            color="var(--ohl-text-muted)"
-                            maxLines={1}
-                            className="mt-0.5"
-                          >
-                            {c.stateLabel ? `${c.stateLabel} · ` : ''}
-                            {c.time} · {c.duration}
-                          </AppText>
-                        </div>
-                        <span className="text-text-muted">
-                          {isVideo ? <IconVideo size={16} /> : <IconPhone size={16} />}
-                        </span>
-                        <AppText
-                          variant="bodyNormal"
-                          align="end"
-                          weight={600}
-                          color="var(--ohl-text-jet)"
-                        >
-                          {c.amount}
-                        </AppText>
-                      </button>
-                    );
-                  }}
+                  {(c) => <CompletedRow key={c.id} call={c} onTap={onTap} />}
                 </Repeat>
               </div>
             </div>
@@ -93,5 +43,61 @@ export function CompletedCallsList({
         </Repeat>
       </div>
     </Show>
+  );
+}
+
+interface CompletedRowProps {
+  call: CompletedCallItem;
+  onTap: (call: CompletedCallItem) => void;
+}
+
+function CompletedRow({ call: c, onTap }: CompletedRowProps) {
+  const isVideo = c.callType === 'video';
+  const prefetch = usePrefetchCallHistoryItem(c.id);
+  return (
+    <button
+      type="button"
+      onClick={() => onTap(c)}
+      onMouseEnter={prefetch.onMouseEnter}
+      onFocus={prefetch.onFocus}
+      className="flex w-full items-center gap-3 rounded-2xl bg-background p-3 text-left transition hover:bg-surface-light"
+    >
+      <AppFilePreview
+        fileKey={c.avatarKey ?? null}
+        kind="image"
+        width={40}
+        height={40}
+        radius={20}
+        alt={c.name}
+        fallback={
+          isVideo ? (
+            <IconVideo size={18} color="var(--ohl-text-muted)" />
+          ) : (
+            <IconPhone size={18} color="var(--ohl-text-muted)" />
+          )
+        }
+      />
+      <div className="min-w-0 flex-1">
+        <AppText variant="body" weight={600} align="start" maxLines={1}>
+          {c.name}
+        </AppText>
+        <AppText
+          variant="bodyNormal"
+          align="start"
+          color="var(--ohl-text-muted)"
+          maxLines={1}
+          className="mt-0.5"
+        >
+          {c.stateLabel ? `${c.stateLabel} · ` : ''}
+          {c.time} · {c.duration}
+        </AppText>
+      </div>
+      <span className="text-text-muted">
+        {isVideo ? <IconVideo size={16} /> : <IconPhone size={16} />}
+      </span>
+      <AppText variant="bodyNormal" align="end" weight={600} color="var(--ohl-text-jet)">
+        {c.amount}
+      </AppText>
+    </button>
   );
 }

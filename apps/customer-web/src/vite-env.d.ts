@@ -5,6 +5,12 @@ interface ImportMetaEnv {
   readonly VITE_USE_MOCKS: string;
   readonly VITE_AGORA_APP_ID: string;
   readonly VITE_PAYSTACK_PUBLIC_KEY: string;
+  /**
+   * Speculative-prefetch flag. Off by default. Set to `1` to enable
+   * route-graph driven JS-chunk + TanStack query prefetching plus hover
+   * prefetch on list tiles. See `shared/prefetch/`.
+   */
+  readonly VITE_ENABLE_PREFETCH?: string;
 }
 
 interface ImportMeta {

@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@ohlify/core';
 import { AppHeader, AppShell, appMainNavItems } from '@ohlify/ui';
 
+import { RoutePrefetchWatcher } from '../prefetch/index.js';
 import { JoinableCallBanner } from './joinable-call-banner.js';
 import { KycReviewBanner } from './kyc-review-banner.js';
 
@@ -60,6 +61,7 @@ export function MainShellLayout() {
         </>
       }
     >
+      <RoutePrefetchWatcher />
       <Outlet />
     </AppShell>
   );

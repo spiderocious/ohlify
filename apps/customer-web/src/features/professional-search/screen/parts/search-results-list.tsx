@@ -3,6 +3,8 @@ import { Repeat, Show } from 'meemaw';
 import type { Professional } from '@ohlify/core';
 import { AppEmptyState, ProfessionalListTile } from '@ohlify/ui';
 
+import { usePrefetchProfessional } from '../../../../shared/prefetch/index.js';
+
 interface SearchResultsListProps {
   professionals: ReadonlyArray<Professional>;
   onTap: (pro: Professional) => void;
@@ -18,20 +20,32 @@ export function SearchResultsList({ professionals, onTap, onSchedule }: SearchRe
     >
       <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
         <Repeat each={professionals as Professional[]}>
-          {(p) => (
-            <ProfessionalListTile
-              key={p.id}
-              name={p.name}
-              role={p.role}
-              rating={p.rating}
-              reviewCount={p.reviewCount}
-              imageKey={p.avatarKey}
-              onTap={() => onTap(p)}
-              onSchedule={() => onSchedule(p)}
-            />
-          )}
+          {(p) => <PrefetchableTile key={p.id} pro={p} onTap={onTap} onSchedule={onSchedule} />}
         </Repeat>
       </div>
     </Show>
+  );
+}
+
+interface TileProps {
+  pro: Professional;
+  onTap: (pro: Professional) => void;
+  onSchedule: (pro: Professional) => void;
+}
+
+function PrefetchableTile({ pro, onTap, onSchedule }: TileProps) {
+  const prefetch = usePrefetchProfessional(pro.id);
+  return (
+    <div onMouseEnter={prefetch.onMouseEnter} onFocus={prefetch.onFocus}>
+      <ProfessionalListTile
+        name={pro.name}
+        role={pro.role}
+        rating={pro.rating}
+        reviewCount={pro.reviewCount}
+        imageKey={pro.avatarKey}
+        onTap={() => onTap(pro)}
+        onSchedule={() => onSchedule(pro)}
+      />
+    </div>
   );
 }
