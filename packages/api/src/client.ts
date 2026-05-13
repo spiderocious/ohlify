@@ -4,7 +4,17 @@ import { EP } from './endpoints.js';
 
 const storage = createTokenStorage();
 
-let _baseUrl = 'http://localhost:8082/';
+declare global {
+  interface Window {
+    CONFIG: {
+      INJECT: {
+        baseUrl?: string;
+      };
+    };
+  }
+}
+
+let _baseUrl = window.CONFIG.INJECT.baseUrl || 'http://localhost:8082/';
 let refreshPromise: Promise<void> | null = null;
 
 export function configureApiClient(baseUrl: string) {
