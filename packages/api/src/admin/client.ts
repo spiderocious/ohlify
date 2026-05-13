@@ -12,7 +12,7 @@ import { adminSession, ADMIN_TOKEN_KEYS } from './session.js';
  * Same in-flight-refresh guard so a burst of 401s only triggers one refresh.
  */
 
-let _baseUrl = 'http://localhost:8082/';
+let _baseUrl = window?.BASE_URL;
 let refreshPromise: Promise<void> | null = null;
 
 export function configureAdminApiClient(baseUrl: string) {

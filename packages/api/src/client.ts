@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-let _baseUrl = window?.BASE_URL || 'http://localhost:8082/';
+let _baseUrl = window?.BASE_URL;
 let refreshPromise: Promise<void> | null = null;
 
 export function configureApiClient(baseUrl: string) {
