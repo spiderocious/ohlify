@@ -18,22 +18,14 @@
         "pnpm config set store-dir /root/.local/share/pnpm/store",
         "pnpm install --frozen-lockfile"
       ],
-      "caches": [
-        "pnpm-store"
-      ]
+      "caches": ["pnpm-store"]
     },
     "build": {
       "inputs": [{ "step": "install" }],
-      "commands": [
-        "pnpm nx build backend"
-      ]
+      "commands": ["pnpm nx build backend"]
     }
   },
   "deploy": {
-    "base": { "image": "node:20-slim" },
-    "inputs": [
-      { "step": "build", "include": ["."] }
-    ],
     "startCommand": "node apps/backend/dist/server.js"
   }
 }
