@@ -9,7 +9,7 @@ import { useAdminLogin } from '../api/use-admin-login.js';
 
 const ERROR_COPY: Record<string, string> = {
   invalid_credentials: 'Incorrect email or password.',
-  totp_invalid: 'That code didn\'t match. Try again.',
+  totp_invalid: "That code didn't match. Try again.",
   account_locked: 'This admin is locked. Contact a super-admin.',
   account_suspended: 'This admin is suspended.',
   validation_error: 'Check your email and password.',

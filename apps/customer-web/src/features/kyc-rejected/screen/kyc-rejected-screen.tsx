@@ -88,16 +88,10 @@ export function KycRejectedScreen() {
           <div
             className={
               'flex h-16 w-16 items-center justify-center rounded-full ' +
-              (isUnderReview
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-amber-100 text-amber-700')
+              (isUnderReview ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')
             }
           >
-            {isUnderReview ? (
-              <IconCheckCircle size={28} />
-            ) : (
-              <IconAlertTriangle size={28} />
-            )}
+            {isUnderReview ? <IconCheckCircle size={28} /> : <IconAlertTriangle size={28} />}
           </div>
 
           <AppText
@@ -186,19 +180,10 @@ function ItemsToUpdate({ itemKeys }: { itemKeys: readonly string[] }) {
                 !
               </span>
               <div className="min-w-0 flex-1 flex flex-col">
-                <AppText
-                  variant="body"
-                  weight={600}
-                  align="start"
-                  color="var(--ohl-text-jet)"
-                >
+                <AppText variant="body" weight={600} align="start" color="var(--ohl-text-jet)">
                   {meta.label}
                 </AppText>
-                <AppText
-                  variant="bodySmall"
-                  align="start"
-                  className="mt-0.5 text-text-muted"
-                >
+                <AppText variant="bodySmall" align="start" className="mt-0.5 text-text-muted">
                   {meta.hint}
                 </AppText>
               </div>
