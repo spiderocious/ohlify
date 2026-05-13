@@ -9,6 +9,7 @@ import {
 import { ROUTES } from '@ohlify/core';
 import { AppLoader, AppText } from '@ohlify/ui';
 import { AppEntrypoint } from './app.entrypoint.js';
+import { AppErrorBoundary } from './shared/errors/index.js';
 import { AuthGuard } from './shared/guards/auth-guard.js';
 import { OnboardingGuard } from './shared/guards/onboarding-guard.js';
 import { RegisterProvider } from './features/auth-register/providers/register-provider.js';
@@ -17,14 +18,18 @@ import { ForgotPasswordProvider } from './features/auth-forgot-password/provider
 function RegisterLayout() {
   return (
     <RegisterProvider>
-      <RouterOutlet />
+      <AppErrorBoundary scope="route">
+        <RouterOutlet />
+      </AppErrorBoundary>
     </RegisterProvider>
   );
 }
 function ForgotPasswordLayout() {
   return (
     <ForgotPasswordProvider>
-      <RouterOutlet />
+      <AppErrorBoundary scope="route">
+        <RouterOutlet />
+      </AppErrorBoundary>
     </ForgotPasswordProvider>
   );
 }
