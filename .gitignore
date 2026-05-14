@@ -22,6 +22,8 @@ dist
 /apps/backend/.env.local
 /apps/customer-web/.env
 /apps/customer-web/.env.local
+.next
+/apps/website/.next
 
 # QA CLI state (per-target user/JWT cache)
 /tools/qa/.spin-call-state.json
