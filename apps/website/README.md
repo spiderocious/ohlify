@@ -6,7 +6,7 @@ The marketing site for Ohlify, hosted at `https://ohlify.com`. Built with Next.j
 
 - `customer-web` is a Vite SPA — fast for the in-app surface, but heavy for first paint of a marketing page.
 - The landing page is SSR-first (LCP < 1.5s on 4G), the customer-web shell is client-first (hydrate, then work).
-- Domain split: `ohlify.com` (this app) for marketing, `app.ohlify.com` (customer-web) for the product. The middleware redirects any unknown root-level path to the app so existing share links like `ohlify.com/jocelyn-aminoff` keep resolving.
+- Domain split: `ohlify.com` (this app) for marketing, `ohlify-web.netlify.app` (customer-web) for the product. The middleware redirects any unknown root-level path to the app so existing share links like `ohlify.com/jocelyn-aminoff` keep resolving.
 
 ## Run
 
@@ -37,7 +37,7 @@ Netlify. Two Netlify sites total:
 
 | Site | Domain | Backend |
 |---|---|---|
-| `customer-web` | `app.ohlify.com` | This repo, `apps/customer-web` |
+| `customer-web` | `ohlify-web.netlify.app` | This repo, `apps/customer-web` |
 | `website` (this app) | `ohlify.com` + `www.ohlify.com` | This repo, `apps/website` |
 
 `netlify.toml` in this directory tells Netlify what to build and which plugin to use. The repository-level `base` is `apps/website` so the build is scoped.
@@ -45,7 +45,7 @@ Netlify. Two Netlify sites total:
 DNS:
 - `ohlify.com` → Netlify (apex)
 - `www.ohlify.com` → Netlify (CNAME)
-- `app.ohlify.com` → Netlify (CNAME)
+- `ohlify-web.netlify.app` → Netlify (CNAME)
 
 ## Performance budget
 

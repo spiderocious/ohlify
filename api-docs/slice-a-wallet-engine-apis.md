@@ -354,7 +354,7 @@ Initiates a Paystack charge to fund the user's wallet.
 ```json
 {
   "amount_kobo": 500000,
-  "callback_url": "https://app.ohlify.com/wallet/funded?ref=..."   // optional
+  "callback_url": "https://ohlify-web.netlify.app/wallet/funded?ref=..."   // optional
 }
 ```
 

@@ -5,8 +5,8 @@
  */
 export const siteConfig = {
   brand: 'Ohlify',
-  url: 'https://ohlify.com',
-  appUrl: 'https://app.ohlify.com',
+  url: 'https://ohlify.netlify.app/',
+  appUrl: 'https://ohlify-web.netlify.app',
   /** <title> on the landing page. */
   title: 'Ohlify — Paid 1:1 calls with verified professionals',
   /** Meta description. Keep under ~160 chars. */
@@ -21,12 +21,12 @@ export const siteConfig = {
   /** Primary CTA in nav + hero. */
   ctaFindProfessional: {
     label: 'Find a professional',
-    href: 'https://app.ohlify.com/professionals',
+    href: 'https://ohlify-web.netlify.app/professionals',
   },
   /** Secondary CTA — professional acquisition. */
   ctaBecomeProfessional: {
     label: 'Earn on Ohlify',
-    href: 'https://app.ohlify.com/register',
+    href: 'https://ohlify-web.netlify.app/register',
   },
   /** Footer socials. Drop empty strings to hide. */
   socials: [

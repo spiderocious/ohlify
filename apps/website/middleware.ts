@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 /**
  * Catch-all redirect for share slugs like `ohlify.com/jocelyn-aminoff`.
  *
- * Customer-web (`app.ohlify.com`) owns the share-page logic. The
+ * Customer-web (`ohlify-web.netlify.app`) owns the share-page logic. The
  * marketing site keeps `/` plus a known set of marketing routes; any
  * other path is treated as a professional handle and 308'd to the app.
  *
@@ -33,7 +33,7 @@ export function middleware(req: NextRequest) {
   // sends these here, but middleware should be robust).
   if (pathname.startsWith('/#')) return NextResponse.next();
 
-  const target = new URL(`https://app.ohlify.com${pathname}${req.nextUrl.search}`);
+  const target = new URL(`https://ohlify-web.netlify.app${pathname}${req.nextUrl.search}`);
   return NextResponse.redirect(target, 308);
 }
 

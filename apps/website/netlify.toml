@@ -6,7 +6,7 @@
 # Native Next.js support on Netlify. The plugin handles middleware,
 # image optimization, and route hashing automatically. No additional
 # redirects/headers blocks needed — the marketing site's middleware
-# owns the share-slug → app.ohlify.com hop.
+# owns the share-slug → ohlify-web.netlify.app hop.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
