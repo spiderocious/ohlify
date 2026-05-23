@@ -49,6 +49,12 @@ export function RegisterScreen() {
     );
   };
 
+  const handleSetPhone = (value: string) => {
+    // Allow only digits, and limit to 11 characters (e.g. 08012345678)
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 11);
+    setPhone(digitsOnly);
+  };
+
   return (
     <AuthScreenShell
       title="Create an account"
@@ -59,7 +65,7 @@ export function RegisterScreen() {
         label="Phone number"
         placeholder="808 123 4567"
         value={phone}
-        onChange={setPhone}
+        onChange={handleSetPhone}
       />
       <div className="mt-4">
         <AppTextInput
