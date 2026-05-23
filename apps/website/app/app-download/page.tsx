@@ -9,7 +9,7 @@ import { siteConfig } from '@/lib/site-config';
  *
  * Drop the build at `public/ohlify.apk` and it serves from `/ohlify.apk`.
  */
-const APK_PATH = '/ohlify.apk';
+const APK_PATH = 'https://drive.google.com/file/d/181Y3eZwW_uynSbyvehqF9wset-A2g8th/view?usp=sharing';
 
 export const metadata: Metadata = {
   title: 'Download the app',
