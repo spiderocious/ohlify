@@ -16,6 +16,7 @@ const MARKETING_ROUTES = new Set<string>([
   '/privacy',
   '/terms',
   '/eula',
+  '/app-download'
 ]);
 
 /** Paths the framework / hosting platform handles natively. */
@@ -23,7 +24,6 @@ const PASSTHROUGH_PREFIXES = ['/_next', '/api', '/favicon', '/images', '/static'
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-
   if (MARKETING_ROUTES.has(pathname)) return NextResponse.next();
   if (pathname.includes('.')) return NextResponse.next(); // assets
   if (PASSTHROUGH_PREFIXES.some((p) => pathname.startsWith(p))) {
