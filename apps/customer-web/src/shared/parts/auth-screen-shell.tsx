@@ -60,10 +60,22 @@ export function AuthScreenShell({
           </AppText>
 
           <div className="mt-7">{children}</div>
+
+          {/*
+            Desktop (lg+): the CTA sits directly under the form, constrained to the
+            form column width, with a rounded edge — not a full-bleed sticky bar.
+            Mobile keeps the edge-to-edge sticky bottom bar (rendered below).
+          */}
+          <div className="mt-8 hidden overflow-hidden rounded-xl lg:block">
+            <ScreenContinueBar label={ctaLabel} onPressed={onContinue} />
+          </div>
         </div>
       </div>
 
-      <ScreenContinueBar label={ctaLabel} onPressed={onContinue} />
+      {/* Mobile (< lg): sticky full-width bottom bar — unchanged behavior. */}
+      <div className="lg:hidden">
+        <ScreenContinueBar label={ctaLabel} onPressed={onContinue} />
+      </div>
     </div>
   );
 }

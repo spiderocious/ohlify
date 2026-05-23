@@ -85,7 +85,7 @@ export function AppOtpInput({
 
   return (
     <div className={cn('flex w-full flex-col items-stretch font-sans', className)}>
-      <div className="flex items-stretch justify-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-center gap-2.5">
         {Array.from({ length }, (_, i) => (
           <input
             key={i}
@@ -106,7 +106,9 @@ export function AppOtpInput({
               borderColor: errorMessage ? 'var(--ohl-error)' : borderColor,
             }}
             className={cn(
-              'h-14 flex-1 rounded-md text-center text-xl font-semibold text-text-primary transition-all outline-none',
+              // Fixed square-ish cell: never stretches on wide (desktop) containers,
+              // never clips on narrow ones — the row wraps if it truly can't fit.
+              'h-14 w-12 shrink-0 rounded-md text-center text-xl font-semibold text-text-primary transition-all outline-none',
               bordered ? 'border' : '',
               'focus:border-primary focus:border-[1.5px]',
               disabled ? 'bg-surface' : 'bg-background',

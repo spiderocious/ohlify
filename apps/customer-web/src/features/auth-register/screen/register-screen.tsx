@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
-import { AppPhoneInput, AppText, AppTextInput, DrawerService } from '@ohlify/ui';
+import { AppPhoneInput, AppText, AppTextInput } from '@ohlify/ui';
 import type { ApiError } from '@ohlify/api';
 
 import { AuthScreenShell } from '../../../shared/parts/auth-screen-shell.js';
@@ -36,7 +36,7 @@ export function RegisterScreen() {
           navigate(ROUTES.REGISTER.CREATE_PASSWORD.absPath);
         },
         onError: (err) => {
-          const apiErr = (err as unknown) as ApiError;
+          const apiErr = err as unknown as ApiError;
           if (apiErr.code === 'email_exists') {
             setNonFieldError('An account with this email already exists.');
           } else if (apiErr.code === 'phone_exists') {
@@ -70,7 +70,8 @@ export function RegisterScreen() {
           value={email}
           onChange={setEmail}
           errorMessage={
-            nonFieldError ?? (email !== '' && !emailValid ? 'Please enter a valid email address.' : undefined)
+            nonFieldError ??
+            (email !== '' && !emailValid ? 'Please enter a valid email address.' : undefined)
           }
         />
       </div>
@@ -94,6 +95,16 @@ export function RegisterScreen() {
           </button>
           .
         </AppText>
+      </div>
+      <div className="mt-6 text-center font-sans text-[13px] text-text-muted">
+        Already have an account?{' '}
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.LOGIN.absPath)}
+          className="font-semibold text-primary"
+        >
+          Log in
+        </button>
       </div>
     </AuthScreenShell>
   );

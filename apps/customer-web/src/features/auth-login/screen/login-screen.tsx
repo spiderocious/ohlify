@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
-import { AppTextInput, cn, DrawerService } from '@ohlify/ui';
+import { AppTextInput, cn } from '@ohlify/ui';
 
 import { AuthScreenShell } from '../../../shared/parts/auth-screen-shell.js';
 import { useLogin } from '../api/use-login.js';
@@ -53,7 +53,7 @@ export function LoginScreen() {
           }
         },
         onError: (err) => {
-          const apiErr = (err as unknown) as ApiError;
+          const apiErr = err as unknown as ApiError;
           setFieldError(authErrorMessage(apiErr.code));
         },
       },
@@ -121,6 +121,16 @@ export function LoginScreen() {
           className="font-sans text-[13px] font-semibold text-primary"
         >
           Forgot password?
+        </button>
+      </div>
+      <div className="mt-6 text-center font-sans text-[13px] text-text-muted">
+        Don&apos;t have an account?{' '}
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.REGISTER.absPath)}
+          className="font-semibold text-primary"
+        >
+          Create account
         </button>
       </div>
     </AuthScreenShell>
