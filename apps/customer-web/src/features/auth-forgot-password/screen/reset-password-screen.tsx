@@ -59,8 +59,8 @@ export function ResetPasswordScreen() {
           );
         },
         onError: (err) => {
-          const apiErr = (err as unknown) as ApiError;
-          if (apiErr.code === 'token_invalid') {
+          const apiErr = err as unknown as ApiError;
+          if (apiErr.reason === 'token_invalid') {
             setNonFieldError('Reset link expired. Please start again.');
           } else {
             setNonFieldError('Something went wrong. Please try again.');

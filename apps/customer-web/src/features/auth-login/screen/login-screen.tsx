@@ -54,7 +54,7 @@ export function LoginScreen() {
         },
         onError: (err) => {
           const apiErr = err as unknown as ApiError;
-          setFieldError(authErrorMessage(apiErr.code));
+          setFieldError(authErrorMessage(apiErr.reason));
         },
       },
     );

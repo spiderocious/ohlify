@@ -19,6 +19,8 @@ export const MESSAGE_KEYS = {
   FORBIDDEN: 'general.forbidden',
   INTERNAL_ERROR: 'general.internal_error',
   VALIDATION_FAILED: 'general.validation_failed',
+  RATE_LIMITED_KEY: 'general.rate_limited',
+  CONFLICT_KEY: 'general.conflict',
   // Profile
   PROFILE_FETCHED: 'profile.fetched',
   PROFILE_UPDATED: 'profile.updated',

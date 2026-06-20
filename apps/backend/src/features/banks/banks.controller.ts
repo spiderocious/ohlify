@@ -5,6 +5,8 @@ import type { Request, Response, RequestHandler } from 'express';
 import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { firstFieldError, resolveErrorMessage } from '@shared/constants/error-messages.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 import { ResolveAccountQuerySchema } from './banks.schema.js';
@@ -33,17 +35,12 @@ export const listBanks: RequestHandler = asyncHandler(async (_req: Request, res:
 export const resolveAccount: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const parsed = ResolveAccountQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    const fieldErrors: Record<string, string[]> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path.join('.') || '_root';
-      const arr = fieldErrors[key] ?? [];
-      arr.push(issue.message);
-      fieldErrors[key] = arr;
-    }
+    const first = firstFieldError(parsed.error.issues);
     ResponseUtil.error(res, HTTP_STATUS.BAD_REQUEST, {
-      code: 'validation_error',
-      message: 'Invalid query parameters',
-      field_errors: fieldErrors,
+      errorCode: severityFor(ERROR_CODES.VALIDATION_ERROR),
+      errorMessage: first?.message ?? resolveErrorMessage(ERROR_CODES.VALIDATION_ERROR),
+      reason: ERROR_CODES.VALIDATION_ERROR,
+      ...(first ? { fieldErrors: first.fieldErrors } : {}),
     });
     return;
   }

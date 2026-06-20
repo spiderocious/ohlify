@@ -43,14 +43,14 @@ export function ProfessionalKycScreen() {
       onSuccess: () => navigate(ROUTES.HOME.absPath, { replace: true }),
       onError: (err) => {
         const e = err as unknown as ApiError;
-        if (e.code === 'kyc_incomplete') {
-          const missing = (e.field_errors?.['incomplete_items'] ?? []).join(', ');
+        if (e.reason === 'kyc_incomplete') {
+          const missing = (e.fieldErrors?.['incomplete_items'] ?? []).join(', ');
           DrawerService.toast(
             missing ? `Still incomplete: ${missing}` : 'Some items are still missing.',
             { type: 'error' },
           );
-        } else if (e.code === 'resubmit_unchanged') {
-          const stale = (e.field_errors?.['item_keys'] ?? []).join(', ');
+        } else if (e.reason === 'resubmit_unchanged') {
+          const stale = (e.fieldErrors?.['item_keys'] ?? []).join(', ');
           DrawerService.toast(
             stale
               ? `Update ${stale} before resubmitting.`
@@ -136,9 +136,7 @@ export function ProfessionalKycScreen() {
 
       <div className="mx-auto w-full max-w-xl px-4 pb-4 pt-2 lg:max-w-2xl">
         <AppButton
-          label={
-            resubmitKeys && resubmitKeys.length > 0 ? 'Resubmit for review' : 'Proceed'
-          }
+          label={resubmitKeys && resubmitKeys.length > 0 ? 'Resubmit for review' : 'Proceed'}
           expanded
           radius={100}
           isDisabled={!canProceed || completeKyc.isPending}

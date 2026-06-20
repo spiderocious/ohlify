@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
+
 import { redis } from './client.js';
 
 // Atomically increment and set expiry in one round-trip.
@@ -27,7 +30,9 @@ export const rateLimitMiddleware =
       const ttl = await redis.ttl(key);
       res.setHeader('Retry-After', ttl > 0 ? ttl : windowSeconds);
       res.status(429).json({
-        error: { code: 'rate_limited', message: 'Too many requests, please try again later' },
+        errorCode: severityFor(ERROR_CODES.RATE_LIMITED),
+        errorMessage: resolveErrorMessage(ERROR_CODES.RATE_LIMITED),
+        reason: ERROR_CODES.RATE_LIMITED,
       });
       return;
     }

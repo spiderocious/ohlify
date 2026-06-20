@@ -46,9 +46,9 @@ export function LoginScreen() {
           navigate(fromPath ?? ADMIN_ROUTES.DASHBOARD.absPath, { replace: true });
         },
         onError: (err) => {
-          setError(ERROR_COPY[err.code] ?? err.message);
+          setError(ERROR_COPY[err.reason] ?? err.errorMessage);
           // If totp_invalid, stay on the totp stage; otherwise drop back to creds.
-          if (err.code !== 'totp_invalid') setStage('creds');
+          if (err.reason !== 'totp_invalid') setStage('creds');
         },
       },
     );

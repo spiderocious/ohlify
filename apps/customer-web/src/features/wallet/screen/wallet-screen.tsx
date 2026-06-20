@@ -65,9 +65,7 @@ export function WalletScreen() {
   };
 
   const allTxPages = txPages?.pages ?? [];
-  const transactions: Transaction[] = allTxPages
-    .flatMap((p) => p.data)
-    .map(toTransaction);
+  const transactions: Transaction[] = allTxPages.flatMap((p) => p.data).map(toTransaction);
 
   const openFundWallet = (defaultAmountNaira?: number) => {
     DrawerService.showCustomModal(
@@ -86,7 +84,9 @@ export function WalletScreen() {
             } else if (result.kind === 'pending') {
               DrawerService.toast('Payment received — confirmation in progress.', { type: 'info' });
             } else if (result.kind === 'failed') {
-              DrawerService.toast('Payment was not completed. Please try again.', { type: 'error' });
+              DrawerService.toast('Payment was not completed. Please try again.', {
+                type: 'error',
+              });
             }
             // 'cancelled' → silent, user closed the popup deliberately.
           }}
@@ -129,14 +129,14 @@ export function WalletScreen() {
             );
           },
           onError: (err) => {
-            const e = (err as unknown) as ApiError;
-            if (e.code === 'no_bank_account') {
+            const e = err as unknown as ApiError;
+            if (e.reason === 'no_bank_account') {
               DrawerService.toast('No bank account on file. Please add one in your profile.', {
                 type: 'error',
               });
-            } else if (e.code === 'insufficient_balance') {
+            } else if (e.reason === 'insufficient_balance') {
               DrawerService.toast('Insufficient balance for this withdrawal.', { type: 'error' });
-            } else if (e.code === 'value_out_of_range') {
+            } else if (e.reason === 'value_out_of_range') {
               DrawerService.toast('Amount is out of the allowed range.', { type: 'error' });
             } else {
               DrawerService.toast('Withdrawal failed. Please try again.', { type: 'error' });

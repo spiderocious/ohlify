@@ -80,7 +80,12 @@ export function PersonalInfoScreen() {
               { new_email: newEmail, otp },
               {
                 onSuccess: () => successToast('Email updated'),
-                onError: (err) => { const e = (err as unknown) as ApiError; errorToast(e.code === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update email'); },
+                onError: (err) => {
+                  const e = err as unknown as ApiError;
+                  errorToast(
+                    e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update email',
+                  );
+                },
               },
             );
           },
@@ -124,7 +129,12 @@ export function PersonalInfoScreen() {
               { new_phone_number: newPhone, otp },
               {
                 onSuccess: () => successToast('Phone number updated'),
-                onError: (err) => { const e = (err as unknown) as ApiError; errorToast(e.code === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update phone'); },
+                onError: (err) => {
+                  const e = err as unknown as ApiError;
+                  errorToast(
+                    e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update phone',
+                  );
+                },
               },
             );
           },
@@ -271,7 +281,9 @@ export function PersonalInfoScreen() {
           Icon={IconHeart}
           iconColor="#0D6F82"
           title="Change interests"
-          subtitle={(me?.interests ?? []).length === 0 ? 'Not set yet' : (me?.interests ?? []).join(', ')}
+          subtitle={
+            (me?.interests ?? []).length === 0 ? 'Not set yet' : (me?.interests ?? []).join(', ')
+          }
           onTap={openEditInterests}
         />
       </div>

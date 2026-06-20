@@ -59,10 +59,10 @@ export function VerifyOtpScreen() {
           );
         },
         onError: (err) => {
-          const apiErr = (err as unknown) as ApiError;
-          if (apiErr.code === 'invalid_otp') {
+          const apiErr = err as unknown as ApiError;
+          if (apiErr.reason === 'invalid_otp') {
             setOtpError('Incorrect code. Please try again.');
-          } else if (apiErr.code === 'otp_expired') {
+          } else if (apiErr.reason === 'otp_expired') {
             setOtpError('Code expired. Please request a new one.');
           } else {
             setOtpError('Something went wrong. Please try again.');
@@ -92,9 +92,7 @@ export function VerifyOtpScreen() {
       onContinue={otp.length === 6 && !verify.isPending ? handleContinue : undefined}
     >
       <AppOtpInput length={6} autoFocus onChange={setOtp} />
-      {otpError && (
-        <p className="mt-2 font-sans text-[13px] text-error">{otpError}</p>
-      )}
+      {otpError && <p className="mt-2 font-sans text-[13px] text-error">{otpError}</p>}
 
       <div className="mt-5 flex items-center font-sans text-[13px]">
         <span className="text-text-muted">Didn&apos;t get the code? </span>

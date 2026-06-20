@@ -38,7 +38,7 @@ export function TotpSetupScreen() {
           setSetupData(data);
           setStage('qr');
         },
-        onError: (err) => setError(err.message),
+        onError: (err) => setError(err.errorMessage),
       },
     );
   };
@@ -49,14 +49,17 @@ export function TotpSetupScreen() {
       { code: override ?? code },
       {
         onSuccess: () => navigate(ADMIN_ROUTES.DASHBOARD.absPath, { replace: true }),
-        onError: (err) => setError(err.message),
+        onError: (err) => setError(err.errorMessage),
       },
     );
   };
 
   if (stage === 'qr' && setupData) {
     return (
-      <AuthCard title="Scan this QR code" subtitle="Use Google Authenticator, 1Password, or similar.">
+      <AuthCard
+        title="Scan this QR code"
+        subtitle="Use Google Authenticator, 1Password, or similar."
+      >
         <img
           src={setupData.qr_code_data_url}
           alt="TOTP QR"
@@ -67,12 +70,7 @@ export function TotpSetupScreen() {
           <code className="rounded bg-surface-light px-1.5 py-0.5 text-xs">{setupData.secret}</code>
         </AppText>
 
-        <AppOtpInput
-          length={6}
-          autoFocus
-          onChange={setCode}
-          onComplete={(c) => handleConfirm(c)}
-        />
+        <AppOtpInput length={6} autoFocus onChange={setCode} onComplete={(c) => handleConfirm(c)} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <AppButton
           label="Confirm code"
@@ -86,7 +84,10 @@ export function TotpSetupScreen() {
   }
 
   return (
-    <AuthCard title="Enable two-factor" subtitle="Confirm your password to generate a new TOTP secret.">
+    <AuthCard
+      title="Enable two-factor"
+      subtitle="Confirm your password to generate a new TOTP secret."
+    >
       <AppTextInput
         label="Password"
         placeholder="Your current password"

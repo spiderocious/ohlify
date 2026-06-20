@@ -1,13 +1,21 @@
 import rateLimit from 'express-rate-limit';
 
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
+
+// Static body for express-rate-limit's `message` option (flat error envelope).
+const RATE_LIMIT_BODY = {
+  errorCode: severityFor(ERROR_CODES.RATE_LIMITED),
+  errorMessage: resolveErrorMessage(ERROR_CODES.RATE_LIMITED),
+  reason: ERROR_CODES.RATE_LIMITED,
+};
+
 export const globalRateLimit = rateLimit({
   windowMs: 60_000,
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: { code: 'rate_limited', message: 'Too many requests, please try again later' },
-  },
+  message: RATE_LIMIT_BODY,
 });
 
 export const authRateLimit = rateLimit({
@@ -15,7 +23,5 @@ export const authRateLimit = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: { code: 'rate_limited', message: 'Too many requests, please try again later' },
-  },
+  message: RATE_LIMIT_BODY,
 });

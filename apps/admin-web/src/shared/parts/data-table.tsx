@@ -22,7 +22,7 @@ interface DataTableProps<T> {
   rows: ReadonlyArray<T> | undefined;
   rowKey: (row: T) => string;
   isLoading?: boolean;
-  error?: { message?: string } | null;
+  error?: { errorMessage?: string; message?: string } | null;
   /** Empty-state title. Defaults to 'No results'. */
   emptyTitle?: string;
   emptyDescription?: string;
@@ -97,7 +97,7 @@ export function DataTable<T>({
                       Couldn't load
                     </AppText>
                     <AppText variant="bodySmall" className="text-text-muted">
-                      {error.message ?? 'Something went wrong.'}
+                      {error.errorMessage ?? error.message ?? 'Something went wrong.'}
                     </AppText>
                   </div>
                 </td>

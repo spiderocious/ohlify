@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { getIdempotencyResult, setIdempotencyResult } from '@lib/redis/idempotency.js';
 import { ResponseUtil } from '@lib/response.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 // Attaches idempotency handling to creating POSTs.
@@ -50,8 +52,10 @@ export const requireIdempotencyKey = (req: Request, res: Response, next: NextFun
   const key = req.headers['idempotency-key'];
   if (typeof key !== 'string' || key.trim() === '') {
     ResponseUtil.error(res, HTTP_STATUS.BAD_REQUEST, {
-      code: 'validation_error',
-      message: 'Idempotency-Key header is required',
+      errorCode: severityFor(ERROR_CODES.VALIDATION_ERROR),
+      errorMessage: resolveErrorMessage(ERROR_CODES.VALIDATION_ERROR),
+      reason: ERROR_CODES.VALIDATION_ERROR,
+      fieldErrors: { 'idempotency-key': ['Idempotency-Key header is required'] },
     });
     return;
   }

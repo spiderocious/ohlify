@@ -1,12 +1,7 @@
 import { formatNaira } from '@ohlify/core';
 import type { CallRate, CallType } from '@ohlify/core';
 import type { ApiError } from '@ohlify/api';
-import {
-  AppLoader,
-  DrawerService,
-  RatesListContent,
-  type RatesController,
-} from '@ohlify/ui';
+import { AppLoader, DrawerService, RatesListContent, type RatesController } from '@ohlify/ui';
 
 import {
   useConfigArray,
@@ -79,15 +74,14 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
           price_kobo: priceKobo,
         },
         {
-          onSuccess: () =>
-            DrawerService.toast('Rate added successfully', { type: 'success' }),
+          onSuccess: () => DrawerService.toast('Rate added successfully', { type: 'success' }),
           onError: (err) => {
             const e = err as unknown as ApiError;
             const message =
-              e.field_errors?.['price_kobo']?.[0] ??
-              e.field_errors?.['duration_minutes']?.[0] ??
-              e.field_errors?.['call_type']?.[0] ??
-              (e.code === 'conflict'
+              e.fieldErrors?.['price_kobo']?.[0] ??
+              e.fieldErrors?.['duration_minutes']?.[0] ??
+              e.fieldErrors?.['call_type']?.[0] ??
+              (e.reason === 'conflict'
                 ? 'A rate already exists for this call type and duration.'
                 : 'Could not add rate. Please try again.');
             DrawerService.toast(message, { type: 'error' });
@@ -97,8 +91,7 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
     },
     removeRate: (id: string) => {
       deleteRate.mutate(id, {
-        onSuccess: () =>
-          DrawerService.toast('Rate deleted successfully', { type: 'success' }),
+        onSuccess: () => DrawerService.toast('Rate deleted successfully', { type: 'success' }),
         onError: () =>
           DrawerService.toast('Could not delete rate. Please try again.', { type: 'error' }),
       });

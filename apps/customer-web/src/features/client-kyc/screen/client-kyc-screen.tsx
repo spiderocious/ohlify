@@ -2,15 +2,14 @@ import { IconBack } from '@icons';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
-import {
-  AppButton,
-  AppIconButton,
-  AppText,
-  KycProgressHeader,
-} from '@ohlify/ui';
+import { AppButton, AppIconButton, AppText, KycProgressHeader } from '@ohlify/ui';
 import type { ApiError } from '@ohlify/api';
 
-import { CLIENT_KYC_ITEMS, ClientKycProvider, useClientKyc } from '../providers/client-kyc-provider.js';
+import {
+  CLIENT_KYC_ITEMS,
+  ClientKycProvider,
+  useClientKyc,
+} from '../providers/client-kyc-provider.js';
 import { ClientKycItemsList } from './parts/client-kyc-items-list.js';
 import { useCompleteKyc } from '../../professional-kyc/api/use-complete-kyc.js';
 import { useKycSpec } from '../../professional-kyc/api/use-kyc-spec.js';
@@ -36,19 +35,17 @@ function ClientKycScreenContent() {
   const isPartial = resubmitKeys !== null && resubmitKeys.length > 0;
   // Same dirty-resubmit gate as the pro screen — every flagged key must
   // be acknowledged on the server before we let the user submit.
-  const dirtyResubmitOk =
-    !isPartial
-      ? true
-      : (resubmitKeys ?? []).every((k) => acknowledgedKeys?.includes(k) ?? false);
-  const allDone =
-    ctx.completedCount === CLIENT_KYC_ITEMS.length && dirtyResubmitOk;
+  const dirtyResubmitOk = !isPartial
+    ? true
+    : (resubmitKeys ?? []).every((k) => acknowledgedKeys?.includes(k) ?? false);
+  const allDone = ctx.completedCount === CLIENT_KYC_ITEMS.length && dirtyResubmitOk;
 
   const handleProceed = () => {
     completeKyc.mutate(undefined, {
       onSuccess: () => navigate(ROUTES.HOME.absPath, { replace: true }),
       onError: (err) => {
-        const apiErr = (err as unknown) as ApiError;
-        if (apiErr.code === 'kyc_incomplete') {
+        const apiErr = err as unknown as ApiError;
+        if (apiErr.reason === 'kyc_incomplete') {
           // progress bar will reflect missing items — no toast needed
         }
       },
