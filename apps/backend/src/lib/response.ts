@@ -48,6 +48,6 @@ export class ResponseUtil {
   }
 
   static error(res: Response, status: number, err: ApiError): Response {
-    return res.status(status).json({ error: err } satisfies ApiEnvelope<never>);
+    return res.status(status).json(err satisfies ApiEnvelope<never>);
   }
 }

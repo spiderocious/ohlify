@@ -5,10 +5,7 @@ import { formatNaira, parseNairaToKobo } from '@ohlify/core';
 import type { ApiError } from '@ohlify/api';
 import { DrawerService, RatesListScreen, type RatesController } from '@ohlify/ui';
 
-import {
-  useConfigArray,
-  useConfigNumber,
-} from '../../../shared/providers/app-config-provider.js';
+import { useConfigArray, useConfigNumber } from '../../../shared/providers/app-config-provider.js';
 import { useMyRates } from '../api/use-my-rates.js';
 import { useAddRate } from '../api/use-add-rate.js';
 import { useDeleteRate } from '../api/use-delete-rate.js';
@@ -51,10 +48,7 @@ export function ProfileRatesScreen() {
   const minKobo = useConfigNumber('rates.min_kobo', 50_000);
   const maxKobo = useConfigNumber('rates.max_kobo', 50_000_000);
 
-  const rates: CallRate[] = useMemo(
-    () => (apiRates ?? []).map(apiRateToCallRate),
-    [apiRates],
-  );
+  const rates: CallRate[] = useMemo(() => (apiRates ?? []).map(apiRateToCallRate), [apiRates]);
 
   const controller = useMemo<RatesController>(
     () => ({
@@ -69,15 +63,14 @@ export function ProfileRatesScreen() {
             price_kobo: Number(priceKobo),
           },
           {
-            onSuccess: () =>
-              DrawerService.toast('Rate added successfully', { type: 'success' }),
+            onSuccess: () => DrawerService.toast('Rate added successfully', { type: 'success' }),
             onError: (err) => {
               const e = err as unknown as ApiError;
               const message =
-                e.field_errors?.['price_kobo']?.[0] ??
-                e.field_errors?.['duration_minutes']?.[0] ??
-                e.field_errors?.['call_type']?.[0] ??
-                (e.code === 'conflict'
+                e.fieldErrors?.['price_kobo']?.[0] ??
+                e.fieldErrors?.['duration_minutes']?.[0] ??
+                e.fieldErrors?.['call_type']?.[0] ??
+                (e.reason === 'conflict'
                   ? 'A rate already exists for this call type and duration.'
                   : 'Could not add rate. Please try again.');
               DrawerService.toast(message, { type: 'error' });
@@ -87,8 +80,7 @@ export function ProfileRatesScreen() {
       },
       removeRate: (id) =>
         deleteRate.mutate(id, {
-          onSuccess: () =>
-            DrawerService.toast('Rate deleted successfully', { type: 'success' }),
+          onSuccess: () => DrawerService.toast('Rate deleted successfully', { type: 'success' }),
           onError: () =>
             DrawerService.toast('Could not delete rate. Please try again.', { type: 'error' }),
         }),

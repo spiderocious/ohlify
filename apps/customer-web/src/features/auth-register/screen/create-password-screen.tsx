@@ -45,8 +45,8 @@ export function CreatePasswordScreen() {
       {
         onSuccess: () => navigate(ROUTES.REGISTER.VERIFY_OTP.absPath),
         onError: (err) => {
-          const apiErr = (err as unknown) as ApiError;
-          if (apiErr.code === 'token_invalid') {
+          const apiErr = err as unknown as ApiError;
+          if (apiErr.reason === 'token_invalid') {
             setNonFieldError('Registration session expired. Please start again.');
           } else {
             setNonFieldError('Something went wrong. Please try again.');

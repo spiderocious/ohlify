@@ -5,17 +5,9 @@ import { AppError } from '@lib/errors.js';
 import { requestContext } from '@lib/http/requestContext.js';
 import { logger } from '@lib/logger.js';
 import { ResponseUtil } from '@lib/response.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { firstFieldError, resolveErrorMessage } from '@shared/constants/error-messages.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
-
-const formatZodFieldErrors = (err: ZodError): Record<string, string[]> => {
-  const out: Record<string, string[]> = {};
-  for (const issue of err.issues) {
-    const key = issue.path.join('.') || '_root';
-    const arr = (out[key] ??= []);
-    arr.push(issue.message);
-  }
-  return out;
-};
 
 export const errorHandler = (
   err: unknown,
@@ -27,31 +19,36 @@ export const errorHandler = (
 
   if (err instanceof AppError) {
     if (err.status >= 500) {
-      logger.error({ err, requestId }, err.message);
+      logger.error({ err, requestId, reason: err.code }, err.message);
     }
     if (err.retryAfter !== undefined) {
       res.setHeader('Retry-After', err.retryAfter);
     }
     ResponseUtil.error(res, err.status, {
-      code: err.code,
-      message: err.message,
-      ...(err.fieldErrors !== undefined ? { field_errors: err.fieldErrors } : {}),
+      errorCode: severityFor(err.code),
+      errorMessage: resolveErrorMessage(err.code, err.messageKey),
+      reason: err.code,
+      ...(err.fieldErrors !== undefined ? { fieldErrors: err.fieldErrors } : {}),
     });
     return;
   }
 
   if (err instanceof ZodError) {
+    // One field at a time: surface only the first invalid field.
+    const first = firstFieldError(err.issues);
     ResponseUtil.error(res, HTTP_STATUS.BAD_REQUEST, {
-      code: 'validation_error',
-      message: 'Validation failed',
-      field_errors: formatZodFieldErrors(err),
+      errorCode: severityFor(ERROR_CODES.VALIDATION_ERROR),
+      errorMessage: first?.message ?? resolveErrorMessage(ERROR_CODES.VALIDATION_ERROR),
+      reason: ERROR_CODES.VALIDATION_ERROR,
+      ...(first ? { fieldErrors: first.fieldErrors } : {}),
     });
     return;
   }
 
-  logger.error({ err, requestId }, 'Unhandled error');
+  logger.error({ err, requestId, reason: ERROR_CODES.INTERNAL }, 'Unhandled error');
   ResponseUtil.error(res, HTTP_STATUS.INTERNAL_SERVER_ERROR, {
-    code: 'internal',
-    message: 'An unexpected error occurred',
+    errorCode: severityFor(ERROR_CODES.INTERNAL),
+    errorMessage: resolveErrorMessage(ERROR_CODES.INTERNAL),
+    reason: ERROR_CODES.INTERNAL,
   });
 };

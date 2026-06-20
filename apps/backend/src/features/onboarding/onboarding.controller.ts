@@ -4,6 +4,8 @@ import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
 import { requestMeta } from '@lib/http/request-meta.js';
 import { ResponseUtil } from '@lib/response.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 import type {
@@ -46,9 +48,10 @@ export const checkHandle: RequestHandler = asyncHandler(async (req: Request, res
   const parsed = HandleCheckSchema.safeParse({ handle: req.query['handle'] });
   if (!parsed.success) {
     ResponseUtil.error(res, HTTP_STATUS.BAD_REQUEST, {
-      code: 'validation_error',
-      message: 'Invalid handle query parameter',
-      field_errors: { handle: ['handle is required'] },
+      errorCode: severityFor(ERROR_CODES.VALIDATION_ERROR),
+      errorMessage: resolveErrorMessage(ERROR_CODES.VALIDATION_ERROR),
+      reason: ERROR_CODES.VALIDATION_ERROR,
+      fieldErrors: { handle: ['handle is required'] },
     });
     return;
   }

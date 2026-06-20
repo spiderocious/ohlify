@@ -142,7 +142,7 @@ export const createBooking = async (ctx: CreateContext) => {
 
   // Caller must exist + must not be the callee.
   if (ctx.dto.callee_user_id === ctx.userId) {
-    return new ServiceError('validation_error', BOOKING_MESSAGES.INVALID, 422, {
+    return new ServiceError('cannot_book_self', BOOKING_MESSAGES.INVALID, 422, {
       callee_user_id: ['Cannot book yourself'],
     });
   }

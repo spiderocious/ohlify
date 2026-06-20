@@ -60,24 +60,23 @@ export function usePaystackInline() {
       const reference = init.reference;
       const popup = new PaystackPop();
 
-      const popupResult = await new Promise<
-        | { kind: 'success' }
-        | { kind: 'cancelled' }
-      >((resolve) => {
-        popup.newTransaction({
-          key: PAYSTACK_PUBLIC_KEY,
-          email: me.email,
-          amount: amountKobo,
-          reference,
-          currency: init.currency,
-          onLoad: () => {
-            // Popup is now visible — clear preparing state.
-            setIsPreparing(false);
-          },
-          onSuccess: () => resolve({ kind: 'success' }),
-          onCancel: () => resolve({ kind: 'cancelled' }),
-        });
-      });
+      const popupResult = await new Promise<{ kind: 'success' } | { kind: 'cancelled' }>(
+        (resolve) => {
+          popup.newTransaction({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: me.email,
+            amount: amountKobo,
+            reference,
+            currency: init.currency,
+            onLoad: () => {
+              // Popup is now visible — clear preparing state.
+              setIsPreparing(false);
+            },
+            onSuccess: () => resolve({ kind: 'success' }),
+            onCancel: () => resolve({ kind: 'cancelled' }),
+          });
+        },
+      );
 
       if (popupResult.kind === 'cancelled') {
         setIsPreparing(false);
@@ -103,7 +102,7 @@ export function usePaystackInline() {
         return { kind: 'failed', reference };
       } catch (err) {
         const apiErr = await parseApiError(err);
-        return { kind: 'failed', reference, reason: apiErr.message };
+        return { kind: 'failed', reference, reason: apiErr.errorMessage };
       }
     },
     [me, qc],

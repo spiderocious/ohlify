@@ -3,6 +3,9 @@ import type { Request, Response, RequestHandler } from 'express';
 import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
+import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 import type {
   InitializeFundingDto,
@@ -51,10 +54,10 @@ export const pay: RequestHandler = asyncHandler(async (req: Request, res: Respon
     return;
   }
   if (r.data.status === 'insufficient_balance') {
-    res.status(409).json({
-      ok: false,
-      data: r.data,
-      error: { code: 'insufficient_balance', message: 'Insufficient wallet balance' },
+    ResponseUtil.error(res, HTTP_STATUS.CONFLICT, {
+      errorCode: severityFor(ERROR_CODES.INSUFFICIENT_BALANCE),
+      errorMessage: resolveErrorMessage(ERROR_CODES.INSUFFICIENT_BALANCE),
+      reason: ERROR_CODES.INSUFFICIENT_BALANCE,
     });
     return;
   }

@@ -56,6 +56,13 @@ export function toastSuccess(message: string) {
 }
 
 export function toastError(err: ApiError | string | { message?: string }) {
-  const message = typeof err === 'string' ? err : err.message ?? 'Something went wrong.';
+  let message = 'Something went wrong.';
+  if (typeof err === 'string') {
+    message = err;
+  } else if ('errorMessage' in err && err.errorMessage) {
+    message = err.errorMessage;
+  } else if ('message' in err && err.message) {
+    message = err.message;
+  }
   DrawerService.toast(message, { type: 'error', duration: 4000 });
 }

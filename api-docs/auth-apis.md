@@ -40,22 +40,26 @@ Every response — success or error — uses one of these two shapes:
 }
 ```
 
-**Error**
+**Error** — flat envelope (no `error` wrapper). See `docs/error-envelope-redesign.md`.
 ```json
 {
-  "error": {
-    "code": "snake_case_code",
-    "message": "Human-readable message",
-    "field_errors": { "field": ["msg1", "msg2"] }
-  }
+  "errorCode": 1000,
+  "errorMessage": "Human-readable, displayable message",
+  "reason": "snake_case_reason",
+  "fieldErrors": { "field": ["msg"] }
 }
 ```
 
-`field_errors` is only present on validation failures (HTTP 400 with `code: "validation_error"`).
+- `reason` — stable snake_case identity. **Key UI/i18n off `reason`**, never the human `errorMessage`.
+- `errorCode` — numeric severity band 1000–1009 (last digit = severity: `1000` body-validation … `1009` server). For measurement/alerting.
+- `errorMessage` — resolved, user-displayable text.
+- `fieldErrors` — present only on validation failures (`reason: "validation_error"`), and carries **one field at a time** (the first invalid field). Fix it, resubmit, the next one appears.
+
+> Note: some inline examples below still show the legacy `{ "error": { "code", "message" } }` shape. The live API now returns the flat shape above for every error; the catalog of `reason` values is unchanged.
 
 ### 2. Error code catalog
 
-Every code below is a snake_case string that comes back in `error.code`. UI/i18n must map them — never key off the human `message`.
+Every value below is a snake_case string returned as `reason`. UI/i18n must map them — never key off the human `errorMessage`.
 
 | Code | Meaning | Typical HTTP |
 |---|---|---|

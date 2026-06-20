@@ -2,11 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ROUTES, formatNaira, type CallType } from '@ohlify/core';
-import {
-  AppLoader,
-  AppErrorState,
-  DrawerService,
-} from '@ohlify/ui';
+import { AppLoader, AppErrorState, DrawerService } from '@ohlify/ui';
 import type { ApiError, ApiRate } from '@ohlify/api';
 
 import { useProfessional } from '../../professional-details/api/use-professional.js';
@@ -17,10 +13,7 @@ import { useAvailability } from '../api/use-availability.js';
 import { usePaystackInline } from '../../wallet/api/use-paystack-inline.js';
 import { useConfigNumber } from '../../../shared/providers/app-config-provider.js';
 import { CompactProfessionalHeader } from './parts/compact-professional-header.js';
-import {
-  ScheduleCallForm,
-  type ScheduleCallFormSubmit,
-} from './parts/schedule-call-form.js';
+import { ScheduleCallForm, type ScheduleCallFormSubmit } from './parts/schedule-call-form.js';
 import type { SlotOption } from './parts/slot-chip-picker.js';
 
 function toYmd(d: Date): string {
@@ -41,15 +34,13 @@ function formatLocalTime(iso: string): string {
 }
 
 /**
- * Returns the first usable message from an `ApiError.field_errors` bag, or
+ * Returns the first usable message from an `ApiError.fieldErrors` bag, or
  * null when there isn't one. Picks the first non-empty entry across all
  * fields (in iteration order) — backend validators put the most relevant
  * problem first, and on this form we only have one field worth of errors
  * to surface in a toast.
  */
-function firstFieldError(
-  fieldErrors: Record<string, string[]> | undefined,
-): string | null {
+function firstFieldError(fieldErrors: Record<string, string[]> | undefined): string | null {
   if (!fieldErrors) return null;
   for (const messages of Object.values(fieldErrors)) {
     const first = messages?.[0];
@@ -167,8 +158,8 @@ export function ScheduleCallScreen() {
         },
         onError: async (err) => {
           const e = err as unknown as ApiError;
-          if (e.code === 'insufficient_balance' && retryAfterFunding) {
-            const raw = e.field_errors?.['total_paid_kobo']?.[0] ?? '';
+          if (e.reason === 'insufficient_balance' && retryAfterFunding) {
+            const raw = e.fieldErrors?.['total_paid_kobo']?.[0] ?? '';
             const match = raw.match(/short by (\d+)/);
             const shortByKobo = match ? parseInt(match[1]!, 10) : minFundingKobo;
             const suggestedKobo = Math.max(shortByKobo, minFundingKobo);
@@ -217,18 +208,17 @@ export function ScheduleCallScreen() {
                 type: 'error',
               });
             }
-          } else if (e.code === 'professional_unavailable') {
-            DrawerService.toast(
-              'This slot is no longer available. Please choose another time.',
-              { type: 'error' },
-            );
+          } else if (e.reason === 'professional_unavailable') {
+            DrawerService.toast('This slot is no longer available. Please choose another time.', {
+              type: 'error',
+            });
           } else {
-            // Prefer backend field_errors when present — they're already
+            // Prefer backend fieldErrors when present — they're already
             // user-facing strings (e.g. "Cannot book yourself"). Fall back
             // to the top-level message, then a generic.
-            const fieldMsg = firstFieldError(e.field_errors);
+            const fieldMsg = firstFieldError(e.fieldErrors);
             DrawerService.toast(
-              fieldMsg ?? e.message ?? 'Could not schedule call. Please try again.',
+              fieldMsg ?? e.errorMessage ?? 'Could not schedule call. Please try again.',
               { type: 'error' },
             );
           }

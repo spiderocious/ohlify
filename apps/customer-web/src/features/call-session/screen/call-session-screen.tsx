@@ -1,5 +1,5 @@
 import { Show, Switch, Case } from 'meemaw';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ROUTES, type CallRole, type CallType } from '@ohlify/core';
@@ -12,14 +12,8 @@ import { useRenewCallToken } from '../api/use-renew-call-token.js';
 import { CallAvatar } from './parts/call-avatar.js';
 import { CallBlurredBackdrop } from './parts/call-blurred-backdrop.js';
 import { CallControls } from './parts/call-controls.js';
-import {
-  DescriptionFeedbackBubble,
-  EmojiFeedbackBubble,
-} from './parts/feedback-bubble.js';
-import {
-  useAgoraCallSession,
-  type AgoraCallSession,
-} from './use-agora-call-session.js';
+import { DescriptionFeedbackBubble, EmojiFeedbackBubble } from './parts/feedback-bubble.js';
+import { useAgoraCallSession, type AgoraCallSession } from './use-agora-call-session.js';
 
 type FeedbackStep = 'none' | 'emoji' | 'description';
 
@@ -49,18 +43,24 @@ export function CallSessionScreen() {
     joinCall.mutate(sessionId, {
       onSuccess: setJoinData,
       onError: (err) => {
-        const e = err as { message?: string };
-        setJoinError(e.message ?? 'Could not join call');
+        const e = err as { errorMessage?: string };
+        setJoinError(e.errorMessage ?? 'Could not join call');
       },
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (joinError) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-black text-white gap-4 px-6">
-        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">{joinError}</AppText>
-        <AppButton label="Go back" radius={100} height={44} onPressed={() => navigate(ROUTES.HOME.absPath, { replace: true })} />
+        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">
+          {joinError}
+        </AppText>
+        <AppButton
+          label="Go back"
+          radius={100}
+          height={44}
+          onPressed={() => navigate(ROUTES.HOME.absPath, { replace: true })}
+        />
       </main>
     );
   }
@@ -117,13 +117,9 @@ function ActiveCallScreen({
   const leaveCall = useLeaveCall(sessionId);
   const renewToken = useRenewCallToken(sessionId);
 
-  const onLeave = useCallback(
-    (reason: 'hangup' | 'declined') => {
-      leaveCall.mutate({ reason });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const onLeave = useCallback((reason: 'hangup' | 'declined') => {
+    leaveCall.mutate({ reason });
+  }, []);
 
   const onRenewToken = useCallback(async (): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -132,7 +128,6 @@ function ActiveCallScreen({
         onError: reject,
       });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const session: AgoraCallSession = useAgoraCallSession({
@@ -175,7 +170,9 @@ function ActiveCallScreen({
       {
         kind: 'success',
         showCloseButton: false,
-        onConfirm: () => { confirmed = true; },
+        onConfirm: () => {
+          confirmed = true;
+        },
       },
     );
     void handle.onDismissed.then(() => {
@@ -195,7 +192,11 @@ function ActiveCallScreen({
             </div>
           </Case>
           <Case when={session.phase.tag === 'dialing'}>
-            <DialingBody peerName={peerName} peerAvatarKey={peerAvatarKey} onHangup={session.hangup} />
+            <DialingBody
+              peerName={peerName}
+              peerAvatarKey={peerAvatarKey}
+              onHangup={session.hangup}
+            />
           </Case>
           <Case when={session.phase.tag === 'connecting'}>
             <ConnectingBody peerName={peerName} peerAvatarKey={peerAvatarKey} />
@@ -225,7 +226,12 @@ function ActiveCallScreen({
               <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">
                 {session.phase.errorMessage ?? 'Connection error'}
               </AppText>
-              <AppButton label="Go back" radius={100} height={44} onPressed={() => navigate(ROUTES.HOME.absPath, { replace: true })} />
+              <AppButton
+                label="Go back"
+                radius={100}
+                height={44}
+                onPressed={() => navigate(ROUTES.HOME.absPath, { replace: true })}
+              />
             </div>
           </Case>
         </Switch>
@@ -262,8 +268,12 @@ function DialingBody({ peerName, peerAvatarKey, onHangup }: BodyProps & { onHang
       <span />
       <div className="flex flex-col items-center gap-5 text-center">
         <CallAvatar fileKey={peerAvatarKey} />
-        <AppText variant="title" weight={700} align="center" color="#fff">{peerName}</AppText>
-        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">Dialing…</AppText>
+        <AppText variant="title" weight={700} align="center" color="#fff">
+          {peerName}
+        </AppText>
+        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">
+          Dialing…
+        </AppText>
       </div>
       <button
         type="button"
@@ -281,8 +291,12 @@ function ConnectingBody({ peerName, peerAvatarKey }: BodyProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
       <CallAvatar fileKey={peerAvatarKey} />
-      <AppText variant="title" weight={700} align="center" color="#fff">{peerName}</AppText>
-      <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">Connecting…</AppText>
+      <AppText variant="title" weight={700} align="center" color="#fff">
+        {peerName}
+      </AppText>
+      <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">
+        Connecting…
+      </AppText>
     </div>
   );
 }
@@ -319,17 +333,32 @@ function ActiveBody({
   return (
     <div className="flex flex-1 flex-col items-center justify-between px-6 py-12">
       <div className="flex flex-col items-center gap-2 text-center">
-        <AppText variant="bodyTitle" weight={700} align="center" color="#fff">{peerName}</AppText>
-        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">{elapsedLabel}</AppText>
+        <AppText variant="bodyTitle" weight={700} align="center" color="#fff">
+          {peerName}
+        </AppText>
+        <AppText variant="body" align="center" color="rgba(255,255,255,0.7)">
+          {elapsedLabel}
+        </AppText>
       </div>
 
-      <div className={cn('relative flex flex-col items-center gap-5', isVideo ? 'w-full flex-1 py-4' : '')}>
+      <div
+        className={cn(
+          'relative flex flex-col items-center gap-5',
+          isVideo ? 'w-full flex-1 py-4' : '',
+        )}
+      >
         {isVideo ? (
           <>
             {/* Remote video fills the center */}
-            <div ref={remoteVideoRef} className="w-full flex-1 rounded-2xl overflow-hidden bg-gray-900 min-h-48" />
+            <div
+              ref={remoteVideoRef}
+              className="w-full flex-1 rounded-2xl overflow-hidden bg-gray-900 min-h-48"
+            />
             {/* Local video PiP in corner */}
-            <div ref={localVideoRef} className="absolute bottom-2 right-2 w-24 h-32 rounded-xl overflow-hidden border-2 border-white/30 bg-gray-800" />
+            <div
+              ref={localVideoRef}
+              className="absolute bottom-2 right-2 w-24 h-32 rounded-xl overflow-hidden border-2 border-white/30 bg-gray-800"
+            />
           </>
         ) : (
           <CallAvatar fileKey={peerAvatarKey} size={140} />
@@ -353,7 +382,9 @@ function ActiveBody({
 function EndedBody() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
-      <AppText variant="title" weight={700} align="center" color="#fff">Call ended</AppText>
+      <AppText variant="title" weight={700} align="center" color="#fff">
+        Call ended
+      </AppText>
     </div>
   );
 }

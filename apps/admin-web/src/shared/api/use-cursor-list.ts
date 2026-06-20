@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { useAdminQuery } from './use-admin-query.js';
-import type { CursorMeta } from '@ohlify/api';
+import type { ApiError, CursorMeta } from '@ohlify/api';
 
 /**
  * Cursor pagination state machine for list endpoints. Maintains a stack
@@ -30,7 +30,7 @@ export interface UseCursorListResult<T> {
   items: T[];
   isLoading: boolean;
   isFetching: boolean;
-  error: { message?: string } | null;
+  error: ApiError | null;
   hasNext: boolean;
   hasPrev: boolean;
   goNext: () => void;
@@ -57,7 +57,11 @@ export function useCursorList<T = unknown, F extends FiltersShape = FiltersShape
 
   // Cast to a plain index-sig record so TS doesn't complain when the caller
   // passes a named interface (which lacks an explicit string index sig).
-  const params: Record<string, Primitive> = { ...(filters as Record<string, Primitive>), cursor, limit };
+  const params: Record<string, Primitive> = {
+    ...(filters as Record<string, Primitive>),
+    cursor,
+    limit,
+  };
 
   const query = useAdminQuery<{ items: T[]; meta: CursorMeta }>({
     key: [...key, filterFingerprint, cursor],

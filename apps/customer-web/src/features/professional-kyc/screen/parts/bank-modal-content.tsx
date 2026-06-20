@@ -44,11 +44,11 @@ export function BankModalContent({ initial, onSuccess }: BankModalContentProps) 
   // Clear top-level error when inputs change.
   useEffect(() => {
     if (errorMessage) setErrorMessage(null);
-  }, [accountNumber, bankCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountNumber, bankCode]);
 
   const resolvedName = resolve.data?.account_name ?? null;
   const resolveErr = resolve.error as unknown as ApiError | null;
-  const resolveErrCode = resolveErr?.code;
+  const resolveErrCode = resolveErr?.reason;
 
   const canSubmit = canResolve && resolvedName !== null && !saveBank.isPending;
 
@@ -62,14 +62,14 @@ export function BankModalContent({ initial, onSuccess }: BankModalContentProps) 
         },
         onError: (err) => {
           const e = err as unknown as ApiError;
-          if (e.code === 'account_name_mismatch') {
+          if (e.reason === 'account_name_mismatch') {
             setErrorMessage(
               'Account name doesn’t match your full name on file. Use an account in your own name, or update your full name in profile.',
             );
-          } else if (e.code === 'unresolvable_account') {
+          } else if (e.reason === 'unresolvable_account') {
             setErrorMessage('That account number could not be resolved at the chosen bank.');
           } else {
-            setErrorMessage(e.message || 'Could not save the bank account. Please try again.');
+            setErrorMessage(e.errorMessage || 'Could not save the bank account. Please try again.');
           }
         },
       },
@@ -79,7 +79,8 @@ export function BankModalContent({ initial, onSuccess }: BankModalContentProps) 
   return (
     <div className="space-y-4">
       <AppText variant="body" align="start" color="var(--ohl-text-muted)">
-        We send your payouts to this account. The name on the account must match your full legal name.
+        We send your payouts to this account. The name on the account must match your full legal
+        name.
       </AppText>
 
       <AppDropdownInput<string>

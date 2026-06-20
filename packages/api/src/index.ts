@@ -1,8 +1,8 @@
 export { apiClient, configureApiClient } from './client.js';
 export { createMockQueryClient, registerMock } from './mock-client.js';
 export { EP } from './endpoints.js';
-export type { ApiError, ApiErrorResponse, ApiResponse } from './types.js';
-export { parseApiError } from './types.js';
+export type { ApiError, ApiResponse } from './types.js';
+export { SeverityBand, parseApiError, fieldError, firstFieldError } from './types.js';
 export { session } from './auth/session.js';
 export type {
   OnboardingStep as AuthOnboardingStep,

@@ -42,7 +42,12 @@ export function ChangePasswordScreen() {
   const isValid = current.length >= 1 && rulesMet && matches;
 
   const eyeButton = (visible: boolean, toggle: () => void) => (
-    <button type="button" onClick={toggle} aria-label="Toggle visibility" className="text-text-slate">
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label="Toggle visibility"
+      className="text-text-slate"
+    >
       {visible ? <IconEye size={18} /> : <IconEyeOff size={18} />}
     </button>
   );
@@ -73,8 +78,8 @@ export function ChangePasswordScreen() {
           setOtpSent(false);
         },
         onError: (err) => {
-          const e = (err as unknown) as ApiError;
-          setError(ERROR_MESSAGES[e.code] ?? 'Failed to change password. Please try again.');
+          const e = err as unknown as ApiError;
+          setError(ERROR_MESSAGES[e.reason] ?? 'Failed to change password. Please try again.');
         },
       },
     );

@@ -26,10 +26,14 @@ import { register as registerReviews } from '@features/reviews/index.js';
 import { register as registerStrikes } from '@features/strikes/index.js';
 import { register as registerSupport } from '@features/support/index.js';
 import { register as registerWallet } from '@features/wallet/index.js';
+import { ResponseUtil } from '@lib/response.js';
 import { errorHandler } from '@middlewares/errorHandler.middleware.js';
 import { globalRateLimit } from '@middlewares/rateLimit.middleware.js';
 import { requestIdMiddleware } from '@middlewares/requestId.middleware.js';
 import { requestLogMiddleware } from '@middlewares/requestLog.middleware.js';
+import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
+import { resolveErrorMessage } from '@shared/constants/error-messages.js';
+import { HTTP_STATUS } from '@shared/constants/http-status.js';
 
 // The Paystack + Agora webhook paths need the body as raw bytes for HMAC
 // signature verification. We skip global json parsing on those routes by
@@ -133,7 +137,11 @@ export const buildApp = (): express.Express => {
 
   // 404
   app.use((_req, res) => {
-    res.status(404).json({ error: { code: 'not_found', message: 'Route not found' } });
+    ResponseUtil.error(res, HTTP_STATUS.NOT_FOUND, {
+      errorCode: severityFor(ERROR_CODES.NOT_FOUND),
+      errorMessage: resolveErrorMessage(ERROR_CODES.NOT_FOUND),
+      reason: ERROR_CODES.NOT_FOUND,
+    });
   });
 
   // Error handler (must be last)

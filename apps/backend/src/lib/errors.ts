@@ -1,19 +1,25 @@
 import type { ErrorCode } from '@shared/constants/error-codes.js';
 import { HTTP_STATUS } from '@shared/constants/http-status.js';
+import type { MessageKey } from '@shared/constants/message-keys.js';
 
 export class AppError extends Error {
   public readonly retryAfter?: number;
+  /** Optional i18n key the error handler resolves into the user-facing `errorMessage`. */
+  public readonly messageKey?: MessageKey;
 
   constructor(
+    /** Stable string identity (an ErrorCode value) emitted as `reason`. */
     public readonly code: ErrorCode,
     message: string,
     public readonly status = 400,
     public readonly fieldErrors?: Record<string, string[]>,
     retryAfter?: number,
+    messageKey?: MessageKey,
   ) {
     super(message);
     this.name = 'AppError';
     if (retryAfter !== undefined) this.retryAfter = retryAfter;
+    if (messageKey !== undefined) this.messageKey = messageKey;
     Error.captureStackTrace(this, this.constructor);
   }
 }

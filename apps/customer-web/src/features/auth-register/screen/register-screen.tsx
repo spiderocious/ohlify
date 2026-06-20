@@ -37,10 +37,8 @@ export function RegisterScreen() {
         },
         onError: (err) => {
           const apiErr = err as unknown as ApiError;
-          if (apiErr.code === 'email_exists') {
-            setNonFieldError('An account with this email already exists.');
-          } else if (apiErr.code === 'phone_exists') {
-            setNonFieldError('An account with this phone number already exists.');
+          if (apiErr.reason === 'email_exists' || apiErr.reason === 'phone_exists') {
+            setNonFieldError('An account with this email or phone number already exists.');
           } else {
             setNonFieldError('Something went wrong. Please try again.');
           }

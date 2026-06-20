@@ -60,9 +60,9 @@ export function RoleSelectionScreen() {
             );
           },
           onError: (err) => {
-            const apiErr = (err as unknown) as ApiError;
+            const apiErr = err as unknown as ApiError;
             DrawerService.toast(
-              apiErr.code === 'rate_limited'
+              apiErr.reason === 'rate_limited'
                 ? 'Too many attempts. Please wait a moment.'
                 : 'Something went wrong. Please try again.',
               { type: 'error' },
