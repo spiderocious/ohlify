@@ -5,8 +5,6 @@ interface Props {
   phase: CallPhase;
   peerName: string;
   peerAvatarUrl: string | null;
-  localName: string;
-  localAvatarUrl: string | null;
   muted: boolean;
   connectedAt: number | null;
   durationMinutes: number | null;

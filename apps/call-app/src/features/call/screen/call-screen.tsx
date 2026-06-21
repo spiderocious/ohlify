@@ -109,8 +109,6 @@ export function CallScreen() {
       phase={state.phase}
       peerName={jp.peer_name}
       peerAvatarUrl={jp.peer_avatar_key}
-      localName={jp.local_name}
-      localAvatarUrl={jp.local_avatar_key}
       muted={state.muted}
       connectedAt={state.connectedAt}
       durationMinutes={jp.duration_minutes}
