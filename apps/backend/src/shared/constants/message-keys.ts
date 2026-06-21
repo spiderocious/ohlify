@@ -239,6 +239,10 @@ export const MESSAGE_KEYS = {
   ADMIN_BOOTSTRAP_DISABLED: 'admin.bootstrap.disabled',
   ADMIN_BOOTSTRAP_ALREADY_DONE: 'admin.bootstrap.already_done',
   ADMIN_BOOTSTRAP_CREATED: 'admin.bootstrap.created',
+  // Dev
+  DEV_CALL_SESSION_CREATED: 'dev.call_session.created',
+  DEV_CALL_SESSION_FETCHED: 'dev.call_session.fetched',
+  DEV_CALL_SESSION_NOT_FOUND: 'dev.call_session.not_found',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];
