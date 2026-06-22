@@ -32,6 +32,9 @@ export const CA_EVENTS = {
   GRANT_PERMISSION:  'ca:grant-permission',
   PAUSE_DURATION:    'ca:pause-duration',
   RESUME_DURATION:   'ca:resume-duration',
+  // Stream messaging (parent → call-app: send to peers; call-app → parent: received from peer)
+  STREAM_SEND:       'ca:stream-send',
+  STREAM_RECEIVED:   'ca:stream-received',
 } as const;
 
 export type CaEvent = (typeof CA_EVENTS)[keyof typeof CA_EVENTS];
@@ -184,6 +187,16 @@ export interface MsgResumeDuration extends BridgeBase {
   type: typeof CA_EVENTS.RESUME_DURATION;
 }
 
+// Parent instructs call-app to broadcast a stream message to all channel peers.
+// `msg_type` must be a valid STREAM_MSG value; `payload` is the message-specific data.
+export interface MsgStreamSend extends BridgeBase {
+  type: typeof CA_EVENTS.STREAM_SEND;
+  payload: {
+    msg_type: string;
+    payload?: Record<string, unknown>;
+  };
+}
+
 export type ParentToCallApp =
   | MsgJoin
   | MsgMute
@@ -195,7 +208,8 @@ export type ParentToCallApp =
   | MsgOverlay
   | MsgGrantPermission
   | MsgPauseDuration
-  | MsgResumeDuration;
+  | MsgResumeDuration
+  | MsgStreamSend;
 
 // Notifications (call-app → parent)
 
@@ -303,6 +317,16 @@ export interface MsgEnded extends BridgeBase {
   };
 }
 
+// Emitted when a stream message arrives from a peer and is marked for parent forwarding.
+export interface MsgStreamReceived extends BridgeBase {
+  type: typeof CA_EVENTS.STREAM_RECEIVED;
+  payload: {
+    from_uid: number;
+    msg_type: string;
+    data: Record<string, unknown>;
+  };
+}
+
 export type CallAppToParent =
   | MsgReady
   | MsgPhase
@@ -321,6 +345,7 @@ export type CallAppToParent =
   | MsgPermissionNeeded
   | MsgWarning
   | MsgError
-  | MsgEnded;
+  | MsgEnded
+  | MsgStreamReceived;
 
 export type BridgeMessage = ParentToCallApp | CallAppToParent;

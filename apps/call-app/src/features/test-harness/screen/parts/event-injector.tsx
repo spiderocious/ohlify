@@ -19,6 +19,11 @@ const INJECTABLE_COMMANDS: { label: string; event: string; defaultPayload: objec
   { label: 'ca:grant-permission (cam)',  event: CA_EVENTS.GRANT_PERMISSION, defaultPayload: { kind: 'camera' } },
   { label: 'ca:pause-duration',  event: CA_EVENTS.PAUSE_DURATION,  defaultPayload: null },
   { label: 'ca:resume-duration', event: CA_EVENTS.RESUME_DURATION, defaultPayload: null },
+  { label: 'ca:stream-send (mute)',     event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:mute',     payload: { muted: true } } },
+  { label: 'ca:stream-send (unmute)',   event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:mute',     payload: { muted: false } } },
+  { label: 'ca:stream-send (camera off)', event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:camera', payload: { enabled: false } } },
+  { label: 'ca:stream-send (reaction)', event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:reaction', payload: { emoji: '👍' } } },
+  { label: 'ca:stream-send (custom)',   event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:custom',   payload: { key: 'ping', value: 'hello' } } },
 ];
 
 interface Props {

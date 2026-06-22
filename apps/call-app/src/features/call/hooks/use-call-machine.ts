@@ -12,7 +12,9 @@ import {
   type NetworkQualityLevel,
   type ParentToCallApp,
 } from '@shared/bridge/index.js';
-import { type AgoraEvent, type AgoraRtcOptions } from './use-agora-rtc.js';
+import { STREAM_MSG, STREAM_FORWARD_TO_PARENT } from '@shared/stream/stream.types.js';
+import type { StreamMessage } from '@shared/stream/stream.types.js';
+import { AGORA_EVENT, type AgoraEvent, type AgoraRtcOptions } from './use-agora-rtc.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,9 @@ export interface CallMachineState {
   durationPaused: boolean;
   pausedAt: number | null;
   accumulatedPausedMs: number;
+  // Remote peer state (driven by stream messages)
+  remoteMuted: boolean;
+  remoteSpeaking: boolean;
 }
 
 type MachineAction =
@@ -48,7 +53,9 @@ type MachineAction =
   | { type: 'SPEAKER'; enabled: boolean }
   | { type: 'NETWORK_QUALITY'; uplink: NetworkQualityLevel; downlink: NetworkQualityLevel }
   | { type: 'PAUSE_DURATION' }
-  | { type: 'RESUME_DURATION' };
+  | { type: 'RESUME_DURATION' }
+  | { type: 'REMOTE_MUTED'; muted: boolean }
+  | { type: 'REMOTE_SPEAKING'; speaking: boolean };
 
 const DURATION_WARNING_THRESHOLD_SECONDS = 60;
 
@@ -66,6 +73,8 @@ const initial: CallMachineState = {
   durationPaused: false,
   pausedAt: null,
   accumulatedPausedMs: 0,
+  remoteMuted: false,
+  remoteSpeaking: false,
 };
 
 function reducer(state: CallMachineState, action: MachineAction): CallMachineState {
@@ -103,7 +112,11 @@ function reducer(state: CallMachineState, action: MachineAction): CallMachineSta
       };
     case 'REMOTE_LEFT':
       if (state.phase === CALL_PHASE.ENDED || state.phase === CALL_PHASE.ERROR) return state;
-      return { ...state, phase: CALL_PHASE.ALONE };
+      return { ...state, phase: CALL_PHASE.ALONE, remoteMuted: false, remoteSpeaking: false };
+    case 'REMOTE_MUTED':
+      return { ...state, remoteMuted: action.muted };
+    case 'REMOTE_SPEAKING':
+      return { ...state, remoteSpeaking: action.speaking };
     case 'PAUSE_DURATION':
       if (state.durationPaused || state.phase !== CALL_PHASE.ACTIVE) return state;
       return { ...state, durationPaused: true, pausedAt: Date.now() };
@@ -151,6 +164,7 @@ export interface CallMachineHandle {
 export function useCallMachine(
   emitToParent: (msg: Parameters<typeof import('@shared/bridge/index.js').emitToParent>[0]) => void,
   rtcLeave: () => void,
+  sendStream: (msg: StreamMessage) => void,
 ): CallMachineHandle {
   const [state, dispatch] = useReducer(reducer, initial);
   const stateRef = useRef(state);
@@ -230,10 +244,14 @@ export function useCallMachine(
       case CA_EVENTS.MUTE:
         dispatch({ type: 'MUTE', muted: msg.payload.muted });
         emitToParent({ type: CA_EVENTS.MUTED, payload: { muted: msg.payload.muted } });
+        // Broadcast mute state to peers.
+        sendStream({ type: STREAM_MSG.MUTE, uid: stateRef.current.joinParams?.agora_uid ?? 0, muted: msg.payload.muted });
         break;
       case CA_EVENTS.CAMERA:
         dispatch({ type: 'CAMERA', enabled: msg.payload.enabled });
         emitToParent({ type: CA_EVENTS.CAMERA_CHANGED, payload: { enabled: msg.payload.enabled } });
+        // Broadcast camera state to peers.
+        sendStream({ type: STREAM_MSG.CAMERA, uid: stateRef.current.joinParams?.agora_uid ?? 0, enabled: msg.payload.enabled });
         break;
       case CA_EVENTS.SPEAKER:
         dispatch({ type: 'SPEAKER', enabled: msg.payload.enabled });
@@ -266,18 +284,28 @@ export function useCallMachine(
         emitToParent({ type: CA_EVENTS.DURATION_RESUMED, payload: { elapsed_seconds: elapsedSeconds } });
         break;
       }
+      case CA_EVENTS.STREAM_SEND: {
+        // Parent instructs call-app to broadcast a custom stream message to all peers.
+        const { msg_type, payload: streamPayload } = msg.payload;
+        sendStream({
+          type: msg_type,
+          uid: stateRef.current.joinParams?.agora_uid ?? 0,
+          ...(streamPayload ?? {}),
+        } as StreamMessage);
+        break;
+      }
       default:
         break;
     }
-  }, [emitToParent]);
+  }, [emitToParent, sendStream]);
 
   const handleAgoraEvent = useCallback((evt: AgoraEvent) => {
     switch (evt.kind) {
-      case 'joined':
+      case AGORA_EVENT.JOINED:
         dispatch({ type: 'JOINED' });
         if (evt.uid != null) emitToParent({ type: CA_EVENTS.JOINED, payload: { uid: evt.uid } });
         break;
-      case 'remote-joined': {
+      case AGORA_EVENT.REMOTE_JOINED: {
         dispatch({ type: 'REMOTE_JOINED' });
         const jp = stateRef.current.joinParams;
         if (jp) {
@@ -290,7 +318,7 @@ export function useCallMachine(
         }
         break;
       }
-      case 'remote-left': {
+      case AGORA_EVENT.REMOTE_LEFT: {
         dispatch({ type: 'REMOTE_LEFT' });
         const jp = stateRef.current.joinParams;
         if (jp) {
@@ -303,23 +331,23 @@ export function useCallMachine(
         }
         break;
       }
-      case 'active':
+      case AGORA_EVENT.ACTIVE:
         dispatch({ type: 'ACTIVE', connectedAt: evt.connectedAt ?? Date.now() });
         emitToParent({ type: CA_EVENTS.ACTIVE, payload: { connected_at: evt.connectedAt ?? Date.now() } });
         break;
-      case 'muted':
+      case AGORA_EVENT.MUTED:
         if (evt.muted != null) {
           dispatch({ type: 'MUTE', muted: evt.muted });
           emitToParent({ type: CA_EVENTS.MUTED, payload: { muted: evt.muted } });
         }
         break;
-      case 'camera-changed':
+      case AGORA_EVENT.CAMERA_CHANGED:
         if (evt.cameraEnabled != null) {
           dispatch({ type: 'CAMERA', enabled: evt.cameraEnabled });
           emitToParent({ type: CA_EVENTS.CAMERA_CHANGED, payload: { enabled: evt.cameraEnabled } });
         }
         break;
-      case 'network-quality':
+      case AGORA_EVENT.NETWORK_QUALITY:
         if (evt.uplink != null && evt.downlink != null) {
           dispatch({ type: 'NETWORK_QUALITY', uplink: evt.uplink, downlink: evt.downlink });
           emitToParent({
@@ -328,20 +356,47 @@ export function useCallMachine(
           });
         }
         break;
-      case 'token-expiring':
+      case AGORA_EVENT.STREAM_MESSAGE: {
+        const msg = evt.streamMsg;
+        if (!msg) break;
+
+        // Act locally on known stream message types.
+        if (msg.type === STREAM_MSG.MUTE) {
+          dispatch({ type: 'REMOTE_MUTED', muted: (msg as { muted: boolean }).muted });
+        } else if (msg.type === STREAM_MSG.SPEAKING) {
+          dispatch({ type: 'REMOTE_SPEAKING', speaking: true });
+        } else if (msg.type === STREAM_MSG.SPEAKING_STOPPED) {
+          dispatch({ type: 'REMOTE_SPEAKING', speaking: false });
+        }
+
+        // Forward to parent if this type is marked for forwarding.
+        if (STREAM_FORWARD_TO_PARENT.has(msg.type)) {
+          const { type, uid, ...rest } = msg as StreamMessage & { uid: number };
+          emitToParent({
+            type: CA_EVENTS.STREAM_RECEIVED,
+            payload: {
+              from_uid: uid ?? (evt.uid ?? 0),
+              msg_type: type,
+              data: rest as Record<string, unknown>,
+            },
+          });
+        }
+        break;
+      }
+      case AGORA_EVENT.TOKEN_EXPIRING:
         emitToParent({
           type: CA_EVENTS.TOKEN_EXPIRING,
           payload: { expires_at: evt.expiresAt ?? '' },
         });
         break;
-      case 'error':
+      case AGORA_EVENT.ERROR:
         dispatch({ type: 'ERROR', message: evt.error ?? 'Unknown RTC error' });
         emitToParent({
           type: CA_EVENTS.ERROR,
           payload: { code: 'rtc_error', message: evt.error ?? 'Unknown RTC error' },
         });
         break;
-      case 'ended':
+      case AGORA_EVENT.ENDED:
         dispatch({ type: 'END', reason: END_REASON.ERROR });
         break;
     }

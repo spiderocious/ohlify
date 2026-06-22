@@ -13,7 +13,12 @@ export function CallScreen() {
   const bridge = useCallBridge();
 
   const rtcLeave = useRef<() => void>(() => {});
-  const machine = useCallMachine(bridge.emit, useCallback(() => rtcLeave.current(), []));
+  const rtcSendStream = useRef<ReturnType<typeof useAgoraRtc>['sendStream']>(() => {});
+  const machine = useCallMachine(
+    bridge.emit,
+    useCallback(() => rtcLeave.current(), []),
+    useCallback((msg) => rtcSendStream.current(msg), []),
+  );
 
   const handleAgoraEvent = useCallback(
     (evt: AgoraEvent) => machine.handleAgoraEvent(evt),
@@ -26,6 +31,7 @@ export function CallScreen() {
 
   const rtc = useAgoraRtc(agoraOptions);
   rtcLeave.current = rtc.leave;
+  rtcSendStream.current = rtc.sendStream;
 
   bridge.onCommand(machine.handleBridgeCommand);
 
@@ -110,6 +116,8 @@ export function CallScreen() {
       peerName={jp.peer_name}
       peerAvatarUrl={jp.peer_avatar_key}
       muted={state.muted}
+      remoteMuted={state.remoteMuted}
+      remoteSpeaking={state.remoteSpeaking}
       connectedAt={state.connectedAt}
       durationMinutes={jp.duration_minutes}
       accumulatedPausedMs={state.accumulatedPausedMs}
