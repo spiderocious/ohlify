@@ -63,9 +63,16 @@ function RateGroup({ title, rates, background, onSelect }: RateGroupProps) {
                     {rate.durationMinutes} minutes
                   </AppText>
                 </span>
-                <AppText variant="body" align="end" color="var(--ohl-text-forest)" weight={700}>
-                  {rate.price}
-                </AppText>
+                <span className="flex flex-col items-end">
+                  <AppText variant="body" align="end" color="var(--ohl-text-forest)" weight={700}>
+                    {rate.price}
+                  </AppText>
+                  <Show when={Boolean(rate.pricePerMinute)}>
+                    <AppText variant="bodySmall" align="end" color="var(--ohl-text-muted)">
+                      {rate.pricePerMinute}
+                    </AppText>
+                  </Show>
+                </span>
               </div>
             );
             const className = i > 0 ? 'border-t border-border' : '';

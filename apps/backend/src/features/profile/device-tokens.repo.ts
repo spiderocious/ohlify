@@ -35,23 +35,15 @@ export const upsert = async (input: {
   return res.rows[0]!;
 };
 
-export const deleteForUser = async (
-  userId: string,
-  token: string,
-): Promise<void> => {
-  await pool.query(
-    `DELETE FROM device_tokens WHERE user_id = $1 AND token = $2`,
-    [userId, token],
-  );
+export const deleteForUser = async (userId: string, token: string): Promise<void> => {
+  await pool.query(`DELETE FROM device_tokens WHERE user_id = $1 AND token = $2`, [userId, token]);
 };
 
 /**
  * Used by the outbox push adapter to fan out to every device the user
  * is currently active on.
  */
-export const findActiveTokensForUser = async (
-  userId: string,
-): Promise<DeviceTokenRow[]> => {
+export const findActiveTokensForUser = async (userId: string): Promise<DeviceTokenRow[]> => {
   const res = await pool.query<DeviceTokenRow>(
     `SELECT * FROM device_tokens WHERE user_id = $1 ORDER BY last_seen_at DESC`,
     [userId],

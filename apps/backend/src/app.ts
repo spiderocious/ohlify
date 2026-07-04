@@ -12,6 +12,7 @@ import { register as registerBookings } from '@features/bookings/index.js';
 import { register as registerAgoraWebhook } from '@features/calls/agora.webhook.routes.js';
 import { register as registerCalls } from '@features/calls/index.js';
 import { register as registerCategories } from '@features/categories/index.js';
+import { register as registerCallSessionEvents } from '@features/call-session-events/index.js';
 import { register as registerDev } from '@features/dev/index.js';
 import { register as registerHealth } from '@features/health/index.js';
 import { register as registerLegal } from '@features/legal/index.js';
@@ -91,6 +92,7 @@ const features = [
   registerBookings,
   registerCalls,
   registerAgoraWebhook,
+  registerCallSessionEvents, // /api/v1/call-sessions — event log, summary, by-reference
   registerAdminAuth, // /api/v1/admin/auth/* — login/refresh/logout (public) + totp/setup,confirm (authed)
   registerAdmin,
   registerDev, // dev-only; no-op in production. Demo Agora token mint at /api/v1/dev/agora-token.

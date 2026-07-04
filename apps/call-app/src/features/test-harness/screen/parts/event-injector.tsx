@@ -3,27 +3,71 @@ import { CA_EVENTS, type ParentToCallApp } from '@shared/bridge/bridge.types.js'
 
 // Default payloads for every injectable command.
 const INJECTABLE_COMMANDS: { label: string; event: string; defaultPayload: object | null }[] = [
-  { label: 'ca:mute (mute)',    event: CA_EVENTS.MUTE,            defaultPayload: { muted: true } },
-  { label: 'ca:mute (unmute)', event: CA_EVENTS.MUTE,            defaultPayload: { muted: false } },
-  { label: 'ca:camera (off)',  event: CA_EVENTS.CAMERA,          defaultPayload: { enabled: false } },
-  { label: 'ca:camera (on)',   event: CA_EVENTS.CAMERA,          defaultPayload: { enabled: true } },
-  { label: 'ca:switch-camera', event: CA_EVENTS.SWITCH_CAMERA,   defaultPayload: null },
-  { label: 'ca:speaker (off)', event: CA_EVENTS.SPEAKER,         defaultPayload: { enabled: false } },
-  { label: 'ca:speaker (on)',  event: CA_EVENTS.SPEAKER,         defaultPayload: { enabled: true } },
-  { label: 'ca:hangup',        event: CA_EVENTS.HANGUP,          defaultPayload: null },
-  { label: 'ca:renew-token',   event: CA_EVENTS.RENEW_TOKEN,     defaultPayload: { agora_token: '', expires_at: new Date(Date.now() + 3600_000).toISOString() } },
-  { label: 'ca:overlay (show network-warning)', event: CA_EVENTS.OVERLAY, defaultPayload: { name: 'network-warning', visible: true } },
-  { label: 'ca:overlay (hide network-warning)', event: CA_EVENTS.OVERLAY, defaultPayload: { name: 'network-warning', visible: false } },
-  { label: 'ca:overlay (show reconnecting)',    event: CA_EVENTS.OVERLAY, defaultPayload: { name: 'reconnecting', visible: true } },
-  { label: 'ca:grant-permission (mic)',  event: CA_EVENTS.GRANT_PERMISSION, defaultPayload: { kind: 'microphone' } },
-  { label: 'ca:grant-permission (cam)',  event: CA_EVENTS.GRANT_PERMISSION, defaultPayload: { kind: 'camera' } },
-  { label: 'ca:pause-duration',  event: CA_EVENTS.PAUSE_DURATION,  defaultPayload: null },
+  { label: 'ca:mute (mute)', event: CA_EVENTS.MUTE, defaultPayload: { muted: true } },
+  { label: 'ca:mute (unmute)', event: CA_EVENTS.MUTE, defaultPayload: { muted: false } },
+  { label: 'ca:camera (off)', event: CA_EVENTS.CAMERA, defaultPayload: { enabled: false } },
+  { label: 'ca:camera (on)', event: CA_EVENTS.CAMERA, defaultPayload: { enabled: true } },
+  { label: 'ca:switch-camera', event: CA_EVENTS.SWITCH_CAMERA, defaultPayload: null },
+  { label: 'ca:speaker (off)', event: CA_EVENTS.SPEAKER, defaultPayload: { enabled: false } },
+  { label: 'ca:speaker (on)', event: CA_EVENTS.SPEAKER, defaultPayload: { enabled: true } },
+  { label: 'ca:hangup', event: CA_EVENTS.HANGUP, defaultPayload: null },
+  {
+    label: 'ca:renew-token',
+    event: CA_EVENTS.RENEW_TOKEN,
+    defaultPayload: { agora_token: '', expires_at: new Date(Date.now() + 3600_000).toISOString() },
+  },
+  {
+    label: 'ca:overlay (show network-warning)',
+    event: CA_EVENTS.OVERLAY,
+    defaultPayload: { name: 'network-warning', visible: true },
+  },
+  {
+    label: 'ca:overlay (hide network-warning)',
+    event: CA_EVENTS.OVERLAY,
+    defaultPayload: { name: 'network-warning', visible: false },
+  },
+  {
+    label: 'ca:overlay (show reconnecting)',
+    event: CA_EVENTS.OVERLAY,
+    defaultPayload: { name: 'reconnecting', visible: true },
+  },
+  {
+    label: 'ca:grant-permission (mic)',
+    event: CA_EVENTS.GRANT_PERMISSION,
+    defaultPayload: { kind: 'microphone' },
+  },
+  {
+    label: 'ca:grant-permission (cam)',
+    event: CA_EVENTS.GRANT_PERMISSION,
+    defaultPayload: { kind: 'camera' },
+  },
+  { label: 'ca:pause-duration', event: CA_EVENTS.PAUSE_DURATION, defaultPayload: null },
   { label: 'ca:resume-duration', event: CA_EVENTS.RESUME_DURATION, defaultPayload: null },
-  { label: 'ca:stream-send (mute)',     event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:mute',     payload: { muted: true } } },
-  { label: 'ca:stream-send (unmute)',   event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:mute',     payload: { muted: false } } },
-  { label: 'ca:stream-send (camera off)', event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:camera', payload: { enabled: false } } },
-  { label: 'ca:stream-send (reaction)', event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:reaction', payload: { emoji: '👍' } } },
-  { label: 'ca:stream-send (custom)',   event: CA_EVENTS.STREAM_SEND, defaultPayload: { msg_type: 'sm:custom',   payload: { key: 'ping', value: 'hello' } } },
+  {
+    label: 'ca:stream-send (mute)',
+    event: CA_EVENTS.STREAM_SEND,
+    defaultPayload: { msg_type: 'sm:mute', payload: { muted: true } },
+  },
+  {
+    label: 'ca:stream-send (unmute)',
+    event: CA_EVENTS.STREAM_SEND,
+    defaultPayload: { msg_type: 'sm:mute', payload: { muted: false } },
+  },
+  {
+    label: 'ca:stream-send (camera off)',
+    event: CA_EVENTS.STREAM_SEND,
+    defaultPayload: { msg_type: 'sm:camera', payload: { enabled: false } },
+  },
+  {
+    label: 'ca:stream-send (reaction)',
+    event: CA_EVENTS.STREAM_SEND,
+    defaultPayload: { msg_type: 'sm:reaction', payload: { emoji: '👍' } },
+  },
+  {
+    label: 'ca:stream-send (custom)',
+    event: CA_EVENTS.STREAM_SEND,
+    defaultPayload: { msg_type: 'sm:custom', payload: { key: 'ping', value: 'hello' } },
+  },
 ];
 
 interface Props {
@@ -40,7 +84,7 @@ export function EventInjector({ onSend }: Props) {
   const handleSelect = (idx: number) => {
     setSelectedIdx(idx);
     const cmd = INJECTABLE_COMMANDS[idx]!;
-    setPayloadText(cmd.defaultPayload != null ? JSON.stringify(cmd.defaultPayload, null, 2) : '');
+    setPayloadText(cmd.defaultPayload !== null ? JSON.stringify(cmd.defaultPayload, null, 2) : '');
     setError(null);
   };
 
@@ -56,9 +100,10 @@ export function EventInjector({ onSend }: Props) {
       }
     }
     setError(null);
-    const msg = payload != null
-      ? { type: cmd.event, payload } as unknown as ParentToCallApp
-      : { type: cmd.event } as unknown as ParentToCallApp;
+    const msg =
+      payload !== null
+        ? ({ type: cmd.event, payload } as unknown as ParentToCallApp)
+        : ({ type: cmd.event } as unknown as ParentToCallApp);
     onSend(msg);
   };
 
@@ -72,7 +117,9 @@ export function EventInjector({ onSend }: Props) {
         className="w-full bg-zinc-700 text-white text-xs rounded-lg px-2 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
       >
         {INJECTABLE_COMMANDS.map((cmd, i) => (
-          <option key={i} value={i}>{cmd.label}</option>
+          <option key={i} value={i}>
+            {cmd.label}
+          </option>
         ))}
       </select>
 

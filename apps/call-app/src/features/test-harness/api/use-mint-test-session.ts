@@ -8,8 +8,20 @@ export interface MintedSession {
   duration_minutes: number;
   label: string | null;
   expires_at: string;
-  party_a: { uid: number; agora_token: string; token_expires_at: string; name: string; avatar_url: string | null };
-  party_b: { uid: number; agora_token: string; token_expires_at: string; name: string; avatar_url: string | null };
+  party_a: {
+    uid: number;
+    agora_token: string;
+    token_expires_at: string;
+    name: string;
+    avatar_url: string | null;
+  };
+  party_b: {
+    uid: number;
+    agora_token: string;
+    token_expires_at: string;
+    name: string;
+    avatar_url: string | null;
+  };
 }
 
 interface MintParams {

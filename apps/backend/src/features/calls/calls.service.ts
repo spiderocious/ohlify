@@ -61,35 +61,35 @@ const pickPeer = (
 const toHistoryView = (row: CallHistoryRow, viewerUserId: string): CallHistoryView => {
   const peer = pickPeer(row, viewerUserId);
   return {
-  call_id: row.call_id,
-  booking_id: row.booking_id,
-  caller_user_id: row.caller_user_id,
-  callee_user_id: row.callee_user_id,
-  peer_user_id: peer.id,
-  peer_name: peer.name,
-  peer_avatar_url: peer.avatar,
-  rate_id: row.rate_id,
-  call_type: row.call_type,
-  start_at: row.start_at.toISOString(),
-  duration_minutes: row.duration_minutes,
-  total_paid_kobo: koboToJson(BigInt(row.total_paid_kobo)),
-  payee_amount_kobo: koboToJson(BigInt(row.payee_amount_kobo)),
-  platform_fee_kobo: koboToJson(BigInt(row.platform_fee_kobo)),
-  fee_mode_used: row.fee_mode_used,
-  booking_status: row.booking_status,
-  cancelled_at: row.cancelled_at?.toISOString() ?? null,
-  cancelled_by_user_id: row.cancelled_by_user_id,
-  call_status: row.call_status,
-  agora_channel_name: row.agora_channel_name,
-  caller_joined_at: row.caller_joined_at?.toISOString() ?? null,
-  callee_joined_at: row.callee_joined_at?.toISOString() ?? null,
-  caller_left_at: row.caller_left_at?.toISOString() ?? null,
-  callee_left_at: row.callee_left_at?.toISOString() ?? null,
-  connected_seconds: row.connected_seconds,
-  settlement_journal_id: row.settlement_journal_id,
-  refund_journal_id: row.refund_journal_id,
-  ended_at: row.ended_at?.toISOString() ?? null,
-  created_at: row.booking_created_at.toISOString(),
+    call_id: row.call_id,
+    booking_id: row.booking_id,
+    caller_user_id: row.caller_user_id,
+    callee_user_id: row.callee_user_id,
+    peer_user_id: peer.id,
+    peer_name: peer.name,
+    peer_avatar_url: peer.avatar,
+    rate_id: row.rate_id,
+    call_type: row.call_type,
+    start_at: row.start_at.toISOString(),
+    duration_minutes: row.duration_minutes,
+    total_paid_kobo: koboToJson(BigInt(row.total_paid_kobo)),
+    payee_amount_kobo: koboToJson(BigInt(row.payee_amount_kobo)),
+    platform_fee_kobo: koboToJson(BigInt(row.platform_fee_kobo)),
+    fee_mode_used: row.fee_mode_used,
+    booking_status: row.booking_status,
+    cancelled_at: row.cancelled_at?.toISOString() ?? null,
+    cancelled_by_user_id: row.cancelled_by_user_id,
+    call_status: row.call_status,
+    agora_channel_name: row.agora_channel_name,
+    caller_joined_at: row.caller_joined_at?.toISOString() ?? null,
+    callee_joined_at: row.callee_joined_at?.toISOString() ?? null,
+    caller_left_at: row.caller_left_at?.toISOString() ?? null,
+    callee_left_at: row.callee_left_at?.toISOString() ?? null,
+    connected_seconds: row.connected_seconds,
+    settlement_journal_id: row.settlement_journal_id,
+    refund_journal_id: row.refund_journal_id,
+    ended_at: row.ended_at?.toISOString() ?? null,
+    created_at: row.booking_created_at.toISOString(),
   };
 };
 
@@ -366,10 +366,7 @@ export const declineCall = async (callId: string, userId: string) => {
       await client.query('ROLLBACK');
       return new ServiceError('call_not_found', CALL_MESSAGES.NOT_FOUND, 404);
     }
-    if (
-      call.status !== CallStatus.SCHEDULED &&
-      call.status !== CallStatus.WAITING_FOR_PARTIES
-    ) {
+    if (call.status !== CallStatus.SCHEDULED && call.status !== CallStatus.WAITING_FOR_PARTIES) {
       await client.query('ROLLBACK');
       return new ServiceError('call_not_joinable', CALL_MESSAGES.NOT_JOINABLE, 409, {
         status: ['Call is not in a declinable state'],
@@ -386,9 +383,7 @@ export const declineCall = async (callId: string, userId: string) => {
       Math.floor((Date.now() - booking.start_at.getTime()) / 1000),
     );
     const reason: 'polite_decline' | 'no_show_grace' =
-      elapsedSeconds <= cfg.polite_decline_window_seconds
-        ? 'polite_decline'
-        : 'no_show_grace';
+      elapsedSeconds <= cfg.polite_decline_window_seconds ? 'polite_decline' : 'no_show_grace';
 
     await repo.recordEvent(client, {
       callId: call.id,
@@ -428,8 +423,7 @@ export const listJoinableCalls = async (userId: string) => {
     start_at: r.start_at?.toISOString() ?? null,
     duration_minutes: r.duration_minutes,
     is_caller: r.caller_user_id === userId,
-    peer_user_id:
-      r.caller_user_id === userId ? r.callee_user_id : r.caller_user_id,
+    peer_user_id: r.caller_user_id === userId ? r.callee_user_id : r.caller_user_id,
     peer_full_name: r.peer_full_name,
     peer_avatar_url: r.peer_avatar_url,
   }));

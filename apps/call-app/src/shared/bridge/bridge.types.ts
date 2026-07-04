@@ -2,39 +2,39 @@
 
 export const CA_EVENTS = {
   // Notifications (call-app → parent)
-  READY:             'ca:ready',
-  PHASE:             'ca:phase',
-  JOINED:            'ca:joined',
-  REMOTE_JOINED:     'ca:remote-joined',
-  REMOTE_LEFT:       'ca:remote-left',
-  ACTIVE:            'ca:active',
-  MUTED:             'ca:muted',
-  CAMERA_CHANGED:    'ca:camera-changed',
-  NETWORK_QUALITY:   'ca:network-quality',
-  TOKEN_EXPIRING:    'ca:token-expiring',
-  TOKEN_RENEWED:     'ca:token-renewed',
-  DURATION_WARNING:  'ca:duration-warning',
-  DURATION_PAUSED:   'ca:duration-paused',
-  DURATION_RESUMED:  'ca:duration-resumed',
+  READY: 'ca:ready',
+  PHASE: 'ca:phase',
+  JOINED: 'ca:joined',
+  REMOTE_JOINED: 'ca:remote-joined',
+  REMOTE_LEFT: 'ca:remote-left',
+  ACTIVE: 'ca:active',
+  MUTED: 'ca:muted',
+  CAMERA_CHANGED: 'ca:camera-changed',
+  NETWORK_QUALITY: 'ca:network-quality',
+  TOKEN_EXPIRING: 'ca:token-expiring',
+  TOKEN_RENEWED: 'ca:token-renewed',
+  DURATION_WARNING: 'ca:duration-warning',
+  DURATION_PAUSED: 'ca:duration-paused',
+  DURATION_RESUMED: 'ca:duration-resumed',
   PERMISSION_NEEDED: 'ca:permission-needed',
-  WARNING:           'ca:warning',
-  ERROR:             'ca:error',
-  ENDED:             'ca:ended',
+  WARNING: 'ca:warning',
+  ERROR: 'ca:error',
+  ENDED: 'ca:ended',
   // Commands (parent → call-app)
-  JOIN:              'ca:join',
-  MUTE:              'ca:mute',
-  CAMERA:            'ca:camera',
-  SWITCH_CAMERA:     'ca:switch-camera',
-  SPEAKER:           'ca:speaker',
-  HANGUP:            'ca:hangup',
-  RENEW_TOKEN:       'ca:renew-token',
-  OVERLAY:           'ca:overlay',
-  GRANT_PERMISSION:  'ca:grant-permission',
-  PAUSE_DURATION:    'ca:pause-duration',
-  RESUME_DURATION:   'ca:resume-duration',
+  JOIN: 'ca:join',
+  MUTE: 'ca:mute',
+  CAMERA: 'ca:camera',
+  SWITCH_CAMERA: 'ca:switch-camera',
+  SPEAKER: 'ca:speaker',
+  HANGUP: 'ca:hangup',
+  RENEW_TOKEN: 'ca:renew-token',
+  OVERLAY: 'ca:overlay',
+  GRANT_PERMISSION: 'ca:grant-permission',
+  PAUSE_DURATION: 'ca:pause-duration',
+  RESUME_DURATION: 'ca:resume-duration',
   // Stream messaging (parent → call-app: send to peers; call-app → parent: received from peer)
-  STREAM_SEND:       'ca:stream-send',
-  STREAM_RECEIVED:   'ca:stream-received',
+  STREAM_SEND: 'ca:stream-send',
+  STREAM_RECEIVED: 'ca:stream-received',
 } as const;
 
 export type CaEvent = (typeof CA_EVENTS)[keyof typeof CA_EVENTS];
@@ -54,54 +54,55 @@ export const CALL_ROLE = {
 export type CallRole = (typeof CALL_ROLE)[keyof typeof CALL_ROLE];
 
 export const CALL_PHASE = {
-  WAITING:          'waiting',
-  JOINING:          'joining',
-  DIALING:          'dialing',
-  CONNECTING:       'connecting',
-  ACTIVE:           'active',
-  ALONE:            'alone',
-  ENDED:            'ended',
-  ERROR:            'error',
+  WAITING: 'waiting',
+  JOINING: 'joining',
+  DIALING: 'dialing',
+  CONNECTING: 'connecting',
+  ACTIVE: 'active',
+  ALONE: 'alone',
+  ENDED: 'ended',
+  ERROR: 'error',
   PERMISSION_ERROR: 'permission-error',
 } as const;
 export type CallPhase = (typeof CALL_PHASE)[keyof typeof CALL_PHASE];
 
 export const END_REASON = {
-  HANGUP:            'hangup',
-  REMOTE_LEFT:       'remote-left',
-  TOKEN_EXPIRED:     'token-expired',
-  ERROR:             'error',
+  HANGUP: 'hangup',
+  REMOTE_LEFT: 'remote-left',
+  TOKEN_EXPIRED: 'token-expired',
+  ERROR: 'error',
   DURATION_EXCEEDED: 'duration-exceeded',
 } as const;
 export type EndReason = (typeof END_REASON)[keyof typeof END_REASON];
 
 export const PERMISSION_STATE = {
   GRANTED: 'granted',
-  DENIED:  'denied',
-  PROMPT:  'prompt',
+  DENIED: 'denied',
+  PROMPT: 'prompt',
 } as const;
 export type PermissionState = (typeof PERMISSION_STATE)[keyof typeof PERMISSION_STATE];
 
 export const PERMISSION_KIND = {
   MICROPHONE: 'microphone',
-  CAMERA:     'camera',
+  CAMERA: 'camera',
 } as const;
 export type PermissionKind = (typeof PERMISSION_KIND)[keyof typeof PERMISSION_KIND];
 
 export const NETWORK_QUALITY_LEVEL = {
-  UNKNOWN:   0,
+  UNKNOWN: 0,
   EXCELLENT: 1,
-  GOOD:      2,
-  POOR:      3,
-  BAD:       4,
-  VERY_BAD:  5,
-  DOWN:      6,
+  GOOD: 2,
+  POOR: 3,
+  BAD: 4,
+  VERY_BAD: 5,
+  DOWN: 6,
 } as const;
-export type NetworkQualityLevel = (typeof NETWORK_QUALITY_LEVEL)[keyof typeof NETWORK_QUALITY_LEVEL];
+export type NetworkQualityLevel =
+  (typeof NETWORK_QUALITY_LEVEL)[keyof typeof NETWORK_QUALITY_LEVEL];
 
 export const OVERLAY_NAME = {
   NETWORK_WARNING: 'network-warning',
-  RECONNECTING:    'reconnecting',
+  RECONNECTING: 'reconnecting',
 } as const;
 export type OverlayName = (typeof OVERLAY_NAME)[keyof typeof OVERLAY_NAME];
 
@@ -121,10 +122,27 @@ interface BridgeBase {
 
 // Commands (parent → call-app)
 
+// A participant as known at join time. For 1:1 calls `participants` has one entry (the peer).
+// For future group calls it will have N entries. The legacy `peer_name`/`peer_avatar_key`
+// fields remain for backward-compat with existing Flutter/web integrators — new code
+// should read from `participants[0]` instead.
+export interface CallParticipantInit {
+  uid: number;
+  name: string;
+  avatar_key: string | null;
+}
+
 export interface MsgJoin extends BridgeBase {
   type: typeof CA_EVENTS.JOIN;
   payload: {
     call_id: string;
+    // Optional opaque reference passed by the parent (booking_id, order_id, etc.).
+    // Forwarded as-is to all backend event records for cross-system correlation.
+    call_reference: string | null;
+    // Short-lived token minted by the parent at join time. Used by the call-app
+    // to authenticate event POSTs to the backend. Optional — if absent, events
+    // are not forwarded to the backend provider.
+    session_token: string | null;
     agora_app_id: string;
     agora_channel: string;
     agora_uid: number;
@@ -134,6 +152,10 @@ export interface MsgJoin extends BridgeBase {
     role: CallRole;
     local_name: string;
     local_avatar_key: string | null;
+    // Structured participant list — replaces the flat peer_name/peer_avatar_key pair.
+    // For 1:1 calls this is always one entry. For group it grows.
+    participants: CallParticipantInit[];
+    // Legacy flat fields kept for backward compat. Populated from participants[0].
     peer_name: string;
     peer_avatar_key: string | null;
     duration_minutes: number | null;

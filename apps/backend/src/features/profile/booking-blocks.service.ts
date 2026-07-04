@@ -17,9 +17,7 @@ interface BookingBlockView {
  * stored list minimal and avoids surprising the user when their UI
  * re-fetches and rows have been merged.
  */
-const normalize = (
-  raw: ReadonlyArray<BookingBlockView>,
-): BookingBlockView[] => {
+const normalize = (raw: ReadonlyArray<BookingBlockView>): BookingBlockView[] => {
   if (raw.length === 0) return [];
   const sorted = [...raw].sort((a, b) =>
     a.start_minute === b.start_minute
@@ -50,10 +48,7 @@ const toView = (
 
 export const list = async (userId: string) => {
   const rows = await repo.listForUser(userId);
-  return new ServiceSuccess(
-    { blocks: rows.map(toView) },
-    MESSAGE_KEYS.BOOKING_BLOCKS_FETCHED,
-  );
+  return new ServiceSuccess({ blocks: rows.map(toView) }, MESSAGE_KEYS.BOOKING_BLOCKS_FETCHED);
 };
 
 export const replace = async (dto: PutBookingBlocksDto, userId: string) => {
@@ -69,8 +64,5 @@ export const replace = async (dto: PutBookingBlocksDto, userId: string) => {
 
   const normalized = normalize(dto.blocks);
   const rows = await repo.replaceAll(userId, normalized);
-  return new ServiceSuccess(
-    { blocks: rows.map(toView) },
-    MESSAGE_KEYS.BOOKING_BLOCKS_UPDATED,
-  );
+  return new ServiceSuccess({ blocks: rows.map(toView) }, MESSAGE_KEYS.BOOKING_BLOCKS_UPDATED);
 };

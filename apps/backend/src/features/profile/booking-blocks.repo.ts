@@ -36,10 +36,7 @@ export const replaceAll = async (
   const client: PoolClient = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `DELETE FROM professional_booking_blocks WHERE user_id = $1`,
-      [userId],
-    );
+    await client.query(`DELETE FROM professional_booking_blocks WHERE user_id = $1`, [userId]);
     for (const b of blocks) {
       await client.query(
         `INSERT INTO professional_booking_blocks (id, user_id, start_minute, end_minute)

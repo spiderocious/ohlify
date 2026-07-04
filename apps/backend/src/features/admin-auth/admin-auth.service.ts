@@ -284,19 +284,11 @@ const generateEmail = (): string => {
 
 export const bootstrap = async () => {
   if (!env.ADMIN_BOOTSTRAP_ENABLED) {
-    return new ServiceError(
-      'bootstrap_disabled',
-      MESSAGE_KEYS.ADMIN_BOOTSTRAP_DISABLED,
-      404,
-    );
+    return new ServiceError('bootstrap_disabled', MESSAGE_KEYS.ADMIN_BOOTSTRAP_DISABLED, 404);
   }
   const existing = await repo.countAdmins();
   if (existing > 0) {
-    return new ServiceError(
-      'already_bootstrapped',
-      MESSAGE_KEYS.ADMIN_BOOTSTRAP_ALREADY_DONE,
-      409,
-    );
+    return new ServiceError('already_bootstrapped', MESSAGE_KEYS.ADMIN_BOOTSTRAP_ALREADY_DONE, 409);
   }
 
   const email = generateEmail();

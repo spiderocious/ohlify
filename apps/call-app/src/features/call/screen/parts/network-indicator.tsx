@@ -14,13 +14,20 @@ function qualityColor(level: NetworkQualityLevel): string {
 
 function qualityLabel(level: NetworkQualityLevel): string {
   switch (level) {
-    case NETWORK_QUALITY_LEVEL.EXCELLENT: return 'Excellent';
-    case NETWORK_QUALITY_LEVEL.GOOD: return 'Good';
-    case NETWORK_QUALITY_LEVEL.POOR: return 'Poor';
-    case NETWORK_QUALITY_LEVEL.BAD: return 'Bad';
-    case NETWORK_QUALITY_LEVEL.VERY_BAD: return 'Very bad';
-    case NETWORK_QUALITY_LEVEL.DOWN: return 'Down';
-    default: return '';
+    case NETWORK_QUALITY_LEVEL.EXCELLENT:
+      return 'Excellent';
+    case NETWORK_QUALITY_LEVEL.GOOD:
+      return 'Good';
+    case NETWORK_QUALITY_LEVEL.POOR:
+      return 'Poor';
+    case NETWORK_QUALITY_LEVEL.BAD:
+      return 'Bad';
+    case NETWORK_QUALITY_LEVEL.VERY_BAD:
+      return 'Very bad';
+    case NETWORK_QUALITY_LEVEL.DOWN:
+      return 'Down';
+    default:
+      return '';
   }
 }
 

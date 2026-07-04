@@ -117,10 +117,7 @@ export const getBookingBlocks: RequestHandler = asyncHandler(
 
 export const putBookingBlocks: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const r = await bookingBlocksService.replace(
-      req.body as PutBookingBlocksDto,
-      req.userId!,
-    );
+    const r = await bookingBlocksService.replace(req.body as PutBookingBlocksDto, req.userId!);
     if (!r.success) bail(r);
     else ResponseUtil.ok(res, r.data);
   },
@@ -128,20 +125,14 @@ export const putBookingBlocks: RequestHandler = asyncHandler(
 
 export const registerDeviceToken: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const r = await deviceTokensService.register(
-      req.body as RegisterDeviceTokenDto,
-      req.userId!,
-    );
+    const r = await deviceTokensService.register(req.body as RegisterDeviceTokenDto, req.userId!);
     ResponseUtil.ok(res, r.data);
   },
 );
 
 export const deleteDeviceToken: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const r = await deviceTokensService.unregister(
-      req.body as DeleteDeviceTokenDto,
-      req.userId!,
-    );
+    const r = await deviceTokensService.unregister(req.body as DeleteDeviceTokenDto, req.userId!);
     ResponseUtil.ok(res, r.data);
   },
 );

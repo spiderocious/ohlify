@@ -1,10 +1,11 @@
-import { formatNaira } from '@ohlify/core';
+import { formatNaira, parseNairaToKobo } from '@ohlify/core';
 import type { CallRate, CallType } from '@ohlify/core';
 import type { ApiError } from '@ohlify/api';
 import { AppLoader, DrawerService, RatesListContent, type RatesController } from '@ohlify/ui';
 
 import {
   useConfigArray,
+  useConfigBool,
   useConfigNumber,
 } from '../../../../shared/providers/app-config-provider.js';
 import { useAddRate } from '../../../profile/api/use-add-rate.js';
@@ -45,6 +46,7 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
   );
   const minKobo = useConfigNumber('rates.min_kobo', 50_000);
   const maxKobo = useConfigNumber('rates.max_kobo', 50_000_000);
+  const singleRatePerChannel = useConfigBool('rates.single_rate_per_channel', true);
 
   if (isLoading) {
     return (
@@ -59,14 +61,22 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
     callType: r.call_type,
     durationMinutes: r.duration_minutes,
     price: formatNaira(r.price_kobo),
+    ...(r.price_per_minute_kobo !== null && r.price_per_minute_kobo !== undefined
+      ? { pricePerMinute: `${formatNaira(r.price_per_minute_kobo)} / min` }
+      : {}),
   }));
 
   const controller: RatesController = {
     rates: callRates,
     addRate: (incoming) => {
-      // RatesListContent gives us a display-formatted price; reverse it to kobo.
-      const priceNaira = parseFloat(String(incoming.price).replace(/[^0-9.]/g, ''));
-      const priceKobo = Math.round(priceNaira * 100);
+      // RatesListContent gives us a display-formatted price; reverse it to kobo
+      // (kobo-precision, handles decimals).
+      const parsed = parseNairaToKobo(incoming.price);
+      if (parsed === null) {
+        DrawerService.toast('Enter a valid price.', { type: 'error' });
+        return;
+      }
+      const priceKobo = Number(parsed);
       addRate.mutate(
         {
           call_type: incoming.callType,
@@ -82,7 +92,9 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
               e.fieldErrors?.['duration_minutes']?.[0] ??
               e.fieldErrors?.['call_type']?.[0] ??
               (e.reason === 'conflict'
-                ? 'A rate already exists for this call type and duration.'
+                ? singleRatePerChannel
+                  ? 'You already have a rate for this call type. Edit the existing one instead.'
+                  : 'A rate already exists for this call type and duration.'
                 : 'Could not add rate. Please try again.');
             DrawerService.toast(message, { type: 'error' });
           },
@@ -96,7 +108,7 @@ export function RatesModalContent({ onDone }: RatesModalContentProps) {
           DrawerService.toast('Could not delete rate. Please try again.', { type: 'error' }),
       });
     },
-    constraints: { callTypes, durations, minKobo, maxKobo },
+    constraints: { callTypes, durations, minKobo, maxKobo, singleRatePerChannel },
   };
 
   return <RatesListContent controller={controller} onDone={onDone} />;

@@ -4,11 +4,7 @@ import { asyncHandler } from '@lib/http/asyncHandler.js';
 import { bail } from '@lib/http/bail.js';
 import { ResponseUtil } from '@lib/response.js';
 
-import type {
-  AdminHideReviewDto,
-  AdminUnhideReviewDto,
-  PostRatingDto,
-} from './reviews.schema.js';
+import type { AdminHideReviewDto, AdminUnhideReviewDto, PostRatingDto } from './reviews.schema.js';
 import * as service from './reviews.service.js';
 
 export const postRating: RequestHandler = asyncHandler(async (req: Request, res: Response) => {

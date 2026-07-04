@@ -3,11 +3,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
 
-import type {
-  BookingStatus,
-  CallType,
-  FeeMode,
-} from '@features/bookings/bookings.types.js';
+import type { BookingStatus, CallType, FeeMode } from '@features/bookings/bookings.types.js';
 
 import type { CallEventRow, CallHistoryRow, CallRow, CallStatus } from './calls.types.js';
 

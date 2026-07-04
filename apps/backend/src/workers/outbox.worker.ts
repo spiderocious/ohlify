@@ -125,10 +125,7 @@ const dispatchToPush = async (row: OutboxRow): Promise<void> => {
   const payload = row.payload;
   const targetUserId = asString(payload['target_user_id']);
   if (targetUserId === null) {
-    logger.warn(
-      { outboxId: row.id },
-      'push.call_joinable missing target_user_id — skipping',
-    );
+    logger.warn({ outboxId: row.id }, 'push.call_joinable missing target_user_id — skipping');
     return;
   }
   const tokens = await deviceTokensRepo.findActiveTokensForUser(targetUserId);
@@ -160,9 +157,7 @@ const dispatchToPush = async (row: OutboxRow): Promise<void> => {
     notification,
   );
   // Prune dead tokens so the next event doesn't re-attempt them.
-  await Promise.all(
-    result.invalidTokens.map((t) => deviceTokensRepo.deleteByToken(t)),
-  );
+  await Promise.all(result.invalidTokens.map((t) => deviceTokensRepo.deleteByToken(t)));
   logger.info(
     {
       outboxId: row.id,

@@ -26,7 +26,9 @@ export function useGetTestSession(): UseGetTestSession {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${env.VITE_BACKEND_URL}/api/v1/dev/call-sessions/${sessionId}/${party}`);
+      const res = await fetch(
+        `${env.VITE_BACKEND_URL}/api/v1/dev/call-sessions/${sessionId}/${party}`,
+      );
       const json = (await res.json()) as { data?: TestPartyView; error?: string };
       if (!json.data) {
         setError(json.error ?? 'Not found');

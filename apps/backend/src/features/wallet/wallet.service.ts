@@ -316,7 +316,12 @@ const applyVerifyResult = async (
       // back, so the user gets a clear failed status.
       const verified = await verifyAndCheckCharge(client, fresh);
       if (!verified) {
-        await paymentsRepo.markFailed(client, fresh.id, 'verification_rejected', paystackResult.raw);
+        await paymentsRepo.markFailed(
+          client,
+          fresh.id,
+          'verification_rejected',
+          paystackResult.raw,
+        );
         await client.query('COMMIT');
         return new ServiceError('upstream_unavailable', WALLET_MESSAGES.FUNDING_FAILED, 422);
       }

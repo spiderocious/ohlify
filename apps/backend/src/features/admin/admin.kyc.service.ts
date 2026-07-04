@@ -163,14 +163,7 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
       });
     }
     const itemKeys = normalizeItemKeys(dto.item_keys);
-    await repo.setRejected(
-      client,
-      submission.id,
-      reviewedBy,
-      dto.reason_code,
-      dto.note,
-      itemKeys,
-    );
+    await repo.setRejected(client, submission.id, reviewedBy, dto.reason_code, dto.note, itemKeys);
     await client.query(
       `UPDATE users
          SET kyc_status = 'rejected'::kyc_status,

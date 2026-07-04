@@ -13,17 +13,13 @@ export function CallAvatar({ name, avatarKey, size = 'lg' }: Props) {
     .join('');
 
   if (avatarKey) {
-    return (
-      <img
-        src={avatarKey}
-        alt={name}
-        className={`${dim} rounded-full object-cover`}
-      />
-    );
+    return <img src={avatarKey} alt={name} className={`${dim} rounded-full object-cover`} />;
   }
 
   return (
-    <div className={`${dim} rounded-full bg-zinc-700 flex items-center justify-center font-semibold text-white`}>
+    <div
+      className={`${dim} rounded-full bg-zinc-700 flex items-center justify-center font-semibold text-white`}
+    >
       {initials}
     </div>
   );

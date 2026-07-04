@@ -48,6 +48,11 @@ export interface ApiRate {
   call_type: 'audio' | 'video';
   duration_minutes: number;
   price_kobo: number;
+  /**
+   * Derived per-minute price (floored): floor(price_kobo / duration_minutes).
+   * Nullable while the single-rate rollout is in flight (older responses omit it).
+   */
+  price_per_minute_kobo: number | null;
   currency: string;
 }
 

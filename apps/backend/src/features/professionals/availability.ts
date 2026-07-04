@@ -90,9 +90,7 @@ export const buildSlotGrid = ({
       const dayEnd = wallClockInTzToUtc(year, month, day, windowEndMinutes, tz);
       const fitsInWindow = slotEnd <= dayEnd;
 
-      const overlapsBooking = bookings.some(
-        (b) => slotStart < b.end && slotEnd > b.start,
-      );
+      const overlapsBooking = bookings.some((b) => slotStart < b.end && slotEnd > b.start);
 
       // Pro-declared exclusion: compare in wall-clock minutes within the
       // current day. The booking's wall-clock range is [m, m + duration).
@@ -219,9 +217,7 @@ export const bookingHitsBlock = (
   // range; check both halves.
   const total = startMinute + durationMinutes;
   if (total <= 1440) {
-    return blocks.some(
-      (b) => startMinute < b.endMinute && total > b.startMinute,
-    );
+    return blocks.some((b) => startMinute < b.endMinute && total > b.startMinute);
   }
   const firstEnd = 1440;
   const secondEnd = total - 1440;

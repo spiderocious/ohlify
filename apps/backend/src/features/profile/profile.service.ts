@@ -45,7 +45,11 @@ const maskAccount = (acct: string): string => (acct.length <= 4 ? '***' : `***${
 const buildShareSlug = (handle: string | null, userId: string): string | null => {
   if (!handle) return null;
   // Stable, derived from user id so slug doesn't change on each request.
-  const suffix = crypto.createHash('sha256').update(userId).digest('hex').slice(0, SHARE_SLUG_SUFFIX_LEN);
+  const suffix = crypto
+    .createHash('sha256')
+    .update(userId)
+    .digest('hex')
+    .slice(0, SHARE_SLUG_SUFFIX_LEN);
   return `${handle}-${suffix}`;
 };
 

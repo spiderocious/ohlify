@@ -60,11 +60,7 @@ export const register = (app: Express): void => {
 
   // Booking blocks (pro-only — service enforces role)
   meRouter.get('/booking-blocks', controller.getBookingBlocks);
-  meRouter.put(
-    '/booking-blocks',
-    validate(PutBookingBlocksSchema),
-    controller.putBookingBlocks,
-  );
+  meRouter.put('/booking-blocks', validate(PutBookingBlocksSchema), controller.putBookingBlocks);
 
   // Device tokens — push notification targets. Re-POST is idempotent;
   // DELETE removes a single token (used on logout).

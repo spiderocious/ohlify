@@ -7,12 +7,16 @@ interface Props {
 }
 
 function CopyField({ label, value }: { label: string; value: string }) {
-  const copy = () => { void navigator.clipboard.writeText(value); };
+  const copy = () => {
+    void navigator.clipboard.writeText(value);
+  };
   return (
     <div className="flex items-center justify-between gap-2 text-xs">
       <span className="text-zinc-400 w-24 shrink-0">{label}</span>
       <span className="text-zinc-200 font-mono truncate flex-1">{value}</span>
-      <button onClick={copy} className="text-indigo-400 hover:text-indigo-300 shrink-0">Copy</button>
+      <button onClick={copy} className="text-indigo-400 hover:text-indigo-300 shrink-0">
+        Copy
+      </button>
     </div>
   );
 }
@@ -32,7 +36,12 @@ export function SessionInfoPanel({ session, activeParty, onSwitchParty }: Props)
         <span className="text-zinc-200">{session.call_type}</span>
         <span className="ml-3">Duration:</span>
         <span className="text-zinc-200">{session.duration_minutes}m</span>
-        {session.label && <><span className="ml-3">Label:</span><span className="text-zinc-200">{session.label}</span></>}
+        {session.label && (
+          <>
+            <span className="ml-3">Label:</span>
+            <span className="text-zinc-200">{session.label}</span>
+          </>
+        )}
       </div>
 
       <div className="border-t border-zinc-700 pt-3 space-y-2">

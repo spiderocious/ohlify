@@ -16,7 +16,13 @@ function formatHms(seconds: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-export function DurationCountdown({ connectedAt, durationMinutes, accumulatedPausedMs, paused, className }: Props) {
+export function DurationCountdown({
+  connectedAt,
+  durationMinutes,
+  accumulatedPausedMs,
+  paused,
+  className,
+}: Props) {
   const [now, setNow] = useState(Date.now);
 
   useEffect(() => {
@@ -25,18 +31,25 @@ export function DurationCountdown({ connectedAt, durationMinutes, accumulatedPau
     return () => clearInterval(id);
   }, [paused]);
 
-  const effectiveElapsed = Math.max(0, Math.floor((now - connectedAt - accumulatedPausedMs) / 1000));
-  const total = durationMinutes != null ? durationMinutes * 60 : null;
-  const isWarning = total != null && Math.max(0, total - effectiveElapsed) <= 60;
+  const effectiveElapsed = Math.max(
+    0,
+    Math.floor((now - connectedAt - accumulatedPausedMs) / 1000),
+  );
+  const total = durationMinutes !== null ? durationMinutes * 60 : null;
+  const isWarning = total !== null && Math.max(0, total - effectiveElapsed) <= 60;
 
   return (
-    <span className={[
-      isWarning ? 'text-red-400 font-semibold' : '',
-      paused ? 'opacity-50' : '',
-      className ?? 'text-zinc-300',
-    ].filter(Boolean).join(' ')}>
+    <span
+      className={[
+        isWarning ? 'text-red-400 font-semibold' : '',
+        paused ? 'opacity-50' : '',
+        className ?? 'text-zinc-300',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {formatHms(effectiveElapsed)}
-      {total != null && ` / ${formatHms(total)}`}
+      {total !== null && ` / ${formatHms(total)}`}
       {paused && <span className="ml-1 text-xs text-yellow-400">(paused)</span>}
     </span>
   );

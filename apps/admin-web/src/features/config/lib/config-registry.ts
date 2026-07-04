@@ -198,6 +198,12 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     label: 'Allowed call types',
     help: 'Comma-separated call types, e.g. audio, video.',
   },
+  {
+    key: 'rates.single_rate_per_channel',
+    kind: 'boolean',
+    label: 'Single rate per channel',
+    help: 'Calls revamp: pros set one rate per call type; per-minute price is derived (floored). When off, pros set multiple duration packages.',
+  },
 
   // ── wallet ──────────────────────────────────────────────────────────────
   {

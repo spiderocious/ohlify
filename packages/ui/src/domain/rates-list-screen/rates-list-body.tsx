@@ -16,6 +16,8 @@ export interface RateConstraints {
   durations?: readonly number[];
   minKobo?: number;
   maxKobo?: number;
+  /** Single-rate model (calls revamp). Sourced from `rates.single_rate_per_channel`. */
+  singleRatePerChannel?: boolean;
 }
 
 export interface RatesController {
@@ -59,6 +61,9 @@ export function RatesListBody({ controller }: RatesListBodyProps) {
           {...(c?.durations ? { durations: c.durations } : {})}
           {...(c?.minKobo !== undefined ? { minKobo: c.minKobo } : {})}
           {...(c?.maxKobo !== undefined ? { maxKobo: c.maxKobo } : {})}
+          {...(c?.singleRatePerChannel !== undefined
+            ? { singleRatePerChannel: c.singleRatePerChannel }
+            : {})}
         />
       ),
       { position: 'bottom' },

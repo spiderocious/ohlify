@@ -94,8 +94,7 @@ const tickStarter = async (): Promise<void> => {
             authRepo.findUserById(booking.callee_user_id),
           ]);
           const politeDeclineUntil = new Date(
-            row.start_at.getTime() +
-              platformConfig.bookings().polite_decline_window_seconds * 1000,
+            row.start_at.getTime() + platformConfig.bookings().polite_decline_window_seconds * 1000,
           ).toISOString();
           // Notify the callee — they're the one we need to actually pull
           // into the channel.

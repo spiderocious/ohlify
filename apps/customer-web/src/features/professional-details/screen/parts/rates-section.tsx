@@ -14,6 +14,9 @@ function toViewRate(r: ApiRate): ProfessionalRate {
     callType: r.call_type,
     durationMinutes: r.duration_minutes,
     price: formatNaira(r.price_kobo),
+    ...(r.price_per_minute_kobo !== null && r.price_per_minute_kobo !== undefined
+      ? { pricePerMinute: `${formatNaira(r.price_per_minute_kobo)} / min` }
+      : {}),
   };
 }
 

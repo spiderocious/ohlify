@@ -15,11 +15,7 @@ export const register = (app: Express): void => {
 
   // History + joinable routes MUST come before `/:id` so they're not
   // matched as ids.
-  router.get(
-    '/history',
-    validate(ListCallHistoryQuerySchema, 'query'),
-    controller.listHistory,
-  );
+  router.get('/history', validate(ListCallHistoryQuerySchema, 'query'), controller.listHistory);
   router.get('/history/:id', controller.getHistoryItem);
   router.get('/joinable', controller.listJoinable);
 

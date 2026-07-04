@@ -5,7 +5,11 @@ import { formatNaira, parseNairaToKobo } from '@ohlify/core';
 import type { ApiError } from '@ohlify/api';
 import { DrawerService, RatesListScreen, type RatesController } from '@ohlify/ui';
 
-import { useConfigArray, useConfigNumber } from '../../../shared/providers/app-config-provider.js';
+import {
+  useConfigArray,
+  useConfigBool,
+  useConfigNumber,
+} from '../../../shared/providers/app-config-provider.js';
 import { useMyRates } from '../api/use-my-rates.js';
 import { useAddRate } from '../api/use-add-rate.js';
 import { useDeleteRate } from '../api/use-delete-rate.js';
@@ -17,12 +21,16 @@ function apiRateToCallRate(r: {
   call_type: 'audio' | 'video';
   duration_minutes: number;
   price_kobo: number;
+  price_per_minute_kobo?: number | null;
 }): CallRate {
   return {
     id: r.id,
     callType: r.call_type,
     durationMinutes: r.duration_minutes,
     price: formatNaira(r.price_kobo),
+    ...(r.price_per_minute_kobo !== null && r.price_per_minute_kobo !== undefined
+      ? { pricePerMinute: `${formatNaira(r.price_per_minute_kobo)} / min` }
+      : {}),
   };
 }
 
@@ -47,6 +55,7 @@ export function ProfileRatesScreen() {
   );
   const minKobo = useConfigNumber('rates.min_kobo', 50_000);
   const maxKobo = useConfigNumber('rates.max_kobo', 50_000_000);
+  const singleRatePerChannel = useConfigBool('rates.single_rate_per_channel', true);
 
   const rates: CallRate[] = useMemo(() => (apiRates ?? []).map(apiRateToCallRate), [apiRates]);
 
@@ -71,7 +80,9 @@ export function ProfileRatesScreen() {
                 e.fieldErrors?.['duration_minutes']?.[0] ??
                 e.fieldErrors?.['call_type']?.[0] ??
                 (e.reason === 'conflict'
-                  ? 'A rate already exists for this call type and duration.'
+                  ? singleRatePerChannel
+                    ? 'You already have a rate for this call type. Edit the existing one instead.'
+                    : 'A rate already exists for this call type and duration.'
                   : 'Could not add rate. Please try again.');
               DrawerService.toast(message, { type: 'error' });
             },
@@ -84,9 +95,9 @@ export function ProfileRatesScreen() {
           onError: () =>
             DrawerService.toast('Could not delete rate. Please try again.', { type: 'error' }),
         }),
-      constraints: { callTypes, durations, minKobo, maxKobo },
+      constraints: { callTypes, durations, minKobo, maxKobo, singleRatePerChannel },
     }),
-    [rates, addRate, deleteRate, callTypes, durations, minKobo, maxKobo],
+    [rates, addRate, deleteRate, callTypes, durations, minKobo, maxKobo, singleRatePerChannel],
   );
 
   return (

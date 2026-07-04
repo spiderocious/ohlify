@@ -46,13 +46,18 @@ export interface Rate {
   call_type: 'audio' | 'video';
   duration_minutes: number;
   price_kobo: number;
+  /**
+   * Derived per-minute price (floored): floor(price_kobo / duration_minutes).
+   * Nullable while the single-rate rollout is in flight (older responses omit it).
+   */
+  price_per_minute_kobo: number | null;
   currency: string;
 }
 
 export interface NotificationPreferences {
-  sms:   { enabled: boolean; updated_at: string };
+  sms: { enabled: boolean; updated_at: string };
   email: { enabled: boolean; updated_at: string };
-  push:  { enabled: boolean; updated_at: string };
+  push: { enabled: boolean; updated_at: string };
 }
 
 /**

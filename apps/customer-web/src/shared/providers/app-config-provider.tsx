@@ -6,11 +6,7 @@ const AppConfigContext = createContext<PublicConfig | null>(null);
 
 export function AppConfigProvider({ children }: { children: ReactNode }) {
   const { data } = usePublicConfig();
-  return (
-    <AppConfigContext.Provider value={data ?? null}>
-      {children}
-    </AppConfigContext.Provider>
-  );
+  return <AppConfigContext.Provider value={data ?? null}>{children}</AppConfigContext.Provider>;
 }
 
 export function useAppConfig(): PublicConfig | null {
@@ -29,6 +25,19 @@ export function useConfigNumber(key: string, fallback: number): number {
     const n = Number(raw);
     if (Number.isFinite(n)) return n;
   }
+  return fallback;
+}
+
+/**
+ * Read a boolean value from the public config bag, falling back when the
+ * config hasn't loaded yet or the key is missing.
+ */
+export function useConfigBool(key: string, fallback: boolean): boolean {
+  const cfg = useAppConfig();
+  const raw = cfg?.values?.[key];
+  if (typeof raw === 'boolean') return raw;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
   return fallback;
 }
 

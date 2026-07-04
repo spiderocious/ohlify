@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMintTestSession, type MintedSession } from '../../api/use-mint-test-session.js';
 
 interface Props {
-  onMinted: (session: MintedSession) => void;
+  onMinted: (session: MintedSession, openEnded: boolean) => void;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -14,8 +14,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function TextInput({ value, onChange, placeholder, required }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean;
+function TextInput({
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <input
@@ -33,6 +41,7 @@ export function SessionMinter({ onMinted }: Props) {
   const { mint, loading, error } = useMintTestSession();
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
   const [duration, setDuration] = useState(30);
+  const [openEnded, setOpenEnded] = useState(false);
   const [label, setLabel] = useState('');
   const [nameA, setNameA] = useState('');
   const [avatarA, setAvatarA] = useState('');
@@ -41,7 +50,11 @@ export function SessionMinter({ onMinted }: Props) {
 
   const handleMint = async () => {
     if (!nameA.trim() || !nameB.trim()) return;
-    const session = await mint({ call_type: callType, duration_minutes: duration, label: label || undefined });
+    const session = await mint({
+      call_type: callType,
+      duration_minutes: duration,
+      label: label || undefined,
+    });
     if (!session) return;
     // Attach participant metadata locally — the backend doesn't store names.
     const enriched: MintedSession = {
@@ -49,7 +62,7 @@ export function SessionMinter({ onMinted }: Props) {
       party_a: { ...session.party_a, name: nameA.trim(), avatar_url: avatarA.trim() || null },
       party_b: { ...session.party_b, name: nameB.trim(), avatar_url: avatarB.trim() || null },
     };
-    onMinted(enriched);
+    onMinted(enriched, openEnded);
   };
 
   return (
@@ -75,10 +88,21 @@ export function SessionMinter({ onMinted }: Props) {
           min={1}
           max={120}
           value={duration}
+          disabled={openEnded}
           onChange={(e) => setDuration(Number(e.target.value))}
-          className="w-20 bg-zinc-700 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-20 bg-zinc-700 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-40"
         />
       </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={openEnded}
+          onChange={(e) => setOpenEnded(e.target.checked)}
+          className="accent-indigo-500"
+        />
+        <span className="text-xs text-zinc-300">Open-ended (no duration limit)</span>
+      </label>
 
       <Field label="Label">
         <TextInput value={label} onChange={setLabel} placeholder="Optional" />

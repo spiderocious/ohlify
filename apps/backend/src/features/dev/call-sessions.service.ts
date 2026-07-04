@@ -12,12 +12,10 @@ import type { DevCallPartyKey, DevCallPartyView, DevCallSession } from './call-s
 
 const TOKEN_EXPIRES_IN_SECONDS = 3600;
 
+// eslint-disable-next-line sonarjs/pseudo-random
 const randomAgoraUid = (): number => Math.floor(Math.random() * 0x7fffffff);
 
-const toPartyView = (
-  session: DevCallSession,
-  party: DevCallPartyKey,
-): DevCallPartyView => {
+const toPartyView = (session: DevCallSession, party: DevCallPartyKey): DevCallPartyView => {
   const partyData = party === 'a' ? session.party_a : session.party_b;
   const peerData = party === 'a' ? session.party_b : session.party_a;
   return {
@@ -87,7 +85,11 @@ export const getParty = async (
   party: string,
 ): Promise<ServiceSuccess<DevCallPartyView> | ServiceError> => {
   if (!isValidPartyKey(party)) {
-    return new ServiceError(ERROR_CODES.VALIDATION_ERROR, MESSAGE_KEYS.DEV_CALL_SESSION_NOT_FOUND, 400);
+    return new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      MESSAGE_KEYS.DEV_CALL_SESSION_NOT_FOUND,
+      400,
+    );
   }
 
   const session = await repo.findById(sessionId);
@@ -95,8 +97,5 @@ export const getParty = async (
     return new ServiceError(ERROR_CODES.NOT_FOUND, MESSAGE_KEYS.DEV_CALL_SESSION_NOT_FOUND, 404);
   }
 
-  return new ServiceSuccess(
-    toPartyView(session, party),
-    MESSAGE_KEYS.DEV_CALL_SESSION_FETCHED,
-  );
+  return new ServiceSuccess(toPartyView(session, party), MESSAGE_KEYS.DEV_CALL_SESSION_FETCHED);
 };

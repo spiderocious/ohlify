@@ -106,6 +106,8 @@ const MESSAGE_TEXT: Partial<Record<MessageKey, string>> = {
     'That action conflicts with the current state. Please refresh and try again.',
   [MESSAGE_KEYS.RATE_NOT_FOUND]: 'That rate no longer exists.',
   [MESSAGE_KEYS.RATE_DUPLICATE]: 'A rate for this call type and duration already exists.',
+  [MESSAGE_KEYS.RATE_CHANNEL_RATE_EXISTS]:
+    'You already have a rate for this call type. Edit the existing one instead.',
   [MESSAGE_KEYS.RATE_INVALID_DURATION]: 'That call duration isn’t allowed.',
   [MESSAGE_KEYS.RATE_INVALID_PRICE]: 'That price is outside the allowed range.',
   [MESSAGE_KEYS.PROFESSIONAL_NOT_FOUND]: 'This professional isn’t available.',

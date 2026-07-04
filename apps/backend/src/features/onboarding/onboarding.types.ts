@@ -178,6 +178,7 @@ export interface KycItemConfig {
 
 /** Per-request response shape — config + per-user value + complete flag. */
 export interface KycItemSpec extends KycItemConfig {
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   value: unknown | null;
   complete: boolean;
 }

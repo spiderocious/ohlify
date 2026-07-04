@@ -30,11 +30,7 @@ interface FirebaseMessagingLike {
 interface FirebaseAdminLike {
   apps: ReadonlyArray<FirebaseAppLike | null>;
   credential: {
-    cert(input: {
-      projectId: string;
-      privateKey: string;
-      clientEmail: string;
-    }): unknown;
+    cert(input: { projectId: string; privateKey: string; clientEmail: string }): unknown;
   };
   initializeApp(opts: unknown, name?: string): FirebaseAppLike;
   messaging(app: FirebaseAppLike): FirebaseMessagingLike;
@@ -53,9 +49,7 @@ interface FirebaseAdminLike {
  * The "Did you install firebase-admin?" message in lib/push/index.ts
  * fires when this import throws because the package isn't installed.
  */
-export const buildFcmProvider = async (
-  opts: BuildOptions,
-): Promise<PushProvider> => {
+export const buildFcmProvider = async (opts: BuildOptions): Promise<PushProvider> => {
   // Deliberately runtime import via a string variable so TS doesn't
   // statically resolve the module — firebase-admin is an optional dep.
   // The cast is over a narrow surface so we can compile cleanly without

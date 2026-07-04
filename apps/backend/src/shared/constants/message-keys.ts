@@ -65,6 +65,7 @@ export const MESSAGE_KEYS = {
   RATE_DELETED: 'rate.deleted',
   RATE_NOT_FOUND: 'rate.not_found',
   RATE_DUPLICATE: 'rate.duplicate',
+  RATE_CHANNEL_RATE_EXISTS: 'rate.channel_rate_exists',
   RATE_INVALID_DURATION: 'rate.invalid_duration',
   RATE_INVALID_PRICE: 'rate.invalid_price',
   // Categories
@@ -243,6 +244,12 @@ export const MESSAGE_KEYS = {
   DEV_CALL_SESSION_CREATED: 'dev.call_session.created',
   DEV_CALL_SESSION_FETCHED: 'dev.call_session.fetched',
   DEV_CALL_SESSION_NOT_FOUND: 'dev.call_session.not_found',
+  // Call session events
+  CALL_SESSION_EVENT_INGESTED: 'call_session_events.ingested',
+  CALL_SESSION_EVENTS_LISTED: 'call_session_events.listed',
+  CALL_SESSION_EVENT_NOT_FOUND: 'call_session_events.not_found',
+  CALL_SESSION_EVENTS_SUMMARY: 'call_session_events.summary',
+  CALL_SESSION_EVENT_INVALID_TS: 'call_session_events.invalid_ts',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];

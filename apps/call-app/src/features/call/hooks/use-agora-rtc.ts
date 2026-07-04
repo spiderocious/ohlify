@@ -15,11 +15,21 @@ import type { StreamMessage } from '@shared/stream/stream.types.js';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const AGORA_CLIENT_EVENTS = {
-  USER_PUBLISHED:              'user-published',
-  USER_LEFT:                   'user-left',
-  NETWORK_QUALITY:             'network-quality',
+  USER_PUBLISHED: 'user-published',
+  USER_UNPUBLISHED: 'user-unpublished',
+  USER_LEFT: 'user-left',
+  NETWORK_QUALITY: 'network-quality',
   TOKEN_PRIVILEGE_WILL_EXPIRE: 'token-privilege-will-expire',
-  STREAM_MESSAGE:              'stream-message',
+  STREAM_MESSAGE: 'stream-message',
+  CONNECTION_STATE_CHANGE: 'connection-state-change',
+} as const;
+
+const AGORA_CONNECTION_STATE = {
+  DISCONNECTED: 'DISCONNECTED',
+  CONNECTING: 'CONNECTING',
+  CONNECTED: 'CONNECTED',
+  RECONNECTING: 'RECONNECTING',
+  DISCONNECTING: 'DISCONNECTING',
 } as const;
 
 const AGORA_MEDIA_TYPE = {
@@ -28,22 +38,25 @@ const AGORA_MEDIA_TYPE = {
 } as const;
 
 const AGORA_CLIENT_MODE = { RTC: 'rtc' } as const;
-const AGORA_CODEC       = { VP8: 'vp8' } as const;
+const AGORA_CODEC = { VP8: 'vp8' } as const;
 
 // ── Agora event kinds (internal discriminant) ─────────────────────────────────
 
 export const AGORA_EVENT = {
-  JOINED:          'joined',
-  REMOTE_JOINED:   'remote-joined',
-  REMOTE_LEFT:     'remote-left',
-  ACTIVE:          'active',
-  ENDED:           'ended',
-  ERROR:           'error',
-  MUTED:           'muted',
-  CAMERA_CHANGED:  'camera-changed',
+  JOINED: 'joined',
+  REMOTE_JOINED: 'remote-joined',
+  REMOTE_LEFT: 'remote-left',
+  REMOTE_MUTED: 'remote-muted',
+  ACTIVE: 'active',
+  ENDED: 'ended',
+  ERROR: 'error',
+  MUTED: 'muted',
+  CAMERA_CHANGED: 'camera-changed',
   NETWORK_QUALITY: 'network-quality',
-  TOKEN_EXPIRING:  'token-expiring',
-  STREAM_MESSAGE:  'stream-message',
+  TOKEN_EXPIRING: 'token-expiring',
+  STREAM_MESSAGE: 'stream-message',
+  RECONNECTING: 'reconnecting',
+  RECONNECTED: 'reconnected',
 } as const;
 
 export type AgoraEventKind = (typeof AGORA_EVENT)[keyof typeof AGORA_EVENT];
@@ -105,9 +118,9 @@ function sendStreamMessage(client: IAgoraRTCClient, bytes: Uint8Array): void {
 
 // ── Voice activity detection ──────────────────────────────────────────────────
 
-const VAD_INTERVAL_MS     = 80;
-const VAD_RMS_THRESHOLD   = 0.015;
-const VAD_STOP_DEBOUNCE   = 300;
+const VAD_INTERVAL_MS = 80;
+const VAD_RMS_THRESHOLD = 0.015;
+const VAD_STOP_DEBOUNCE = 300;
 
 function computeRms(data: Uint8Array): number {
   let sum = 0;
@@ -125,14 +138,14 @@ function startVoiceActivityDetection(
   isMutedRef: { current: boolean },
 ): () => void {
   const mediaStream = new MediaStream([track.getMediaStreamTrack()]);
-  const audioCtx    = new AudioContext();
-  const source      = audioCtx.createMediaStreamSource(mediaStream);
-  const analyser    = audioCtx.createAnalyser();
-  analyser.fftSize  = 256;
+  const audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(mediaStream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
   source.connect(analyser);
 
   const buffer = new Uint8Array(analyser.frequencyBinCount);
-  let speaking  = false;
+  let speaking = false;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
   const tick = () => {
@@ -140,14 +153,17 @@ function startVoiceActivityDetection(
     const active = computeRms(buffer) > VAD_RMS_THRESHOLD;
 
     if (active) {
-      if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+      if (stopTimer) {
+        clearTimeout(stopTimer);
+        stopTimer = null;
+      }
       if (!speaking && !isMutedRef.current) {
         speaking = true;
         onSpeaking();
       }
     } else if (speaking && !stopTimer) {
       stopTimer = setTimeout(() => {
-        speaking  = false;
+        speaking = false;
         stopTimer = null;
         onSpeakingStopped();
       }, VAD_STOP_DEBOUNCE);
@@ -172,65 +188,114 @@ function toQualityLevel(q: number): NetworkQualityLevel {
 }
 
 export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
-  const onEventRef   = useRef(options?.onEvent);
+  const onEventRef = useRef(options?.onEvent);
   onEventRef.current = options?.onEvent;
 
   const expiresAtRef = useRef(options?.expiresAt ?? '');
 
-  const clientRef      = useRef<IAgoraRTCClient | null>(null);
-  const micRef         = useRef<IMicrophoneAudioTrack | null>(null);
-  const camRef         = useRef<ICameraVideoTrack | null>(null);
-  const localVideoRef  = useRef<HTMLDivElement>(null);
+  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const micRef = useRef<IMicrophoneAudioTrack | null>(null);
+  const camRef = useRef<ICameraVideoTrack | null>(null);
+  const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
-  const renewTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const leftRef        = useRef(false);
+  const renewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leftRef = useRef(false);
   // Tracks local mute state for VAD — suppresses speaking broadcasts when muted.
-  const mutedRef       = useRef(false);
+  const mutedRef = useRef(false);
 
   const emit = useCallback((evt: AgoraEvent) => {
     onEventRef.current?.(evt);
   }, []);
 
-  const scheduleExpiryWarn = useCallback((expiresAt: string) => {
-    if (renewTimerRef.current) clearTimeout(renewTimerRef.current);
-    const ms = new Date(expiresAt).getTime() - Date.now() - 60_000;
-    if (ms <= 0) return;
-    renewTimerRef.current = setTimeout(() => {
-      emit({ kind: AGORA_EVENT.TOKEN_EXPIRING, expiresAt });
-    }, ms);
-  }, [emit]);
+  const scheduleExpiryWarn = useCallback(
+    (expiresAt: string) => {
+      if (renewTimerRef.current) clearTimeout(renewTimerRef.current);
+      const ms = new Date(expiresAt).getTime() - Date.now() - 60_000;
+      if (ms <= 0) return;
+      renewTimerRef.current = setTimeout(() => {
+        emit({ kind: AGORA_EVENT.TOKEN_EXPIRING, expiresAt });
+      }, ms);
+    },
+    [emit],
+  );
 
   useEffect(() => {
     if (!options) return;
     const { appId, channel, uid, token, expiresAt, callType } = options;
 
-    leftRef.current   = false;
-    mutedRef.current  = false;
+    leftRef.current = false;
+    mutedRef.current = false;
 
     AgoraRTC.setLogLevel(Number(env.VITE_AGORA_LOG_LEVEL));
     const client = AgoraRTC.createClient({ mode: AGORA_CLIENT_MODE.RTC, codec: AGORA_CODEC.VP8 });
     clientRef.current = client;
 
-    // Guard: only handle audio/video publishes — ignore datachannel mediaType.
-    client.on(AGORA_CLIENT_EVENTS.USER_PUBLISHED, async (user: IAgoraRTCRemoteUser, mediaType: string) => {
-      if (mediaType !== AGORA_MEDIA_TYPE.AUDIO && mediaType !== AGORA_MEDIA_TYPE.VIDEO) return;
-      await client.subscribe(user, mediaType as 'audio' | 'video');
-      if (mediaType === AGORA_MEDIA_TYPE.AUDIO) user.audioTrack?.play();
-      if (mediaType === AGORA_MEDIA_TYPE.VIDEO && remoteVideoRef.current) {
-        user.videoTrack?.play(remoteVideoRef.current);
-      }
-      emit({ kind: AGORA_EVENT.REMOTE_JOINED, uid: user.uid as number });
-      emit({ kind: AGORA_EVENT.ACTIVE, connectedAt: Date.now() });
-    });
+    // Track which remote UIDs have already triggered REMOTE_JOINED so unmute
+    // republishes don't re-emit a join event.
+    const joinedUids = new Set<number>();
+    // Flag to distinguish first CONNECTED from reconnection CONNECTED.
+    let wasReconnecting = false;
+
+    client.on(
+      AGORA_CLIENT_EVENTS.USER_PUBLISHED,
+      async (user: IAgoraRTCRemoteUser, mediaType: string) => {
+        if (mediaType !== AGORA_MEDIA_TYPE.AUDIO && mediaType !== AGORA_MEDIA_TYPE.VIDEO) return;
+        await client.subscribe(user, mediaType as 'audio' | 'video');
+        if (mediaType === AGORA_MEDIA_TYPE.AUDIO) {
+          user.audioTrack?.play();
+          if (!joinedUids.has(user.uid as number)) {
+            joinedUids.add(user.uid as number);
+            emit({ kind: AGORA_EVENT.REMOTE_JOINED, uid: user.uid as number });
+            emit({ kind: AGORA_EVENT.ACTIVE, connectedAt: Date.now() });
+          } else {
+            // Republish after mute = unmute
+            emit({ kind: AGORA_EVENT.REMOTE_MUTED, uid: user.uid as number, muted: false });
+          }
+        }
+        if (mediaType === AGORA_MEDIA_TYPE.VIDEO && remoteVideoRef.current) {
+          user.videoTrack?.play(remoteVideoRef.current);
+        }
+      },
+    );
 
     client.on(AGORA_CLIENT_EVENTS.USER_LEFT, (user: IAgoraRTCRemoteUser) => {
+      joinedUids.delete(user.uid as number);
       emit({ kind: AGORA_EVENT.REMOTE_LEFT, uid: user.uid as number });
     });
 
+    // user-unpublished audio = remote muted (Agora unpublishes the track on setMuted).
+    client.on(
+      AGORA_CLIENT_EVENTS.USER_UNPUBLISHED,
+      (user: IAgoraRTCRemoteUser, mediaType: string) => {
+        if (mediaType === AGORA_MEDIA_TYPE.AUDIO) {
+          emit({ kind: AGORA_EVENT.REMOTE_MUTED, uid: user.uid as number, muted: true });
+        }
+      },
+    );
+
+    // Reconnection: Agora handles the reconnect internally; we surface state changes to the UI.
+    client.on(
+      AGORA_CLIENT_EVENTS.CONNECTION_STATE_CHANGE,
+      (curState: string, _prevState: string) => {
+        if (curState === AGORA_CONNECTION_STATE.RECONNECTING) {
+          emit({ kind: AGORA_EVENT.RECONNECTING });
+        } else if (curState === AGORA_CONNECTION_STATE.CONNECTED) {
+          // CONNECTED fires both on first connect and after a successful reconnect.
+          // Only emit RECONNECTED if the client had previously been reconnecting.
+          // We track this with a flag local to this effect closure.
+          if (wasReconnecting) {
+            wasReconnecting = false;
+            emit({ kind: AGORA_EVENT.RECONNECTED });
+          }
+        }
+        if (curState === AGORA_CONNECTION_STATE.RECONNECTING) wasReconnecting = true;
+      },
+    );
+
     client.on(AGORA_CLIENT_EVENTS.NETWORK_QUALITY, (stats: NetworkQuality) => {
       emit({
-        kind:     AGORA_EVENT.NETWORK_QUALITY,
-        uplink:   toQualityLevel(stats.uplinkNetworkQuality),
+        kind: AGORA_EVENT.NETWORK_QUALITY,
+        uplink: toQualityLevel(stats.uplinkNetworkQuality),
         downlink: toQualityLevel(stats.downlinkNetworkQuality),
       });
     });
@@ -241,7 +306,7 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
 
     client.on(AGORA_CLIENT_EVENTS.STREAM_MESSAGE, (senderUid: number, data: Uint8Array) => {
       const msg = decodeStreamMsg(data);
-      console.debug('[stream] received from', senderUid, msg);
+      console.warn('[stream] received from', senderUid, msg);
       if (msg) emit({ kind: AGORA_EVENT.STREAM_MESSAGE, uid: senderUid, streamMsg: msg });
     });
 
@@ -297,30 +362,35 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
       camRef.current?.close();
       void client.leave();
       clientRef.current = null;
-      micRef.current    = null;
-      camRef.current    = null;
+      micRef.current = null;
+      camRef.current = null;
     };
-  // options object identity changes on every render — destructure key scalars only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // options object identity changes on every render — destructure key scalars only
   }, [options?.appId, options?.channel, options?.uid, options?.token, options?.callType]);
 
-  const mute = useCallback((muted: boolean) => {
-    mutedRef.current = muted;
-    void micRef.current?.setMuted(muted);
-    emit({ kind: AGORA_EVENT.MUTED, muted });
-  }, [emit]);
+  const mute = useCallback(
+    (muted: boolean) => {
+      mutedRef.current = muted;
+      void micRef.current?.setMuted(muted);
+      emit({ kind: AGORA_EVENT.MUTED, muted });
+    },
+    [emit],
+  );
 
-  const setCamera = useCallback((enabled: boolean) => {
-    void camRef.current?.setMuted(!enabled);
-    emit({ kind: AGORA_EVENT.CAMERA_CHANGED, cameraEnabled: enabled });
-  }, [emit]);
+  const setCamera = useCallback(
+    (enabled: boolean) => {
+      void camRef.current?.setMuted(!enabled);
+      emit({ kind: AGORA_EVENT.CAMERA_CHANGED, cameraEnabled: enabled });
+    },
+    [emit],
+  );
 
   const switchCamera = useCallback(async () => {
     if (!camRef.current) return;
     const devices = await AgoraRTC.getCameras();
     if (devices.length < 2) return;
     const current = camRef.current.getTrackLabel();
-    const next    = devices.find((d) => d.label !== current) ?? devices[0];
+    const next = devices.find((d) => d.label !== current) ?? devices[0];
     if (next) await camRef.current.setDevice(next.deviceId);
   }, []);
 
@@ -328,18 +398,24 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
     // Web SDK has no speaker toggle API — OS handles output device selection.
   }, []);
 
-  const renewToken = useCallback(async (token: string, expiresAt: string) => {
-    expiresAtRef.current = expiresAt;
-    await clientRef.current?.renewToken(token);
-    scheduleExpiryWarn(expiresAt);
-    emit({ kind: AGORA_EVENT.TOKEN_EXPIRING });
-  }, [emit, scheduleExpiryWarn]);
+  const renewToken = useCallback(
+    async (token: string, expiresAt: string) => {
+      expiresAtRef.current = expiresAt;
+      await clientRef.current?.renewToken(token);
+      scheduleExpiryWarn(expiresAt);
+      emit({ kind: AGORA_EVENT.TOKEN_EXPIRING });
+    },
+    [emit, scheduleExpiryWarn],
+  );
 
   const sendStream = useCallback((msg: StreamMessage) => {
     const bytes = encodeStreamMsg(msg);
     if (!bytes) return;
-    if (!clientRef.current) { console.warn('[stream] sendStream: no client'); return; }
-    console.debug('[stream] sending', msg);
+    if (!clientRef.current) {
+      console.warn('[stream] sendStream: no client');
+      return;
+    }
+    console.warn('[stream] sending', msg);
     sendStreamMessage(clientRef.current, bytes);
   }, []);
 
@@ -354,5 +430,15 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
     void clientRef.current?.leave();
   }, []);
 
-  return { mute, setCamera, switchCamera, setSpeaker, renewToken, sendStream, leave, localVideoRef, remoteVideoRef };
+  return {
+    mute,
+    setCamera,
+    switchCamera,
+    setSpeaker,
+    renewToken,
+    sendStream,
+    leave,
+    localVideoRef,
+    remoteVideoRef,
+  };
 }

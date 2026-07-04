@@ -23,6 +23,10 @@ export interface RateConfig {
   max_kobo: number;
   allowed_durations_minutes: readonly number[];
   allowed_call_types: readonly ('audio' | 'video')[];
+  // When true, a pro may have at most ONE active rate per call_type, and the
+  // per-minute price is derived as floor(price_kobo / duration_minutes).
+  // Gates the calls-revamp rate model. See docs/revamp/01-per-minute-rates.md.
+  single_rate_per_channel: boolean;
 }
 
 export interface BankAccountConfig {
@@ -109,6 +113,7 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     max_kobo: 50_000_000,
     allowed_durations_minutes: [5, 10, 15, 20, 25, 30, 45, 60],
     allowed_call_types: ['audio', 'video'],
+    single_rate_per_channel: true,
   },
   bankAccount: {
     min_name_match_percent: 45,
@@ -226,11 +231,7 @@ const callTypeArr = (
   v: unknown,
   fallback: readonly ('audio' | 'video')[],
 ): readonly ('audio' | 'video')[] => {
-  if (
-    Array.isArray(v) &&
-    v.length > 0 &&
-    v.every((x) => x === 'audio' || x === 'video')
-  ) {
+  if (Array.isArray(v) && v.length > 0 && v.every((x) => x === 'audio' || x === 'video')) {
     // Dedupe while preserving order.
     return Array.from(new Set(v as ('audio' | 'video')[]));
   }
@@ -255,6 +256,10 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       allowed_call_types: callTypeArr(
         get('rates.allowed_call_types', d.rate.allowed_call_types),
         d.rate.allowed_call_types,
+      ),
+      single_rate_per_channel: bool(
+        get('rates.single_rate_per_channel', d.rate.single_rate_per_channel),
+        d.rate.single_rate_per_channel,
       ),
     },
     bankAccount: {
@@ -396,10 +401,7 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
         d.bookings.token_expires_seconds,
       ),
       polite_decline_window_seconds: num(
-        get(
-          'bookings.polite_decline_window_seconds',
-          d.bookings.polite_decline_window_seconds,
-        ),
+        get('bookings.polite_decline_window_seconds', d.bookings.polite_decline_window_seconds),
         d.bookings.polite_decline_window_seconds,
       ),
     },

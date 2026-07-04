@@ -23,6 +23,23 @@ export const findByIdForUser = async (rateId: string, userId: string): Promise<R
   return res.rows[0] ?? null;
 };
 
+// One-active-rate-per-channel lookup for the single-rate model. Returns the
+// pro's existing active rate for a call_type regardless of duration.
+export const findActiveByUserAndCallType = async (
+  userId: string,
+  callType: CallType,
+): Promise<RateRow | null> => {
+  const res = await pool.query<RateRow>(
+    `SELECT * FROM professional_rates
+      WHERE user_id = $1
+        AND call_type = $2
+        AND deleted_at IS NULL
+      LIMIT 1`,
+    [userId, callType],
+  );
+  return res.rows[0] ?? null;
+};
+
 export const findActiveByUserAndShape = async (
   userId: string,
   callType: CallType,

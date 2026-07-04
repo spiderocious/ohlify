@@ -83,10 +83,7 @@ let cachedProvider: PushProvider | null = null;
  */
 export const getPushProvider = async (): Promise<PushProvider> => {
   if (cachedProvider !== null) return cachedProvider;
-  if (
-    env.FCM_SERVICE_ACCOUNT_JSON_BASE64 === undefined ||
-    env.FCM_PROJECT_ID === undefined
-  ) {
+  if (env.FCM_SERVICE_ACCOUNT_JSON_BASE64 === undefined || env.FCM_PROJECT_ID === undefined) {
     cachedProvider = noopProvider;
     return cachedProvider;
   }

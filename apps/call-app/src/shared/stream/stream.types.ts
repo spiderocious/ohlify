@@ -2,24 +2,47 @@
 // Max payload: 512 bytes total. Keep payloads tiny.
 
 export const STREAM_MSG = {
-  MUTE:             'sm:mute',             // { muted: boolean }
-  CAMERA:           'sm:camera',           // { enabled: boolean }
-  SPEAKING:         'sm:speaking',         // {} — sender started speaking
+  MUTE: 'sm:mute', // { muted: boolean }
+  CAMERA: 'sm:camera', // { enabled: boolean }
+  SPEAKING: 'sm:speaking', // {} — sender started speaking
   SPEAKING_STOPPED: 'sm:speaking-stopped', // {} — sender stopped speaking
-  REACTION:         'sm:reaction',         // { emoji: string }
-  CUSTOM:           'sm:custom',           // { key: string; value?: string }
+  REACTION: 'sm:reaction', // { emoji: string }
+  CUSTOM: 'sm:custom', // { key: string; value?: string }
 } as const;
 
 export type StreamMsgType = (typeof STREAM_MSG)[keyof typeof STREAM_MSG];
 
 // ── Typed payloads ────────────────────────────────────────────────────────────
 
-export interface StreamMsgMute            { type: typeof STREAM_MSG.MUTE;             uid: number; muted: boolean }
-export interface StreamMsgCamera          { type: typeof STREAM_MSG.CAMERA;           uid: number; enabled: boolean }
-export interface StreamMsgSpeaking        { type: typeof STREAM_MSG.SPEAKING;         uid: number }
-export interface StreamMsgSpeakingStopped { type: typeof STREAM_MSG.SPEAKING_STOPPED; uid: number }
-export interface StreamMsgReaction        { type: typeof STREAM_MSG.REACTION;         uid: number; emoji: string }
-export interface StreamMsgCustom          { type: typeof STREAM_MSG.CUSTOM;           uid: number; key: string; value?: string }
+export interface StreamMsgMute {
+  type: typeof STREAM_MSG.MUTE;
+  uid: number;
+  muted: boolean;
+}
+export interface StreamMsgCamera {
+  type: typeof STREAM_MSG.CAMERA;
+  uid: number;
+  enabled: boolean;
+}
+export interface StreamMsgSpeaking {
+  type: typeof STREAM_MSG.SPEAKING;
+  uid: number;
+}
+export interface StreamMsgSpeakingStopped {
+  type: typeof STREAM_MSG.SPEAKING_STOPPED;
+  uid: number;
+}
+export interface StreamMsgReaction {
+  type: typeof STREAM_MSG.REACTION;
+  uid: number;
+  emoji: string;
+}
+export interface StreamMsgCustom {
+  type: typeof STREAM_MSG.CUSTOM;
+  uid: number;
+  key: string;
+  value?: string;
+}
 
 export type StreamMessage =
   | StreamMsgMute

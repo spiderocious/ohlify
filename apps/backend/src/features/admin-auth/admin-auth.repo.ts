@@ -10,7 +10,9 @@ interface QueryRunner {
 }
 
 export const countAdmins = async (): Promise<number> => {
-  const res = await pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM admin_users WHERE role = 'admin' AND status = 'active'`);
+  const res = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM admin_users WHERE role = 'admin' AND status = 'active'`,
+  );
   return Number(res.rows[0]?.n ?? '0');
 };
 

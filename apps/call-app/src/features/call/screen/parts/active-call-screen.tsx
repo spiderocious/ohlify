@@ -8,6 +8,7 @@ interface Props {
   muted: boolean;
   remoteMuted: boolean;
   remoteSpeaking: boolean;
+  reconnecting: boolean;
   connectedAt: number | null;
   durationMinutes: number | null;
   accumulatedPausedMs: number;
@@ -38,9 +39,18 @@ function PeerAvatar({
       {/* Speaking ring — three concentric pulses */}
       {remoteSpeaking && (
         <>
-          <span className="absolute inset-0 rounded-full bg-white/20 animate-ping" style={{ animationDuration: '1.2s' }} />
-          <span className="absolute -inset-2 rounded-full bg-white/10 animate-ping" style={{ animationDuration: '1.5s', animationDelay: '0.15s' }} />
-          <span className="absolute -inset-4 rounded-full bg-white/5 animate-ping" style={{ animationDuration: '1.8s', animationDelay: '0.3s' }} />
+          <span
+            className="absolute inset-0 rounded-full bg-white/20 animate-ping"
+            style={{ animationDuration: '1.2s' }}
+          />
+          <span
+            className="absolute -inset-2 rounded-full bg-white/10 animate-ping"
+            style={{ animationDuration: '1.5s', animationDelay: '0.15s' }}
+          />
+          <span
+            className="absolute -inset-4 rounded-full bg-white/5 animate-ping"
+            style={{ animationDuration: '1.8s', animationDelay: '0.3s' }}
+          />
         </>
       )}
 
@@ -97,6 +107,7 @@ export function ActiveCallScreen({
   muted,
   remoteMuted,
   remoteSpeaking,
+  reconnecting,
   connectedAt,
   durationMinutes,
   accumulatedPausedMs,
@@ -105,9 +116,7 @@ export function ActiveCallScreen({
   onHangup,
 }: Props) {
   const isConnecting =
-    phase === CALL_PHASE.JOINING ||
-    phase === CALL_PHASE.CONNECTING ||
-    phase === CALL_PHASE.DIALING;
+    phase === CALL_PHASE.JOINING || phase === CALL_PHASE.CONNECTING || phase === CALL_PHASE.DIALING;
   const isAlone = phase === CALL_PHASE.ALONE;
   const isActive = phase === CALL_PHASE.ACTIVE;
 
@@ -132,11 +141,21 @@ export function ActiveCallScreen({
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/10" />
 
+      {/* Reconnecting banner */}
+      {reconnecting && (
+        <div className="absolute top-0 inset-x-0 z-20 flex justify-center pt-3">
+          <div className="flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-full px-4 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+            <span className="text-white/90 text-xs font-medium">Reconnecting…</span>
+          </div>
+        </div>
+      )}
+
       {/* Peer name + status — top center */}
       <div className="relative pt-14 pb-4 flex flex-col items-center gap-1">
         <p className="text-white text-lg font-semibold tracking-wide">{peerName}</p>
         <div className="text-white/70 text-sm">
-          {isActive && connectedAt != null ? (
+          {isActive && connectedAt !== null ? (
             <DurationCountdown
               connectedAt={connectedAt}
               durationMinutes={durationMinutes}

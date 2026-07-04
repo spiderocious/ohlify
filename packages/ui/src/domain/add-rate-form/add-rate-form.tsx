@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 
-import type { CallRate, CallType } from '@ohlify/core';
+import { formatNaira, parseNairaToKobo, type CallRate, type CallType } from '@ohlify/core';
 
+import { DrawerService } from '../../modals/drawer-service.js';
 import { AppButton } from '../../primitives/app-button/app-button.js';
 import {
   AppDropdownInput,
@@ -15,16 +16,18 @@ const DEFAULT_DURATIONS: readonly number[] = [10, 25, 45, 60];
 const DEFAULT_MIN_KOBO = 50_000;
 const DEFAULT_MAX_KOBO = 50_000_000;
 
+// Allows digits, commas, a single decimal point + up to 2 decimals, optional ₦.
+const PRICE_INPUT_PATTERN = /^₦?\s?[0-9,]*(\.[0-9]{0,2})?$/;
+
 const CALL_TYPE_LABELS: Record<CallType, string> = {
   audio: 'Audio call',
   video: 'Video call',
 };
 
-function formatPrice(raw: string): string {
-  const digits = raw.replace(/[^0-9]/g, '');
-  if (digits === '') return '';
-  const withCommas = digits.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
-  return `₦ ${withCommas}`;
+/** Floor: per_minute * duration <= price; platform owns the sub-kobo remainder. */
+function perMinuteKobo(priceKobo: number, durationMinutes: number): number {
+  if (durationMinutes <= 0) return 0;
+  return Math.floor(priceKobo / durationMinutes);
 }
 
 function formatNairaShort(kobo: number): string {
@@ -44,6 +47,12 @@ interface AddRateFormProps {
   minKobo?: number;
   /** Inclusive maximum price in kobo. Sourced from `rates.max_kobo`. */
   maxKobo?: number;
+  /**
+   * Single-rate model (calls revamp): one rate per channel; show the derived
+   * per-minute price + a confirmation modal on submit. Sourced from
+   * `rates.single_rate_per_channel`. Defaults to the legacy multi-duration flow.
+   */
+  singleRatePerChannel?: boolean;
 }
 
 /** 1:1 with mobile/lib/ui/widgets/add_rate_form/add_rate_form.dart. */
@@ -55,6 +64,7 @@ export function AddRateForm({
   durations = DEFAULT_DURATIONS,
   minKobo = DEFAULT_MIN_KOBO,
   maxKobo = DEFAULT_MAX_KOBO,
+  singleRatePerChannel = false,
 }: AddRateFormProps) {
   const [callType, setCallType] = useState<CallType | undefined>(undefined);
   const [duration, setDuration] = useState<number | undefined>(undefined);
@@ -70,12 +80,10 @@ export function AddRateForm({
     [durations],
   );
 
+  // Parse with kobo precision (handles "₦5,000.50" → 500050).
   const priceKobo = useMemo(() => {
-    const digits = amount.replace(/[^0-9]/g, '');
-    if (digits === '') return null;
-    const naira = Number(digits);
-    if (!Number.isFinite(naira)) return null;
-    return naira * 100;
+    const parsed = parseNairaToKobo(amount);
+    return parsed === null ? null : Number(parsed);
   }, [amount]);
 
   const priceTooLow = priceKobo !== null && priceKobo < minKobo;
@@ -91,6 +99,44 @@ export function AddRateForm({
       : undefined;
 
   const priceHelper = `Allowed range: ${formatNairaShort(minKobo)} – ${formatNairaShort(maxKobo)}`;
+
+  // Live derived per-minute hint (single-rate model only).
+  const perMinuteHint = useMemo(() => {
+    if (!singleRatePerChannel || priceKobo === null || duration === undefined) return undefined;
+    return `≈ ${formatNaira(perMinuteKobo(priceKobo, duration))} / min`;
+  }, [singleRatePerChannel, priceKobo, duration]);
+
+  const emit = () => {
+    onSave({
+      id: '',
+      callType: callType as CallType,
+      durationMinutes: duration as number,
+      // Pass the kobo-accurate price as a parseable string so callers preserve
+      // precision via parseNairaToKobo.
+      price: formatNaira(priceKobo as number),
+    });
+  };
+
+  const handleSubmit = () => {
+    if (!isValid) return;
+    if (!singleRatePerChannel) {
+      emit();
+      return;
+    }
+    // Single-rate: confirm the floored per-minute the pro will be paid.
+    const perMin = perMinuteKobo(priceKobo as number, duration as number);
+    DrawerService.showConfirmationModal(
+      'Confirm your rate',
+      `You'll be paid ${formatNaira(perMin)} per minute (${formatNaira(
+        priceKobo as number,
+      )} ÷ ${duration} min). Any fraction below a kobo is on us.`,
+      {
+        confirmButtonText: 'Save rate',
+        cancelButtonText: 'Edit',
+        onConfirm: emit,
+      },
+    );
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -113,30 +159,28 @@ export function AddRateForm({
         bordered
         onChange={setDuration}
       />
-      <AppTextInput
-        label={`Price (${priceHelper})`}
-        value={amount}
-        placeholder="Enter amount"
-        charSupported="number"
-        onChange={setAmount}
-        errorMessage={priceErrorMessage}
-      />
+      <div className="flex flex-col gap-1">
+        <AppTextInput
+          label={`Price (${priceHelper})`}
+          value={amount}
+          placeholder="Enter amount"
+          pattern={PRICE_INPUT_PATTERN}
+          inputMode="decimal"
+          onChange={setAmount}
+          errorMessage={priceErrorMessage}
+        />
+        {perMinuteHint ? (
+          <AppText variant="bodySmall" align="start" color="var(--ohl-text-muted)">
+            {perMinuteHint}
+          </AppText>
+        ) : null}
+      </div>
       <AppButton
         label={submitLabel}
         expanded
         radius={100}
         isDisabled={!isValid}
-        onPressed={
-          !isValid
-            ? undefined
-            : () =>
-                onSave({
-                  id: '',
-                  callType: callType as CallType,
-                  durationMinutes: duration as number,
-                  price: formatPrice(amount),
-                })
-        }
+        onPressed={!isValid ? undefined : handleSubmit}
       />
     </div>
   );

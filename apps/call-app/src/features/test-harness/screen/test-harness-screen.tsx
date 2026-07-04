@@ -27,6 +27,8 @@ function buildJoinMsg(
     type: CA_EVENTS.JOIN,
     payload: {
       call_id: session.session_id,
+      call_reference: session.label ?? null,
+      session_token: null, // test harness has no auth; backend events use unauthenticated path
       agora_app_id: env.VITE_AGORA_APP_ID,
       agora_channel: session.channel,
       agora_uid: p.uid,
@@ -36,6 +38,7 @@ function buildJoinMsg(
       role: party === 'a' ? 'caller' : 'callee',
       local_name: p.name,
       local_avatar_key: p.avatar_url,
+      participants: [{ uid: peer.uid, name: peer.name, avatar_key: peer.avatar_url }],
       peer_name: peer.name,
       peer_avatar_key: peer.avatar_url,
       duration_minutes: durationMinutes,
@@ -86,7 +89,7 @@ function PartyBPanel({ url }: { url: string }) {
 export function TestHarnessScreen() {
   const searchParams = new URLSearchParams(window.location.search);
   const autoParty = searchParams.get('party') as 'a' | 'b' | null;
-  const isAutoMode = searchParams.get('auto') === '1' && autoParty != null;
+  const isAutoMode = searchParams.get('auto') === '1' && autoParty !== null;
 
   // In auto mode, read participant names/avatars from URL params.
   const urlNameB = searchParams.get('name_b') ?? '';
@@ -118,40 +121,82 @@ export function TestHarnessScreen() {
 
     fetch(`${env.VITE_BACKEND_URL}/api/v1/dev/call-sessions/${sessionId}/${autoParty}`)
       .then((r) => r.json())
-      .then((json: { data?: { session_id: string; channel: string; call_type: 'audio' | 'video'; duration_minutes: number; uid: number; agora_token: string; token_expires_at: string; peer_uid: number } }) => {
-        if (!json.data) return;
-        const d = json.data;
-        const myName = autoParty === 'b' ? partyBName : urlNameA;
-        const myAvatar = autoParty === 'b' ? (partyBAvatar || null) : (urlAvatarA || null);
-        const peerName = autoParty === 'b' ? urlNameA : partyBName;
-        const peerAvatar = autoParty === 'b' ? (urlAvatarA || null) : (partyBAvatar || null);
+      .then(
+        (json: {
+          data?: {
+            session_id: string;
+            channel: string;
+            call_type: 'audio' | 'video';
+            duration_minutes: number;
+            uid: number;
+            agora_token: string;
+            token_expires_at: string;
+            peer_uid: number;
+          };
+        }) => {
+          if (!json.data) return;
+          const d = json.data;
+          const myName = autoParty === 'b' ? partyBName : urlNameA;
+          const myAvatar = autoParty === 'b' ? partyBAvatar || null : urlAvatarA || null;
+          const peerName = autoParty === 'b' ? urlNameA : partyBName;
+          const peerAvatar = autoParty === 'b' ? urlAvatarA || null : partyBAvatar || null;
 
-        const syntheticSession: MintedSession = {
-          session_id: d.session_id,
-          channel: d.channel,
-          call_type: d.call_type,
-          duration_minutes: d.duration_minutes,
-          label: null,
-          expires_at: d.token_expires_at,
-          party_a: autoParty === 'a'
-            ? { uid: d.uid, agora_token: d.agora_token, token_expires_at: d.token_expires_at, name: myName, avatar_url: myAvatar }
-            : { uid: d.peer_uid, agora_token: '', token_expires_at: '', name: peerName, avatar_url: peerAvatar },
-          party_b: autoParty === 'b'
-            ? { uid: d.uid, agora_token: d.agora_token, token_expires_at: d.token_expires_at, name: myName, avatar_url: myAvatar }
-            : { uid: d.peer_uid, agora_token: '', token_expires_at: '', name: peerName, avatar_url: peerAvatar },
-        };
-        setSession(syntheticSession);
-        if (pendingReadyRef.current && !joined) {
-          pendingReadyRef.current = false;
-          setJoined(true);
-          const joinMsg = buildJoinMsg(syntheticSession, party, syntheticSession.duration_minutes);
-          setTimeout(() => {
-            iframeRef.current?.contentWindow?.postMessage(joinMsg, '*');
-          }, 100);
-        }
-      })
+          const syntheticSession: MintedSession = {
+            session_id: d.session_id,
+            channel: d.channel,
+            call_type: d.call_type,
+            duration_minutes: d.duration_minutes,
+            label: null,
+            expires_at: d.token_expires_at,
+            party_a:
+              autoParty === 'a'
+                ? {
+                    uid: d.uid,
+                    agora_token: d.agora_token,
+                    token_expires_at: d.token_expires_at,
+                    name: myName,
+                    avatar_url: myAvatar,
+                  }
+                : {
+                    uid: d.peer_uid,
+                    agora_token: '',
+                    token_expires_at: '',
+                    name: peerName,
+                    avatar_url: peerAvatar,
+                  },
+            party_b:
+              autoParty === 'b'
+                ? {
+                    uid: d.uid,
+                    agora_token: d.agora_token,
+                    token_expires_at: d.token_expires_at,
+                    name: myName,
+                    avatar_url: myAvatar,
+                  }
+                : {
+                    uid: d.peer_uid,
+                    agora_token: '',
+                    token_expires_at: '',
+                    name: peerName,
+                    avatar_url: peerAvatar,
+                  },
+          };
+          setSession(syntheticSession);
+          if (pendingReadyRef.current && !joined) {
+            pendingReadyRef.current = false;
+            setJoined(true);
+            const joinMsg = buildJoinMsg(
+              syntheticSession,
+              party,
+              syntheticSession.duration_minutes,
+            );
+            setTimeout(() => {
+              iframeRef.current?.contentWindow?.postMessage(joinMsg, '*');
+            }, 100);
+          }
+        },
+      )
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyBReady]);
 
   // Listen for events from the iframe.
@@ -178,16 +223,20 @@ export function TestHarnessScreen() {
     return () => window.removeEventListener('message', handler);
   }, [appendLog, session, joined, party, openEnded]);
 
-  const sendCommand = useCallback((msg: ParentToCallApp) => {
-    iframeRef.current?.contentWindow?.postMessage(msg, '*');
-    const { type, ...rest } = msg as { type: string; payload?: unknown };
-    appendLog('out', type, (rest as { payload?: unknown }).payload);
-  }, [appendLog]);
+  const sendCommand = useCallback(
+    (msg: ParentToCallApp) => {
+      iframeRef.current?.contentWindow?.postMessage(msg, '*');
+      const { type, ...rest } = msg as { type: string; payload?: unknown };
+      appendLog('out', type, (rest as { payload?: unknown }).payload);
+    },
+    [appendLog],
+  );
 
   const sendHangup = () => sendCommand({ type: CA_EVENTS.HANGUP });
 
-  const handleMinted = (s: MintedSession) => {
+  const handleMinted = (s: MintedSession, oe: boolean) => {
     setSession(s);
+    setOpenEnded(oe);
     setJoined(false);
     setLog([]);
   };
@@ -249,11 +298,15 @@ export function TestHarnessScreen() {
         {session && !isAutoMode && (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-zinc-400">
-              {session.call_type} · {session.duration_minutes}m
+              {session.call_type} · {openEnded ? 'open-ended' : `${session.duration_minutes}m`}
               {session.label ? ` · ${session.label}` : ''}
             </span>
             <button
-              onClick={() => { setSession(null); setLog([]); setJoined(false); }}
+              onClick={() => {
+                setSession(null);
+                setLog([]);
+                setJoined(false);
+              }}
               className="text-zinc-500 hover:text-red-400 text-xs"
             >
               ← New session
@@ -277,18 +330,9 @@ export function TestHarnessScreen() {
             {!isAutoMode && <PartyBPanel url={partyBUrl(session)} />}
 
             <div className="bg-zinc-800 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Controls</p>
-              {!isAutoMode && (
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={openEnded}
-                    onChange={(e) => setOpenEnded(e.target.checked)}
-                    className="accent-indigo-500"
-                  />
-                  <span className="text-xs text-zinc-300">Open-ended (no total duration)</span>
-                </label>
-              )}
+              <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                Controls
+              </p>
               <button
                 onClick={sendHangup}
                 className="w-full py-2 rounded-lg bg-red-700 hover:bg-red-600 text-sm font-semibold text-white transition-colors"
@@ -300,12 +344,17 @@ export function TestHarnessScreen() {
             <EventInjector onSend={sendCommand} />
 
             <div className="bg-zinc-800 rounded-xl p-4 space-y-2 flex-1 flex flex-col">
-              <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Event Log</p>
+              <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                Event Log
+              </p>
               <div className="flex-1">
                 <EventLog entries={log} />
               </div>
               {log.length > 0 && (
-                <button onClick={() => setLog([])} className="text-xs text-zinc-500 hover:text-zinc-300 text-left">
+                <button
+                  onClick={() => setLog([])}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 text-left"
+                >
                   Clear
                 </button>
               )}

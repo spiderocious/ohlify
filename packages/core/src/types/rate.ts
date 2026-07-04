@@ -5,6 +5,8 @@ export interface ProfessionalRate {
   durationMinutes: number;
   /** Pre-formatted display price, e.g. "₦ 10,800". */
   price: string;
+  /** Pre-formatted derived per-minute price, e.g. "₦ 166.66 / min". */
+  pricePerMinute?: string;
 }
 
 export interface CallRate {
@@ -13,4 +15,6 @@ export interface CallRate {
   durationMinutes: number;
   /** Pre-formatted display price, e.g. "₦ 10,800". */
   price: string;
+  /** Pre-formatted derived per-minute price, e.g. "₦ 166.66 / min". */
+  pricePerMinute?: string;
 }

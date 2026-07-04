@@ -1,6 +1,8 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { CALL_PHASE, PERMISSION_KIND } from '@shared/bridge/bridge.types.js';
+import { EventService, BackendProvider, ConsoleProvider } from '@shared/events/index.js';
+import { env } from '@shared/config/env.js';
 import { useCallBridge } from '../hooks/use-call-bridge.js';
 import { useAgoraRtc, type AgoraEvent } from '../hooks/use-agora-rtc.js';
 import { useCallMachine } from '../hooks/use-call-machine.js';
@@ -35,13 +37,48 @@ export function CallScreen() {
 
   bridge.onCommand(machine.handleBridgeCommand);
 
+  // Register event providers once when join params are first received.
+  const providersRegisteredRef = useRef(false);
+  const backendProviderRef = useRef<BackendProvider | null>(null);
+
+  useEffect(() => {
+    if (!machine.state.joinParams || providersRegisteredRef.current) return;
+    providersRegisteredRef.current = true;
+    EventService.unregisterAll();
+    if (env.VITE_ENABLE_TEST_HARNESS === 'true') {
+      EventService.register(new ConsoleProvider('*'));
+    }
+    const { session_token, call_id } = machine.state.joinParams;
+    if (call_id) {
+      const provider = new BackendProvider({
+        endpoint: `${env.VITE_BACKEND_URL}/api/v1/call-sessions/${call_id}/events`,
+        sessionToken: session_token ?? call_id,
+      });
+      backendProviderRef.current = provider;
+      EventService.register(provider);
+    }
+    return () => {
+      backendProviderRef.current?.destroy();
+      backendProviderRef.current = null;
+    };
+  }, [machine.state.joinParams]);
+
+  // Flush immediately on call end — never let ca:ended sit in the 5s queue.
+  useEffect(() => {
+    if (machine.state.phase === CALL_PHASE.ENDED) {
+      backendProviderRef.current?.flush();
+    }
+  }, [machine.state.phase]);
+
   const { state, hangup } = machine;
   const jp = state.joinParams;
 
   if (state.phase === CALL_PHASE.PERMISSION_ERROR) {
     return (
       <div className="flex h-full w-full bg-zinc-950">
-        <PermissionErrorScreen kind={jp?.call_type === 'video' ? PERMISSION_KIND.CAMERA : PERMISSION_KIND.MICROPHONE} />
+        <PermissionErrorScreen
+          kind={jp?.call_type === 'video' ? PERMISSION_KIND.CAMERA : PERMISSION_KIND.MICROPHONE}
+        />
       </div>
     );
   }
@@ -80,7 +117,7 @@ export function CallScreen() {
           <CallVideoLayout localVideoRef={rtc.localVideoRef} remoteVideoRef={rtc.remoteVideoRef} />
         </div>
         <div className="flex items-center justify-center gap-6 px-6 pb-8 pt-4">
-          {state.connectedAt != null && (
+          {state.connectedAt !== null && (
             <DurationCountdown
               connectedAt={state.connectedAt}
               durationMinutes={jp.duration_minutes}
@@ -118,6 +155,7 @@ export function CallScreen() {
       muted={state.muted}
       remoteMuted={state.remoteMuted}
       remoteSpeaking={state.remoteSpeaking}
+      reconnecting={state.reconnecting}
       connectedAt={state.connectedAt}
       durationMinutes={jp.duration_minutes}
       accumulatedPausedMs={state.accumulatedPausedMs}

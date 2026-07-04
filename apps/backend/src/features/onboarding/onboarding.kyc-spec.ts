@@ -99,11 +99,7 @@ const loadAggregates = async (userId: string): Promise<KycAggregates> => {
 
 // ── One spec entry per known kind ────────────────────────────────────────────
 
-const buildItemSpec = (
-  config: KycItemConfig,
-  user: UserRow,
-  agg: KycAggregates,
-): KycItemSpec => {
+const buildItemSpec = (config: KycItemConfig, user: UserRow, agg: KycAggregates): KycItemSpec => {
   const base = { ...config, value: null as unknown, complete: false };
 
   switch (config.key) {
@@ -193,14 +189,10 @@ export const getRequiredKycKeysForRole = (role: UserRole): KycItemKey[] => {
  * making the client fetch /onboarding/status separately) so a single
  * round-trip drives the screen.
  */
-export const buildKycSpec = async (
-  user: UserRow,
-): Promise<KycSpecResponse> => {
+export const buildKycSpec = async (user: UserRow): Promise<KycSpecResponse> => {
   const items = getKycItemsForRole(user.role);
   const agg = await loadAggregates(user.id);
-  const built = items
-    .filter((i) => i.enabled)
-    .map((i) => buildItemSpec(i, user, agg));
+  const built = items.filter((i) => i.enabled).map((i) => buildItemSpec(i, user, agg));
   const requiredItems = built.filter((i) => i.required);
   const completedRequired = requiredItems.filter((i) => i.complete);
 
@@ -228,8 +220,7 @@ export const buildKycSpec = async (
     items: built,
     completed_count: completedRequired.length,
     total_required: requiredItems.length,
-    all_complete:
-      requiredItems.length > 0 && completedRequired.length === requiredItems.length,
+    all_complete: requiredItems.length > 0 && completedRequired.length === requiredItems.length,
     resubmission,
   };
 };
@@ -269,9 +260,7 @@ export const findIncompleteKeys = async (user: UserRow): Promise<KycItemKey[]> =
  * silently rewritten. UI tells the same story but we still defend the
  * server boundary.
  */
-export const findActiveResubmitSet = async (
-  user: UserRow,
-): Promise<KycItemKey[] | null> => {
+export const findActiveResubmitSet = async (user: UserRow): Promise<KycItemKey[] | null> => {
   if (user.kyc_status !== 'rejected') return null;
   const latest = await repo.findLatestKycSubmission(user.id);
   if (!latest || latest.status !== 'rejected') return null;

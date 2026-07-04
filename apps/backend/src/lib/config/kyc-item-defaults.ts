@@ -164,7 +164,7 @@ export const parseKycItems = (raw: unknown, fallback: KycItemConfig[]): KycItemC
     ) {
       return fallback;
     }
-    result.push(entry as unknown as KycItemConfig);
+    result.push(entry as unknown as KycItemConfig); // eslint-disable-line @typescript-eslint/no-unnecessary-type-assertion
   }
   return result;
 };

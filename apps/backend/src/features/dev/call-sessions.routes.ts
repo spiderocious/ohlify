@@ -8,12 +8,7 @@ import { CreateCallSessionSchema } from './call-sessions.schema.js';
 
 const router: IRouter = Router();
 
-router.post(
-  '/',
-  ipRateLimit(10, 60),
-  validate(CreateCallSessionSchema),
-  controller.create,
-);
+router.post('/', ipRateLimit(10, 60), validate(CreateCallSessionSchema), controller.create);
 
 router.get('/:session_id/:party', controller.getParty);
 
