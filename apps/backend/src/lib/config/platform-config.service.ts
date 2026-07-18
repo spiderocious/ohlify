@@ -33,6 +33,19 @@ export interface BankAccountConfig {
   min_name_match_percent: number;
 }
 
+export interface PresenceConfig {
+  // A pro is "online" if they've heartbeated within this many seconds.
+  online_window_seconds: number;
+  // How long an instant call rings the callee before giving up (unavailable).
+  ring_timeout_seconds: number;
+}
+
+export interface ChatConfig {
+  // Below (or at) this many minutes with a pro, the chat composer shows a
+  // "credits running low" warning. At 0 the client can't send at all.
+  low_minutes_threshold: number;
+}
+
 export interface HandleConfig {
   change_cooldown_days: number;
   redirect_days: number;
@@ -118,6 +131,13 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
   bankAccount: {
     min_name_match_percent: 45,
   },
+  presence: {
+    online_window_seconds: 60,
+    ring_timeout_seconds: 30,
+  },
+  chat: {
+    low_minutes_threshold: 5,
+  },
   handle: {
     change_cooldown_days: 30,
     redirect_days: 90,
@@ -181,6 +201,8 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
 interface ConfigSnapshot {
   rate: RateConfig;
   bankAccount: BankAccountConfig;
+  presence: PresenceConfig;
+  chat: ChatConfig;
   handle: HandleConfig;
   kyc: KycConfig;
   availability: AvailabilityConfig;
@@ -266,6 +288,22 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       min_name_match_percent: num(
         get('bank_account.min_name_match_percent', d.bankAccount.min_name_match_percent),
         d.bankAccount.min_name_match_percent,
+      ),
+    },
+    presence: {
+      online_window_seconds: num(
+        get('presence.online_window_seconds', d.presence.online_window_seconds),
+        d.presence.online_window_seconds,
+      ),
+      ring_timeout_seconds: num(
+        get('presence.ring_timeout_seconds', d.presence.ring_timeout_seconds),
+        d.presence.ring_timeout_seconds,
+      ),
+    },
+    chat: {
+      low_minutes_threshold: num(
+        get('chat.low_minutes_threshold', d.chat.low_minutes_threshold),
+        d.chat.low_minutes_threshold,
       ),
     },
     handle: {
@@ -491,6 +529,8 @@ export const listPublicConfigRows = async (): Promise<{ key: string; value: unkn
 export const platformConfig = {
   rate: (): RateConfig => snapshot.rate,
   bankAccount: (): BankAccountConfig => snapshot.bankAccount,
+  presence: (): PresenceConfig => snapshot.presence,
+  chat: (): ChatConfig => snapshot.chat,
   handle: (): HandleConfig => snapshot.handle,
   kyc: (): KycConfig => snapshot.kyc,
   availability: (): AvailabilityConfig => snapshot.availability,

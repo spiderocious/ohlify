@@ -119,6 +119,10 @@ export const ERROR_SEVERITY: Record<ErrorCode, SeverityBand> = {
   avatar_invalid: SEVERITY_BANDS.BODY_VALIDATION,
   category_invalid: SEVERITY_BANDS.BODY_VALIDATION,
   handle_invalid_format: SEVERITY_BANDS.BODY_VALIDATION,
+  // Reserved is a validation rejection returned as HTTP 400 (like
+  // handle_invalid_format) — not a 1005 conflict. Band it to match the status.
+  // (BUG-kyc-professional-01.)
+  handle_reserved: SEVERITY_BANDS.BODY_VALIDATION,
   // 1001 — suspicious validation
   cannot_book_self: SEVERITY_BANDS.VALIDATION_SUSPICIOUS,
   role_mismatch: SEVERITY_BANDS.VALIDATION_SUSPICIOUS,
@@ -160,7 +164,6 @@ export const ERROR_SEVERITY: Record<ErrorCode, SeverityBand> = {
   email_exists: SEVERITY_BANDS.CONFLICT,
   phone_exists: SEVERITY_BANDS.CONFLICT,
   handle_taken: SEVERITY_BANDS.CONFLICT,
-  handle_reserved: SEVERITY_BANDS.CONFLICT,
   review_exists: SEVERITY_BANDS.CONFLICT,
   role_already_set: SEVERITY_BANDS.CONFLICT,
   already_bootstrapped: SEVERITY_BANDS.CONFLICT,

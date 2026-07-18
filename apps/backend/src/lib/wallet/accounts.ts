@@ -10,6 +10,7 @@ export const SystemAccountCode = {
   PLATFORM_PROMO: 'platform_promo',
   SUSPENSE: 'suspense',
   PENDING_DEBITS_POOL: 'pending_debits_pool',
+  MINUTES_ESCROW: 'minutes_escrow',
 } as const;
 
 export type SystemAccountCode = (typeof SystemAccountCode)[keyof typeof SystemAccountCode];

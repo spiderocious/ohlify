@@ -4,6 +4,7 @@ import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as categoriesService from '@features/categories/categories.service.js';
 import * as bookingBlocksRepo from '@features/profile/booking-blocks.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
+import { perMinuteKobo } from '@features/rates/rates.types.js';
 import { getOrCompute } from '@lib/cache/responseCache.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { buildCursorPage, decodeCursor, resolveLimit } from '@lib/pagination.js';
@@ -161,6 +162,10 @@ export const rates = async (professionalId: string) => {
       call_type: row.call_type,
       duration_minutes: row.duration_minutes,
       price_kobo: Number(row.price_kobo),
+      // Derived floored per-minute price — the field clients gate the
+      // buy-minutes button on. Must match /me/rates exactly, or the public
+      // profile can never start a purchase. (BUGS.md M5.)
+      price_per_minute_kobo: perMinuteKobo(Number(row.price_kobo), row.duration_minutes),
       currency: row.currency,
     }));
   });

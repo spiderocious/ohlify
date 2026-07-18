@@ -9,12 +9,7 @@ import {
   IconUser,
   type LucideIcon,
 } from '@icons';
-import {
-  DrawerService,
-  InterestsForm,
-  KycItemTile,
-  OccupationForm,
-} from '@ohlify/ui';
+import { DrawerService, InterestsForm, KycItemTile, OccupationForm } from '@ohlify/ui';
 import type {
   KycBankValue,
   KycIdentityValue,
@@ -45,6 +40,14 @@ const ICONS: Record<KycItemKey, LucideIcon> = {
 };
 
 const successToast = (m: string) => DrawerService.toast(m, { type: 'success' });
+// KYC save modals previously wired only onSuccess, so a rejected PATCH (e.g.
+// full_name below min_length, or selfie-before-identity) closed silently and
+// the user believed the value saved. Every save now surfaces its failure.
+// (BUG-kyc-professional-cw-02 / cw-03.)
+const errorToast = (err: unknown, fallback: string) =>
+  DrawerService.toast(err instanceof Error && err.message ? err.message : fallback, {
+    type: 'error',
+  });
 
 // ── Helpers — read inline-validation hints from the spec ─────────────────────
 
@@ -103,8 +106,7 @@ interface KycItemsListProps {
 
 export function KycItemsList({ items, resubmitKeys = null }: KycItemsListProps) {
   const saveKyc = useSaveProfessionalKyc();
-  const flaggedSet =
-    resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
+  const flaggedSet = resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
 
   // In a partial-rejection state, surface the items the user needs to act
   // on first. Locked tiles still render so the user can see the rest of
@@ -175,36 +177,29 @@ function openTextModal(
   const minLen = ruleNumber(item.validation, 'min_length');
   const maxLen = ruleNumber(item.validation, 'max_length');
   let pending: string | undefined;
-  const handle = DrawerService.showInputModal(
-    item.label,
-    item.subtitle,
-    {
-      placeholder: item.label,
-      defaultValue: typeof item.value === 'string' ? item.value : '',
-      multiline,
-      ...(maxLen !== undefined ? { maxLength: maxLen } : {}),
-      confirmButtonText: 'Save',
-      showCancelButton: false,
-      onConfirm: (v) => {
-        const trimmed = v.trim();
-        if (minLen !== undefined && trimmed.length < minLen) return;
-        pending = trimmed;
-      },
+  const handle = DrawerService.showInputModal(item.label, item.subtitle, {
+    placeholder: item.label,
+    defaultValue: typeof item.value === 'string' ? item.value : '',
+    multiline,
+    ...(maxLen !== undefined ? { maxLength: maxLen } : {}),
+    confirmButtonText: 'Save',
+    showCancelButton: false,
+    onConfirm: (v) => {
+      const trimmed = v.trim();
+      if (minLen !== undefined && trimmed.length < minLen) return;
+      pending = trimmed;
     },
-  );
+  });
   void handle.onDismissed.then(() => {
     if (pending === undefined) return;
-    saveKyc.mutate(
-      { [item.key]: pending } as Record<string, string>,
-      { onSuccess: () => successToast(`${item.label} saved`) },
-    );
+    saveKyc.mutate({ [item.key]: pending } as Record<string, string>, {
+      onSuccess: () => successToast(`${item.label} saved`),
+      onError: (err) => errorToast(err, `Could not save ${item.label.toLowerCase()}.`),
+    });
   });
 }
 
-function openHandleModal(
-  item: KycItemSpec,
-  saveKyc: ReturnType<typeof useSaveProfessionalKyc>,
-) {
+function openHandleModal(item: KycItemSpec, saveKyc: ReturnType<typeof useSaveProfessionalKyc>) {
   const initial = typeof item.value === 'string' ? item.value : null;
   DrawerService.showCustomModal(
     item.label,
@@ -225,10 +220,7 @@ function openHandleModal(
   );
 }
 
-function openInterestsModal(
-  item: KycItemSpec,
-  saveKyc: ReturnType<typeof useSaveProfessionalKyc>,
-) {
+function openInterestsModal(item: KycItemSpec, saveKyc: ReturnType<typeof useSaveProfessionalKyc>) {
   let pending: string[] | undefined;
   let close: (() => void) | null = null;
   const handle = DrawerService.showCustomModal(
@@ -252,7 +244,10 @@ function openInterestsModal(
     if (!pending) return;
     saveKyc.mutate(
       { interests: pending },
-      { onSuccess: () => successToast(`${item.label} saved`) },
+      {
+        onSuccess: () => successToast(`${item.label} saved`),
+        onError: (err) => errorToast(err, `Could not save ${item.label.toLowerCase()}.`),
+      },
     );
   });
 }
@@ -273,10 +268,7 @@ function openBankModal(item: KycItemSpec) {
   );
 }
 
-function openIdentityModal(
-  item: KycItemSpec,
-  saveKyc: ReturnType<typeof useSaveProfessionalKyc>,
-) {
+function openIdentityModal(item: KycItemSpec, saveKyc: ReturnType<typeof useSaveProfessionalKyc>) {
   DrawerService.showCustomModal(
     item.label,
     (dismiss) => (
@@ -302,10 +294,7 @@ function openIdentityModal(
   );
 }
 
-function openSelfieModal(
-  item: KycItemSpec,
-  saveKyc: ReturnType<typeof useSaveProfessionalKyc>,
-) {
+function openSelfieModal(item: KycItemSpec, saveKyc: ReturnType<typeof useSaveProfessionalKyc>) {
   const initialKey = (item.value as KycSelfieValue | null)?.upload_key ?? null;
   DrawerService.showCustomModal(
     item.label,
@@ -326,11 +315,9 @@ function openSelfieModal(
 }
 
 function openRatesModal(item: KycItemSpec) {
-  DrawerService.showCustomModal(
-    item.label,
-    (dismiss) => <RatesModalContent onDone={dismiss} />,
-    { position: 'center' },
-  );
+  DrawerService.showCustomModal(item.label, (dismiss) => <RatesModalContent onDone={dismiss} />, {
+    position: 'center',
+  });
 }
 
 // Suppress unused-warning during build — referenced for completeness.

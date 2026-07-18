@@ -27,7 +27,10 @@ export const RegisterVerifySchema = z.object({
   registration_token: z.string().min(1),
   otp: z
     .string()
-    .length(6)
+    // Message on .length too — otherwise a wrong-length OTP returns Zod's raw
+    // "String must contain exactly 6 character(s)" instead of the intended copy.
+    // (BUG-auth-register-02.)
+    .length(6, 'OTP must be 6 digits')
     .regex(/^\d{6}$/, 'OTP must be 6 digits'),
 });
 
@@ -56,7 +59,10 @@ export const ForgotPasswordVerifyOtpSchema = z.object({
   email: z.string().email('Invalid email address').max(254, 'Email address too long'),
   otp: z
     .string()
-    .length(6)
+    // Message on .length too — otherwise a wrong-length OTP returns Zod's raw
+    // "String must contain exactly 6 character(s)" instead of the intended copy.
+    // (BUG-auth-register-02.)
+    .length(6, 'OTP must be 6 digits')
     .regex(/^\d{6}$/, 'OTP must be 6 digits'),
 });
 
@@ -70,7 +76,10 @@ export const ChangePasswordSchema = z.object({
   new_password: passwordPolicy,
   otp: z
     .string()
-    .length(6)
+    // Message on .length too — otherwise a wrong-length OTP returns Zod's raw
+    // "String must contain exactly 6 character(s)" instead of the intended copy.
+    // (BUG-auth-register-02.)
+    .length(6, 'OTP must be 6 digits')
     .regex(/^\d{6}$/, 'OTP must be 6 digits'),
 });
 

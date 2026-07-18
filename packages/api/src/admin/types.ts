@@ -37,7 +37,10 @@ export interface AdminLoginResponse {
 export interface AdminTotpSetupResponse {
   secret: string;
   otpauth_url: string;
-  qr_code_data_url: string;
+  // Backend sends `qr_data_url` (admin-auth.service.ts:212); the old
+  // `qr_code_data_url` name left the <img> src undefined so the QR never
+  // rendered. (BUGS.md B3.)
+  qr_data_url: string;
 }
 
 // ────────────────────────────────────────────────── Pagination ───────────────
@@ -466,9 +469,7 @@ export interface AdminTransactionJournalDetail {
   }>;
 }
 
-export type AdminTransactionDetail =
-  | AdminTransactionPaymentDetail
-  | AdminTransactionJournalDetail;
+export type AdminTransactionDetail = AdminTransactionPaymentDetail | AdminTransactionJournalDetail;
 
 // ────────────────────────────────────────────── Reports ──────────────────────
 // Source: admin.reports.service.ts → toView. Status: z.enum(['pending','resolved','dismissed'])

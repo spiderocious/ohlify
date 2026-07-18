@@ -1,4 +1,4 @@
-import { AppButton, AppText } from '@ohlify/ui';
+import { AppButton } from '@ohlify/ui';
 
 import { DetailDrawer } from '../../../shared/parts/detail-drawer.js';
 import { DetailRow, DetailSection } from '../../../shared/parts/detail-row.js';
@@ -26,7 +26,7 @@ export function ReviewDetailDrawer({ reviewId, onClose }: ReviewDetailDrawerProp
     if (!review) return;
     const reason = await promptForReason({
       title: 'Hide review',
-      message: 'Hidden reviews stop counting toward the pro\'s public rating. Provide a reason.',
+      message: "Hidden reviews stop counting toward the pro's public rating. Provide a reason.",
       placeholder: 'e.g. Personal attack on the professional',
     });
     if (!reason) return;
@@ -43,7 +43,7 @@ export function ReviewDetailDrawer({ reviewId, onClose }: ReviewDetailDrawerProp
     if (!review) return;
     const reason = await promptForReason({
       title: 'Restore review',
-      message: 'Review will be visible again and recounted toward the pro\'s rating.',
+      message: "Review will be visible again and recounted toward the pro's rating.",
       placeholder: 'e.g. Re-reviewed, original hide was a mistake',
     });
     if (!reason) return;
@@ -62,8 +62,12 @@ export function ReviewDetailDrawer({ reviewId, onClose }: ReviewDetailDrawerProp
     <DetailDrawer
       open={Boolean(reviewId)}
       onClose={onClose}
-      title={review ? `Review by ${review.reviewer?.name ?? shortId(review.reviewer?.id, 12)}` : 'Review'}
-      subtitle={review ? `About ${review.subject?.name ?? shortId(review.subject?.id, 12)}` : undefined}
+      title={
+        review ? `Review by ${review.reviewer?.name ?? shortId(review.reviewer?.id, 12)}` : 'Review'
+      }
+      subtitle={
+        review ? `About ${review.subject?.name ?? shortId(review.subject?.id, 12)}` : undefined
+      }
       width={560}
       footer={
         review ? (
@@ -119,7 +123,9 @@ export function ReviewDetailDrawer({ reviewId, onClose }: ReviewDetailDrawerProp
                 <DetailRow label="Call ID">{shortId(review.call.id, 18)}</DetailRow>
                 <DetailRow label="Type">{humanizeStatus(review.call.call_type)}</DetailRow>
                 <DetailRow label="Booked">{review.call.duration_minutes} min</DetailRow>
-                <DetailRow label="Connected">{formatDuration(review.call.connected_seconds)}</DetailRow>
+                <DetailRow label="Connected">
+                  {formatDuration(review.call.connected_seconds)}
+                </DetailRow>
                 <DetailRow label="Scheduled">{formatDateTime(review.call.scheduled_at)}</DetailRow>
                 <DetailRow label="Status">{humanizeStatus(review.call.status)}</DetailRow>
               </DetailSection>

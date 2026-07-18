@@ -95,19 +95,24 @@ export function usePlatformRevenueSummary(params: WindowParams) {
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
+// Field names MUST match the backend `.strict()` schemas (admin.write.schema.ts)
+// exactly — the old { description, account_code, amount_kobo, memo } payloads
+// 400'd every write. Manual journal: { note, lines:[{account_id,
+// signed_amount_kobo, currency?}] }. Credit/debit: { user_id, amount_kobo,
+// reason }. (BUGS.md M9.)
 interface ManualJournalLine {
-  account_code: string;
-  user_id?: string | null;
-  amount_kobo: number;
-  memo?: string;
+  account_id: string;
+  signed_amount_kobo: number;
+  currency?: string;
 }
 
 export function usePostManualJournal() {
   const qc = useQueryClient();
   return useAdminMutation<{
-    description: string;
-    idempotency_key: string;
+    note: string;
     lines: ManualJournalLine[];
+    related_user_id?: string;
+    idempotency_key?: string;
   }>(
     { method: 'post', url: ADMIN_EP.WALLET_MANUAL_JOURNAL },
     { onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'wallet'] }) },
@@ -119,8 +124,8 @@ export function useAdminCredit() {
   return useAdminMutation<{
     user_id: string;
     amount_kobo: number;
-    memo: string;
-    idempotency_key: string;
+    reason: string;
+    idempotency_key?: string;
   }>(
     { method: 'post', url: ADMIN_EP.WALLET_CREDIT },
     { onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'wallet'] }) },
@@ -132,8 +137,8 @@ export function useAdminDebit() {
   return useAdminMutation<{
     user_id: string;
     amount_kobo: number;
-    memo: string;
-    idempotency_key: string;
+    reason: string;
+    idempotency_key?: string;
   }>(
     { method: 'post', url: ADMIN_EP.WALLET_DEBIT },
     { onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'wallet'] }) },

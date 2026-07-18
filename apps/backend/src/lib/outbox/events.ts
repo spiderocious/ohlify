@@ -6,6 +6,7 @@ export const OutboxEventType = {
   CALL_PAYMENT_RESERVED: 'call.payment.reserved',
   CALL_SETTLED: 'call.settled',
   CALL_REFUNDED: 'call.refunded',
+  MINUTES_PURCHASED: 'minutes.purchased',
   WITHDRAWAL_REQUESTED: 'withdrawal.requested',
   WITHDRAWAL_COMPLETED: 'withdrawal.completed',
   WITHDRAWAL_REVERSED: 'withdrawal.reversed',

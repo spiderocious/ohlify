@@ -12,13 +12,17 @@ import { register as registerBookings } from '@features/bookings/index.js';
 import { register as registerAgoraWebhook } from '@features/calls/agora.webhook.routes.js';
 import { register as registerCalls } from '@features/calls/index.js';
 import { register as registerCategories } from '@features/categories/index.js';
+import { register as registerChat } from '@features/chat/index.js';
 import { register as registerCallSessionEvents } from '@features/call-session-events/index.js';
 import { register as registerDev } from '@features/dev/index.js';
 import { register as registerHealth } from '@features/health/index.js';
+import { register as registerInstantCalls } from '@features/instant-calls/index.js';
 import { register as registerLegal } from '@features/legal/index.js';
+import { register as registerMinutes } from '@features/minutes/index.js';
 import { register as registerOnboarding } from '@features/onboarding/index.js';
 import { register as registerPayments } from '@features/payments/index.js';
 import { register as registerPlatformConfig } from '@features/platform-config/index.js';
+import { register as registerPresence } from '@features/presence/index.js';
 import { register as registerProfessionals } from '@features/professionals/index.js';
 import { register as registerProfile } from '@features/profile/index.js';
 import { register as registerRates } from '@features/rates/index.js';
@@ -82,8 +86,10 @@ const features = [
   registerProfile,
   registerBanks,
   registerRates,
+  registerMinutes, // /api/v1/me/minutes — buy + balances (calls revamp P2)
   registerCategories,
   registerProfessionals,
+  registerPresence, // /api/v1/me/presence + /professionals/:id/presence (calls revamp P3)
   registerLegal,
   registerSupport,
   registerWallet,
@@ -91,6 +97,8 @@ const features = [
   registerRefunds,
   registerBookings,
   registerCalls,
+  registerInstantCalls, // /api/v1/instant-calls — pay-with-minutes instant calling (revamp P4)
+  registerChat, // /api/v1/chat — conversations + messages, minutes-gated (revamp P6)
   registerAgoraWebhook,
   registerCallSessionEvents, // /api/v1/call-sessions — event log, summary, by-reference
   registerAdminAuth, // /api/v1/admin/auth/* — login/refresh/logout (public) + totp/setup,confirm (authed)

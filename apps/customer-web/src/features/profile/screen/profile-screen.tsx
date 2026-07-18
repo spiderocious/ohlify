@@ -5,7 +5,7 @@ import { AppAvatar, AppText, DrawerService } from '@ohlify/ui';
 import { useMe } from '@ohlify/api';
 
 import { useLogout } from '../api/use-logout.js';
-import { useRequestDeleteAccountOtp } from '../api/use-delete-account.js';
+import { useDeleteAccount, useRequestDeleteAccountOtp } from '../api/use-delete-account.js';
 
 import { ProfileLinkCard } from './parts/profile-link-card.js';
 import { ProfileMenu } from './parts/profile-menu.js';
@@ -16,6 +16,7 @@ export function ProfileScreen() {
   const { data: me } = useMe();
   const logout = useLogout();
   const requestDeleteOtp = useRequestDeleteAccountOtp();
+  const deleteAccount = useDeleteAccount();
 
   const profileUrl = me?.share_slug
     ? `www.ohlify.com/profile/${me.share_slug}`
@@ -43,6 +44,42 @@ export function ProfileScreen() {
     });
   };
 
+  // After the OTP is sent, collect it and actually call DELETE /me. Previously
+  // the flow sent the OTP and dead-ended — useDeleteAccount was never invoked,
+  // so deletion was impossible on web. (BUGS.md M10.)
+  const promptForDeleteOtp = () => {
+    let otp: string | undefined;
+    const handle = DrawerService.showInputModal(
+      'Enter your deletion code',
+      `We sent a 6-digit code to ${me?.email ?? 'your email'}. Enter it to permanently delete your account. This cannot be undone.`,
+      {
+        placeholder: '123456',
+        confirmButtonText: 'Delete my account',
+        showCancelButton: true,
+        onConfirm: (v) => {
+          otp = v.trim();
+        },
+      },
+    );
+    void handle.onDismissed.then(() => {
+      if (!otp || otp.length === 0) return;
+      deleteAccount.mutate(
+        { otp },
+        {
+          onSuccess: () => navigate(ROUTES.LOGIN.absPath, { replace: true }),
+          onError: (err) =>
+            DrawerService.showFeedbackModal(
+              'Could not delete account',
+              err instanceof Error && err.message
+                ? err.message
+                : 'The code was invalid or expired. Please try again.',
+              { kind: 'error', showCloseButton: true, confirmButtonText: 'OK' },
+            ),
+        },
+      );
+    });
+  };
+
   const startDeleteAccountFlow = () => {
     DrawerService.showFeedbackModal(
       'Account deletion is OTP-protected',
@@ -51,7 +88,17 @@ export function ProfileScreen() {
         kind: 'warning',
         confirmButtonText: 'Continue',
         onConfirm: () => {
-          requestDeleteOtp.mutate(undefined);
+          requestDeleteOtp.mutate(undefined, {
+            onSuccess: () => promptForDeleteOtp(),
+            onError: (err) =>
+              DrawerService.showFeedbackModal(
+                'Could not send code',
+                err instanceof Error && err.message
+                  ? err.message
+                  : 'We could not send the deletion code. Please try again.',
+                { kind: 'error', showCloseButton: true, confirmButtonText: 'OK' },
+              ),
+          });
         },
       },
     );
@@ -76,7 +123,6 @@ export function ProfileScreen() {
             </AppText>
           </div>
           <AppAvatar fileKey={me?.avatar_url} size={52} radius={8} alt="avatar" />
-
         </div>
 
         <div className="mt-5">

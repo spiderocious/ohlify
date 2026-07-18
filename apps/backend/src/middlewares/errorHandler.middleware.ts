@@ -45,6 +45,23 @@ export const errorHandler = (
     return;
   }
 
+  // A malformed JSON body is a CLIENT error, not a server fault. express.json()
+  // throws a SyntaxError tagged `type: 'entity.parse.failed'` with status 400;
+  // letting it fall through returned a 500 (and inflated error-rate alarms) for
+  // every JSON endpoint. Return 400 validation_error instead. (BUG-auth-register-03.)
+  if (
+    err instanceof SyntaxError &&
+    (err as SyntaxError & { type?: string; status?: number }).type === 'entity.parse.failed'
+  ) {
+    ResponseUtil.error(res, HTTP_STATUS.BAD_REQUEST, {
+      errorCode: severityFor(ERROR_CODES.VALIDATION_ERROR),
+      errorMessage: resolveErrorMessage(ERROR_CODES.VALIDATION_ERROR),
+      reason: ERROR_CODES.VALIDATION_ERROR,
+      fieldErrors: { body: ['Request body is not valid JSON'] },
+    });
+    return;
+  }
+
   logger.error({ err, requestId, reason: ERROR_CODES.INTERNAL }, 'Unhandled error');
   ResponseUtil.error(res, HTTP_STATUS.INTERNAL_SERVER_ERROR, {
     errorCode: severityFor(ERROR_CODES.INTERNAL),

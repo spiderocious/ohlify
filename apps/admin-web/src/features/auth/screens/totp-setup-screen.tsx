@@ -61,7 +61,7 @@ export function TotpSetupScreen() {
         subtitle="Use Google Authenticator, 1Password, or similar."
       >
         <img
-          src={setupData.qr_code_data_url}
+          src={setupData.qr_data_url}
           alt="TOTP QR"
           className="mx-auto h-48 w-48 rounded-md border border-border"
         />

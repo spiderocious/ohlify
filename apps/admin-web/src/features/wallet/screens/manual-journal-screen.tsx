@@ -17,7 +17,13 @@ interface LineDraft {
 }
 
 function emptyLine(): LineDraft {
-  return { id: Math.random().toString(36).slice(2), account_code: '', user_id: '', amount_kobo: '', memo: '' };
+  return {
+    id: Math.random().toString(36).slice(2),
+    account_code: '',
+    user_id: '',
+    amount_kobo: '',
+    memo: '',
+  };
 }
 
 export function ManualJournalScreen() {
@@ -48,15 +54,19 @@ export function ManualJournalScreen() {
       }))
     )
       return;
+    // Map to the backend contract: description→note, account_code→account_id,
+    // amount_kobo→signed_amount_kobo. The schema carries a single top-level
+    // related_user_id (not per-line), so take the first line that names one.
+    // (BUGS.md M9.)
+    const relatedUserId = numericLines.find((l) => l.user_id.trim())?.user_id.trim();
     post.mutate(
       {
-        description: description || 'manual journal',
+        note: description || 'manual journal',
         idempotency_key: idempotencyKey(),
+        ...(relatedUserId ? { related_user_id: relatedUserId } : {}),
         lines: numericLines.map((l) => ({
-          account_code: l.account_code,
-          user_id: l.user_id || null,
-          amount_kobo: l.amount_num,
-          memo: l.memo || undefined,
+          account_id: l.account_code,
+          signed_amount_kobo: l.amount_num,
         })),
       },
       {
@@ -72,7 +82,10 @@ export function ManualJournalScreen() {
 
   return (
     <>
-      <PageHeader title="Manual journal" subtitle="Direct double-entry write. Use with extreme care." />
+      <PageHeader
+        title="Manual journal"
+        subtitle="Direct double-entry write. Use with extreme care."
+      />
 
       <div className="px-6 py-6">
         <div className="rounded-lg border border-border bg-surface p-5">
@@ -86,7 +99,8 @@ export function ManualJournalScreen() {
           <div className="mt-5 flex items-center justify-between">
             <AppText variant="bodyTitle">Lines</AppText>
             <AppText variant="bodySmall" className="text-text-muted">
-              Sum: <span className={cn('font-semibold', balanced ? 'text-emerald-700' : 'text-red-700')}>
+              Sum:{' '}
+              <span className={cn('font-semibold', balanced ? 'text-emerald-700' : 'text-red-700')}>
                 {formatKobo(sum.toString(), { signed: true })}
               </span>
             </AppText>
@@ -186,8 +200,9 @@ function CreditDebitPanel() {
     )
       return;
     const fn = kind === 'credit' ? credit : debit;
+    // Backend field is `reason`, not `memo`. (BUGS.md M9.)
     fn.mutate(
-      { user_id: userId, amount_kobo: num, memo, idempotency_key: idempotencyKey() },
+      { user_id: userId, amount_kobo: num, reason: memo, idempotency_key: idempotencyKey() },
       {
         onSuccess: () => {
           toastSuccess(`${kind === 'credit' ? 'Credited' : 'Debited'}`);

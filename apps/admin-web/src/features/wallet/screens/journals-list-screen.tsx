@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { AppText, AppTextInput } from '@ohlify/ui';
+import { AppTextInput } from '@ohlify/ui';
 import type { AdminJournalSummary } from '@ohlify/api';
 
 import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
@@ -69,13 +69,28 @@ export function JournalsListScreen() {
 
       <FilterBar>
         <div className="w-44">
-          <AppTextInput label="Kind" placeholder="funding, refund…" value={kind} onChange={setKind} />
+          <AppTextInput
+            label="Kind"
+            placeholder="funding, refund…"
+            value={kind}
+            onChange={setKind}
+          />
         </div>
         <div className="w-72">
-          <AppTextInput label="User ID" placeholder="user uuid" value={userId} onChange={setUserId} />
+          <AppTextInput
+            label="User ID"
+            placeholder="user uuid"
+            value={userId}
+            onChange={setUserId}
+          />
         </div>
         <div className="w-72">
-          <AppTextInput label="Call ID" placeholder="call uuid" value={callId} onChange={setCallId} />
+          <AppTextInput
+            label="Call ID"
+            placeholder="call uuid"
+            value={callId}
+            onChange={setCallId}
+          />
         </div>
       </FilterBar>
 

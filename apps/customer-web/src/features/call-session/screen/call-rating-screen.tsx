@@ -6,8 +6,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ROUTES } from '@ohlify/core';
 import { AppButton, AppText, AppTextAreaInput, DrawerService } from '@ohlify/ui';
 
+import { AppAvatar } from '@ohlify/ui';
+
 import { useSubmitReview } from '../api/use-submit-review.js';
-import { CallAvatar } from './parts/call-avatar.js';
 
 const STARS = [1, 2, 3, 4, 5] as const;
 
@@ -47,7 +48,20 @@ export function CallRatingScreen() {
       { callId, professionalId: peerId, stars: rating, comment: comment.trim() || undefined },
       {
         onSuccess: done,
-        onError: done,
+        // A rejected review must NOT show the thank-you modal — that told the
+        // user their rating saved when it didn't. Surface the failure and keep
+        // them on the screen to retry. (BUGS.md M6.)
+        onError: (err: unknown) => {
+          const message =
+            err instanceof Error && err.message
+              ? err.message
+              : 'We could not submit your rating. Please try again.';
+          DrawerService.showFeedbackModal('Rating not submitted', message, {
+            kind: 'error',
+            showCloseButton: true,
+            confirmButtonText: 'Try again',
+          });
+        },
       },
     );
   };
@@ -56,7 +70,7 @@ export function CallRatingScreen() {
     <main className="flex min-h-screen flex-col bg-surface-light">
       <div className="mx-auto w-full max-w-xl px-5 pb-6 pt-10 lg:max-w-2xl">
         <div className="flex flex-col items-center text-center">
-          <CallAvatar fileKey={peerAvatarKey} size={88} />
+          <AppAvatar fileKey={peerAvatarKey} size={88} className="bg-surface-light" />
           <AppText
             variant="bodyTitle"
             weight={700}
@@ -66,12 +80,7 @@ export function CallRatingScreen() {
           >
             How was your call with {peerName}?
           </AppText>
-          <AppText
-            variant="body"
-            align="center"
-            color="var(--ohl-text-muted)"
-            className="mt-1"
-          >
+          <AppText variant="body" align="center" color="var(--ohl-text-muted)" className="mt-1">
             Rate the call to help us improve recommendations.
           </AppText>
           <div className="mt-6 flex items-center gap-2">
@@ -87,9 +96,7 @@ export function CallRatingScreen() {
                 >
                   <IconStar
                     size={32}
-                    color={
-                      rating >= s ? 'var(--ohl-text-amber)' : 'var(--ohl-border)'
-                    }
+                    color={rating >= s ? 'var(--ohl-text-amber)' : 'var(--ohl-border)'}
                     fill={rating >= s ? 'var(--ohl-text-amber)' : 'transparent'}
                   />
                 </button>

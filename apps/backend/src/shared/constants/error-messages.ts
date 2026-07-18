@@ -70,7 +70,9 @@ const REASON_MESSAGE_KEY: Record<ErrorCode, MessageKey> = {
   [ERROR_CODES.BOOTSTRAP_DISABLED]: MESSAGE_KEYS.ADMIN_BOOTSTRAP_DISABLED,
   [ERROR_CODES.ALREADY_BOOTSTRAPPED]: MESSAGE_KEYS.ADMIN_BOOTSTRAP_ALREADY_DONE,
   // Onboarding / role
-  [ERROR_CODES.ROLE_ALREADY_SET]: MESSAGE_KEYS.VALIDATION_FAILED,
+  // role_already_set is not a form-validation error — there is no form to fix,
+  // the role is simply frozen. Use copy that says so. (BUG-onboarding-role-01.)
+  [ERROR_CODES.ROLE_ALREADY_SET]: MESSAGE_KEYS.ROLE_ALREADY_SET,
   [ERROR_CODES.ROLE_REQUIRED]: MESSAGE_KEYS.FORBIDDEN,
   [ERROR_CODES.ROLE_MISMATCH]: MESSAGE_KEYS.VALIDATION_FAILED,
   [ERROR_CODES.KYC_INCOMPLETE]: MESSAGE_KEYS.VALIDATION_FAILED,
@@ -101,6 +103,8 @@ const MESSAGE_TEXT: Partial<Record<MessageKey, string>> = {
   [MESSAGE_KEYS.FORBIDDEN]: 'You don’t have permission to do that.',
   [MESSAGE_KEYS.INTERNAL_ERROR]: 'Something went wrong on our end. Please try again.',
   [MESSAGE_KEYS.VALIDATION_FAILED]: 'Please check the form and try again.',
+  [MESSAGE_KEYS.ROLE_ALREADY_SET]:
+    'Your account role has already been set and can’t be changed here.',
   [MESSAGE_KEYS.RATE_LIMITED_KEY]: 'Too many requests. Please wait a moment and try again.',
   [MESSAGE_KEYS.CONFLICT_KEY]:
     'That action conflicts with the current state. Please refresh and try again.',
@@ -108,6 +112,30 @@ const MESSAGE_TEXT: Partial<Record<MessageKey, string>> = {
   [MESSAGE_KEYS.RATE_DUPLICATE]: 'A rate for this call type and duration already exists.',
   [MESSAGE_KEYS.RATE_CHANNEL_RATE_EXISTS]:
     'You already have a rate for this call type. Edit the existing one instead.',
+  [MESSAGE_KEYS.MINUTES_INSUFFICIENT_WALLET]:
+    'Your wallet balance is too low. Fund your wallet and try again.',
+  [MESSAGE_KEYS.MINUTES_PRO_NOT_FOUND]: 'This professional isn’t available.',
+  [MESSAGE_KEYS.MINUTES_RATE_NOT_FOUND]:
+    'This professional hasn’t set a rate for this call type yet.',
+  [MESSAGE_KEYS.MINUTES_AMOUNT_TOO_LOW]:
+    'That amount is too low to buy even one minute at this rate.',
+  [MESSAGE_KEYS.INSTANT_CALL_NO_MINUTES]:
+    'You don’t have any minutes with this professional. Buy minutes to call.',
+  [MESSAGE_KEYS.INSTANT_CALL_OFFLINE]: 'This professional is unavailable right now.',
+  [MESSAGE_KEYS.INSTANT_CALL_NOT_ACCEPTING]: 'This professional isn’t taking calls right now.',
+  [MESSAGE_KEYS.INSTANT_CALL_DND]: 'This professional is unavailable right now.',
+  [MESSAGE_KEYS.INSTANT_CALL_BUSY]: 'This professional is on another call. Try again shortly.',
+  [MESSAGE_KEYS.INSTANT_CALL_NOT_FOUND]: 'That call no longer exists.',
+  [MESSAGE_KEYS.INSTANT_CALL_NOT_RINGING]: 'This call can’t be answered anymore.',
+  [MESSAGE_KEYS.INSTANT_CALL_CANNOT_CALL_SELF]: 'You can’t call yourself.',
+  [MESSAGE_KEYS.CHAT_NEEDS_MINUTES]: 'Buy minutes with this professional to start chatting.',
+  [MESSAGE_KEYS.CHAT_NOT_FOUND]: 'That conversation no longer exists.',
+  [MESSAGE_KEYS.CHAT_PRO_NOT_FOUND]: 'This professional isn’t available.',
+  [MESSAGE_KEYS.CHAT_CANNOT_CHAT_SELF]: 'You can’t chat with yourself.',
+  [MESSAGE_KEYS.CHAT_SCHEDULE_NOT_FOUND]: 'That scheduled call no longer exists.',
+  [MESSAGE_KEYS.CHAT_SCHEDULE_NOT_ACTIONABLE]: 'This scheduled call can’t be changed anymore.',
+  [MESSAGE_KEYS.CHAT_SCHEDULE_INVALID_TIME]: 'Pick a valid date and time.',
+  [MESSAGE_KEYS.CHAT_SCHEDULE_IN_PAST]: 'Pick a time in the future.',
   [MESSAGE_KEYS.RATE_INVALID_DURATION]: 'That call duration isn’t allowed.',
   [MESSAGE_KEYS.RATE_INVALID_PRICE]: 'That price is outside the allowed range.',
   [MESSAGE_KEYS.PROFESSIONAL_NOT_FOUND]: 'This professional isn’t available.',

@@ -9,10 +9,14 @@ interface QueryRunner {
   query: PoolClient['query'];
 }
 
+// Bootstrap guard: the intent is "the admin_users table must be empty" before
+// the first-admin bootstrap can run. Counting only `role='admin' AND
+// status='active'` let bootstrap re-run whenever the sole admin row was a
+// support/finance_ops account or had been deactivated — minting a second
+// unauthenticated admin. Count EVERY row so bootstrap is truly one-shot.
+// (BUGS.md B1.)
 export const countAdmins = async (): Promise<number> => {
-  const res = await pool.query<{ n: string }>(
-    `SELECT COUNT(*)::text AS n FROM admin_users WHERE role = 'admin' AND status = 'active'`,
-  );
+  const res = await pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM admin_users`);
   return Number(res.rows[0]?.n ?? '0');
 };
 

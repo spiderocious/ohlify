@@ -1,10 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import {
-  ADMIN_EP,
-  type AdminUserDetail,
-  type AdminUserListItem,
-} from '@ohlify/api';
+import { ADMIN_EP, type AdminUserDetail, type AdminUserListItem } from '@ohlify/api';
 
 import { useAdminMutation } from '../../../shared/api/use-admin-mutation.js';
 import { useAdminQuery } from '../../../shared/api/use-admin-query.js';
@@ -57,7 +53,12 @@ export const useSuspendUser = makeUserAction<{ reason: string }>(ADMIN_EP.USER_S
 export const useUnsuspendUser = makeUserAction<{ note?: string }>(ADMIN_EP.USER_UNSUSPEND);
 export const useBlockUser = makeUserAction<{ reason: string }>(ADMIN_EP.USER_BLOCK);
 export const useUnblockUser = makeUserAction<{ note?: string }>(ADMIN_EP.USER_UNBLOCK);
-export const useResetUserPassword = makeUserAction<{ notify: boolean }>(
-  ADMIN_EP.USER_RESET_PASSWORD,
-);
+// Backend AdminResetPasswordSchema is `.strict()` and requires
+// { send_email, note } (+ optional new_password). The old `{ notify }` payload
+// 400'd every reset. (BUGS.md B5.)
+export const useResetUserPassword = makeUserAction<{
+  send_email: boolean;
+  note: string;
+  new_password?: string;
+}>(ADMIN_EP.USER_RESET_PASSWORD);
 export const useImpersonateUser = makeUserAction<{ reason: string }>(ADMIN_EP.USER_IMPERSONATE);

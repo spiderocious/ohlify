@@ -37,14 +37,19 @@ interface ClientKycItemsListProps {
   resubmitKeys?: readonly string[] | null;
 }
 
-const successToast = (message: string) =>
-  DrawerService.toast(message, { type: 'success' });
+const successToast = (message: string) => DrawerService.toast(message, { type: 'success' });
+// Surface a rejected save instead of closing silently — otherwise the user
+// believes a value saved when it didn't. (BUG-kyc-professional-cw-02/cw-03,
+// same swallowed-error class on the client-KYC modals.)
+const errorToast = (err: unknown, fallback: string) =>
+  DrawerService.toast(err instanceof Error && err.message ? err.message : fallback, {
+    type: 'error',
+  });
 
 export function ClientKycItemsList({ resubmitKeys = null }: ClientKycItemsListProps = {}) {
   const ctx = useClientKyc();
   const saveKyc = useSaveClientKyc();
-  const lockedSet =
-    resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
+  const lockedSet = resubmitKeys && resubmitKeys.length > 0 ? new Set<string>(resubmitKeys) : null;
 
   const summaryFor = (item: ClientKycItem): string | null => {
     switch (item) {
@@ -77,9 +82,13 @@ export function ClientKycItemsList({ resubmitKeys = null }: ClientKycItemsListPr
         void handle.onDismissed.then(() => {
           if (pending && pending !== '') {
             ctx.setFullName(pending);
-            saveKyc.mutate({ full_name: pending }, {
-              onSuccess: () => successToast('Full name saved'),
-            });
+            saveKyc.mutate(
+              { full_name: pending },
+              {
+                onSuccess: () => successToast('Full name saved'),
+                onError: (err) => errorToast(err, 'Could not save full name.'),
+              },
+            );
           }
         });
         return;
@@ -104,9 +113,13 @@ export function ClientKycItemsList({ resubmitKeys = null }: ClientKycItemsListPr
         void handle.onDismissed.then(() => {
           if (pending !== undefined) {
             ctx.setDescription(pending);
-            saveKyc.mutate({ description: pending }, {
-              onSuccess: () => successToast('Description saved'),
-            });
+            saveKyc.mutate(
+              { description: pending },
+              {
+                onSuccess: () => successToast('Description saved'),
+                onError: (err) => errorToast(err, 'Could not save description.'),
+              },
+            );
           }
         });
         return;
@@ -133,9 +146,13 @@ export function ClientKycItemsList({ resubmitKeys = null }: ClientKycItemsListPr
         void handle.onDismissed.then(() => {
           if (pending) {
             ctx.setInterests(pending);
-            saveKyc.mutate({ interests: pending }, {
-              onSuccess: () => successToast('Interests saved'),
-            });
+            saveKyc.mutate(
+              { interests: pending },
+              {
+                onSuccess: () => successToast('Interests saved'),
+                onError: (err) => errorToast(err, 'Could not save interests.'),
+              },
+            );
           }
         });
         return;

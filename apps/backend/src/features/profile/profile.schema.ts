@@ -4,7 +4,7 @@ import { HANDLE_REGEX } from '@shared/constants/reserved-handles.js';
 
 const otpField = z
   .string()
-  .length(6)
+  .length(6, 'OTP must be 6 digits')
   .regex(/^\d{6}$/, 'OTP must be 6 digits');
 
 const e164Phone = z

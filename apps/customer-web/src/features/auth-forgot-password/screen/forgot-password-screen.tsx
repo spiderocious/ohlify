@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
 import { AppIconButton, AppText, AppTextInput, ScreenContinueBar } from '@ohlify/ui';
-import type { ApiError } from '@ohlify/api';
 
 import { useFpInitiate } from '../api/use-fp-initiate.js';
 import { useForgotPasswordContext } from '../providers/forgot-password-provider.js';

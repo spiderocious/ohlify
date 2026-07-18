@@ -13,7 +13,7 @@ import {
  * TOTP setup is gated on re-confirming the password — the server returns
  * the secret + provisioning URL only after this re-auth, so we don't expose
  * it via passive API browsing. Caller renders the QR code from
- * `qr_code_data_url` and asks for a 6-digit confirm code.
+ * `qr_data_url` and asks for a 6-digit confirm code.
  */
 export function useAdminTotpSetup() {
   return useMutation<AdminTotpSetupResponse, ApiError, { password: string }>({

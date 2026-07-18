@@ -39,7 +39,6 @@ export function AdminSidebar({ mobileOpen, onClose }: AdminSidebarProps) {
     if (mobileOpen) onClose();
     // We deliberately depend on pathname only — re-running on `mobileOpen`
     // would close the drawer the moment it opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   // Esc closes the drawer (mobile only — desktop never enters the open

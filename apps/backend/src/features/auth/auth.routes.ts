@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import { validate } from '@lib/http/validateRequest.js';
 import { ipRateLimit } from '@lib/redis/rateLimit.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
+import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
 
 import * as controller from './auth.controller.js';
 import {
@@ -84,9 +85,13 @@ export const register = (app: Express): void => {
   );
 
   // ── Authenticated /me actions ──────────────────────────────────────────────
+  // requireActiveUser (not just requireAuth): a suspended/blocked user must not
+  // be able to change their password or request a sensitive-action OTP with a
+  // still-valid access token. (BUGS.md D7.)
   meRouter.post(
     '/password',
     requireAuth,
+    requireActiveUser,
     ipRateLimit(5, 60 * 60),
     validate(ChangePasswordSchema),
     controller.changePassword,
@@ -95,6 +100,7 @@ export const register = (app: Express): void => {
   meRouter.post(
     '/sensitive-action/otp',
     requireAuth,
+    requireActiveUser,
     validate(SensitiveActionOtpSchema),
     controller.requestSensitiveActionOtp,
   );

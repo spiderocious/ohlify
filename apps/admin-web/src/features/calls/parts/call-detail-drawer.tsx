@@ -51,7 +51,11 @@ export function CallDetailDrawer({ callId, onClose }: CallDetailDrawerProps) {
     });
     if (!reason) return;
     refund.mutate(
-      { amount_kobo: amountKobo, reason, request_id: `admin-refund-${call.id}-${Date.now()}` },
+      // Stable idempotency key per call — a double-click or retry must resolve
+      // to the SAME refund, not a second one. Including Date.now() minted a new
+      // key every click and defeated the backend's idempotency guard. A call is
+      // refunded once, so keying on call.id is correct. (BUGS.md D5.)
+      { amount_kobo: amountKobo, reason, request_id: `admin-refund-${call.id}` },
       {
         onSuccess: () => toastSuccess('Refund posted'),
         onError: (err) => toastError(err),

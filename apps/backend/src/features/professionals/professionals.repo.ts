@@ -28,9 +28,14 @@ const baseFieldsSql = (): string => `
 
 const aggregatesJoinSql = (): string => 'LEFT JOIN review_aggregates ra ON ra.user_id = u.id';
 
+// A suspended or blocked professional must disappear from discovery entirely —
+// list, detail, rates, and reviews all gate on this predicate. kyc_status stays
+// 'approved' through a suspension, so status must be checked explicitly.
+// (BUGS.md D8.)
 const PROFESSIONAL_VISIBLE_PREDICATE = `
   u.role = 'professional'
   AND u.deleted_at IS NULL
+  AND u.status = 'active'
   AND u.kyc_status = 'approved'
 `;
 

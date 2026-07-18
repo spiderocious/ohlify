@@ -72,7 +72,9 @@ export function IdentityModalContent({
     value: m,
   }));
 
-  const [method, setMethod] = useState<IdentityType>(initial?.method ?? methodOptions[0]?.value ?? 'nin');
+  const [method, setMethod] = useState<IdentityType>(
+    initial?.method ?? methodOptions[0]?.value ?? 'nin',
+  );
   const [idNumber, setIdNumber] = useState('');
   const [docKey, setDocKey] = useState<string | null>(initial?.document_upload_key ?? null);
   const [isUploading, setIsUploading] = useState(false);
@@ -82,8 +84,7 @@ export function IdentityModalContent({
   const { uri: previewUri } = useFilePreview(docKey);
 
   const idRegex = regexForMethod(validation, method);
-  const idValid =
-    idNumber.trim().length >= 4 && (idRegex ? idRegex.test(idNumber.trim()) : true);
+  const idValid = idNumber.trim().length >= 4 && (idRegex ? idRegex.test(idNumber.trim()) : true);
   const canSubmit = idValid && docKey !== null && !isUploading && !isSaving;
 
   const handleFile = async (file: File) => {
@@ -101,11 +102,18 @@ export function IdentityModalContent({
 
   const handleSave = async () => {
     if (!canSubmit || !docKey) return;
+    setUploadError(null);
     setIsSaving(true);
     try {
       await onSubmit({ type: method, number: idNumber.trim(), document_upload_key: docKey });
       onSuccess?.();
-    } catch {
+    } catch (err) {
+      // Surface the save failure instead of swallowing it. (BUG-kyc-professional-cw-03.)
+      setUploadError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not save your identity. Please try again.',
+      );
       setIsSaving(false);
     }
   };
@@ -113,7 +121,8 @@ export function IdentityModalContent({
   return (
     <div className="space-y-4">
       <AppText variant="body" align="start" color="var(--ohl-text-muted)">
-        Pick a verification method, enter the matching ID number, and upload a clear photo of the document.
+        Pick a verification method, enter the matching ID number, and upload a clear photo of the
+        document.
       </AppText>
 
       <AppDropdownInput
@@ -128,7 +137,11 @@ export function IdentityModalContent({
       />
 
       <AppTextInput
-        label={initial?.id_number_masked ? `ID number (current: ${initial.id_number_masked})` : 'ID number'}
+        label={
+          initial?.id_number_masked
+            ? `ID number (current: ${initial.id_number_masked})`
+            : 'ID number'
+        }
         placeholder="Enter ID number"
         value={idNumber}
         onChange={setIdNumber}
@@ -146,7 +159,11 @@ export function IdentityModalContent({
         <div className="mt-2">
           {previewUri ? (
             <div className="relative overflow-hidden rounded-2xl border border-border">
-              <img src={previewUri} alt="ID document preview" className="h-48 w-full object-cover" />
+              <img
+                src={previewUri}
+                alt="ID document preview"
+                className="h-48 w-full object-cover"
+              />
               <button
                 type="button"
                 onClick={() => setDocKey(null)}
@@ -172,9 +189,7 @@ export function IdentityModalContent({
             </label>
           )}
         </div>
-        {uploadError ? (
-          <p className="mt-1.5 text-xs text-error">{uploadError}</p>
-        ) : null}
+        {uploadError ? <p className="mt-1.5 text-xs text-error">{uploadError}</p> : null}
       </div>
 
       <AppButton

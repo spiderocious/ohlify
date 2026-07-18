@@ -9,8 +9,21 @@ export function useSubmitReview() {
       professionalId: string;
       stars: number;
       comment?: string;
+      isPublic?: boolean;
     }) => {
-      const { callId, professionalId, ...body } = payload;
+      const { callId, stars, comment, isPublic } = payload;
+      // Backend schema is `.strict()` and expects { rating, feedback_text?,
+      // is_public? } — not { professionalId, stars, comment }. Sending the wrong
+      // field names 400s every submission. (BUGS.md M6.)
+      const body: { rating: number; feedback_text?: string; is_public?: boolean } = {
+        rating: stars,
+      };
+      if (comment !== undefined && comment.trim().length > 0) {
+        body.feedback_text = comment;
+      }
+      if (isPublic !== undefined) {
+        body.is_public = isPublic;
+      }
       try {
         await apiClient.post(EP.CALL_RATING(callId), { json: body });
       } catch (err) {

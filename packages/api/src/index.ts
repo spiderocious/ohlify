@@ -82,6 +82,26 @@ export type {
   TransactionType as WalletTransactionType,
 } from './wallet/types.js';
 export type { ContentBlock, LegalDocument, Faq, HelpContact, PublicConfig } from './misc/types.js';
+export type { MinuteBalance, BuyMinutesPayload, BuyMinutesResult } from './minutes/types.js';
+export type { Presence } from './presence/types.js';
+export type {
+  InstantCallStatus,
+  StartInstantCallPayload,
+  InstantCallJoin,
+  IncomingInstantCall,
+} from './instant-calls/types.js';
+export type {
+  Conversation,
+  ChatMessage,
+  ConversationContext,
+  ConversationsPage,
+  MessageKind,
+  MessagesPage,
+  OpenConversationResult,
+  ProposeSchedulePayload,
+  ScheduleAction,
+  ScheduleStatus,
+} from './chat/types.js';
 
 // Admin surface — endpoints, client, session, and all admin response types.
 // Exported under explicit names so customer-side imports never accidentally

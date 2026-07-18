@@ -35,11 +35,20 @@ export function SelfieModalContent({ initialKey, onSubmit, onSuccess }: SelfieMo
 
   const handleSave = async () => {
     if (!canSubmit || !key) return;
+    setUploadError(null);
     setIsSaving(true);
     try {
       await onSubmit(key);
       onSuccess?.();
-    } catch {
+    } catch (err) {
+      // Surface the save failure (e.g. identity_required_first 422) instead of
+      // swallowing it — previously the modal just stopped with no feedback and
+      // the user believed the selfie saved. (BUG-kyc-professional-cw-03.)
+      setUploadError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not save your selfie. Please try again.',
+      );
       setIsSaving(false);
     }
   };

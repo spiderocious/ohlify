@@ -17,24 +17,36 @@ import {
 } from './banners.schema.js';
 
 export const register = (app: Express): void => {
+  // /api/v1/public/banners — no-auth variant for guests / web-landing.
+  // Same view shape, no userId required. Sensitive only-internal fields
+  // are already stripped by toPublicView at the service layer.
+  //
+  // MUST be registered before the authed router below. Previously the authed
+  // router was mounted at `/api/v1/` with a router-level `requireAuth`, so
+  // Express entered it (and 401'd) for EVERY `/api/v1/*` path — including this
+  // guest route — before this mount was ever reached. (banners-home.bugs.md
+  // BUG-banners-home-01.)
+  const pub = Router();
+  pub.get('/', validate(ListBannersPublicQuerySchema, 'query'), controller.publicList);
+  app.use('/api/v1/public/banners', pub);
+
   // /api/v1/banners — authenticated. Mobile polls this; the role-aware
   // audience filter (clients vs professionals) is driven from the token.
   // For now the controller still uses ?audience=... query — when the
   // mobile app stops sending it, we'll have it derive from req.userId's
   // role server-side.
+  //
+  // requireAuth is attached PER-ROUTE (not via authed.use on a `/api/v1/`
+  // mount) so it can never fire on an unrelated `/api/v1/*` path such as the
+  // guest banners route or /auth/login.
   const authed = Router();
-  authed.use(requireAuth);
-  authed.get('/banners', validate(ListBannersPublicQuerySchema, 'query'), controller.publicList);
-  // Mount at /api/v1/banners (NOT /api/v1) — a router-level requireAuth on a
-  // /api/v1 mount fires on every /api/v1/* request, including /auth/login.
+  authed.get(
+    '/banners',
+    requireAuth,
+    validate(ListBannersPublicQuerySchema, 'query'),
+    controller.publicList,
+  );
   app.use('/api/v1/', authed);
-
-  // /api/v1/public/banners — no-auth variant for guests / web-landing.
-  // Same view shape, no userId required. Sensitive only-internal fields
-  // are already stripped by toPublicView at the service layer.
-  const pub = Router();
-  pub.get('/', validate(ListBannersPublicQuerySchema, 'query'), controller.publicList);
-  app.use('/api/v1/public/banners', pub);
 
   // Admin CRUD — banners are admin-only per spec (public-facing copy).
   const admin = Router();

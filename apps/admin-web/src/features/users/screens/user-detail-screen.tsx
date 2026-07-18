@@ -88,7 +88,7 @@ export function UserDetailScreen() {
     )
       return;
     resetPw.mutate(
-      { notify: true },
+      { send_email: true, note: 'Password reset requested from admin user detail.' },
       { onSuccess: () => toastSuccess('Reset email sent'), onError: (err) => toastError(err) },
     );
   };
@@ -356,12 +356,8 @@ export function UserDetailScreen() {
                 {user.bank_account && (
                   <InfoCard title="Bank account">
                     <DetailRow label="Bank">{user.bank_account.bank_name}</DetailRow>
-                    <DetailRow label="Last 4">
-                      {user.bank_account.account_number_last4}
-                    </DetailRow>
-                    <DetailRow label="Account name">
-                      {user.bank_account.account_name}
-                    </DetailRow>
+                    <DetailRow label="Last 4">{user.bank_account.account_number_last4}</DetailRow>
+                    <DetailRow label="Account name">{user.bank_account.account_name}</DetailRow>
                     <DetailRow label="Added">
                       {formatDateTime(user.bank_account.added_at)}
                     </DetailRow>

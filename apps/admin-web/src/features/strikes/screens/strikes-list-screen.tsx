@@ -14,7 +14,7 @@ import { FilterBar } from '../../../shared/parts/filter-bar.js';
 import { PageHeader } from '../../../shared/parts/page-header.js';
 import { UserLink } from '../../../shared/parts/user-link.js';
 import { formatRelative } from '../../../shared/format/datetime.js';
-import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
+import { humanizeStatus } from '../../../shared/lib/labels.js';
 import { useStrikes } from '../api/use-strikes.js';
 import { IssueStrikeDialog } from '../parts/issue-strike-dialog.js';
 import { StrikeDetailDrawer } from '../parts/strike-detail-drawer.js';

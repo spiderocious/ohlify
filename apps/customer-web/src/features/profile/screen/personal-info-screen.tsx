@@ -14,6 +14,7 @@ import { useMe, type ApiError } from '@ohlify/api';
 import { useUpdateMe } from '../api/use-update-me.js';
 import { useChangeEmail } from '../api/use-change-email.js';
 import { useChangePhone } from '../api/use-change-phone.js';
+import { useRequestSensitiveOtp } from '../api/use-request-sensitive-otp.js';
 
 import { PersonalInfoRow } from './parts/personal-info-row.js';
 import { ProfileSubscreenScaffold } from './parts/profile-subscreen-scaffold.js';
@@ -41,6 +42,7 @@ export function PersonalInfoScreen() {
   const updateMe = useUpdateMe();
   const changeEmail = useChangeEmail();
   const changePhone = useChangePhone();
+  const requestOtp = useRequestSensitiveOtp();
 
   const [name, setName] = useState(me?.full_name ?? '');
   useEffect(() => setName(me?.full_name ?? ''), [me?.full_name]);
@@ -67,30 +69,41 @@ export function PersonalInfoScreen() {
     void handle.onDismissed.then(() => {
       if (!pending || pending === me?.email) return;
       const newEmail = pending;
-      DrawerService.showInputModal(
-        'Enter OTP',
-        `We sent a 6-digit code to ${maskEmail(me?.email ?? '')} to confirm this change.`,
-        {
-          placeholder: '000000',
-          maxLength: 6,
-          confirmButtonText: 'Confirm',
-          showCancelButton: true,
-          onConfirm: (otp) => {
-            changeEmail.mutate(
-              { new_email: newEmail, otp },
-              {
-                onSuccess: () => successToast('Email updated'),
-                onError: (err) => {
-                  const e = err as unknown as ApiError;
-                  errorToast(
-                    e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update email',
-                  );
-                },
-              },
-            );
-          },
+      // Request the OTP FIRST — the entry modal below claims a code was sent, so
+      // one must actually be sent or every confirmation 400s invalid_otp.
+      // (BUGS.md M10.)
+      requestOtp.mutate('change_email', {
+        onError: (err) => {
+          const e = err as unknown as ApiError;
+          errorToast(e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Could not send OTP');
         },
-      );
+        onSuccess: () => {
+          DrawerService.showInputModal(
+            'Enter OTP',
+            `We sent a 6-digit code to ${maskEmail(me?.email ?? '')} to confirm this change.`,
+            {
+              placeholder: '000000',
+              maxLength: 6,
+              confirmButtonText: 'Confirm',
+              showCancelButton: true,
+              onConfirm: (otp) => {
+                changeEmail.mutate(
+                  { new_email: newEmail, otp },
+                  {
+                    onSuccess: () => successToast('Email updated'),
+                    onError: (err) => {
+                      const e = err as unknown as ApiError;
+                      errorToast(
+                        e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update email',
+                      );
+                    },
+                  },
+                );
+              },
+            },
+          );
+        },
+      });
     });
   };
 
@@ -116,30 +129,39 @@ export function PersonalInfoScreen() {
     void handle.onDismissed.then(() => {
       if (!pending || pending === me?.phone_number) return;
       const newPhone = pending;
-      DrawerService.showInputModal(
-        'Enter OTP',
-        `We sent a 6-digit code to ${maskPhone(me?.phone_number ?? '')} to confirm this change.`,
-        {
-          placeholder: '000000',
-          maxLength: 6,
-          confirmButtonText: 'Confirm',
-          showCancelButton: true,
-          onConfirm: (otp) => {
-            changePhone.mutate(
-              { new_phone_number: newPhone, otp },
-              {
-                onSuccess: () => successToast('Phone number updated'),
-                onError: (err) => {
-                  const e = err as unknown as ApiError;
-                  errorToast(
-                    e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update phone',
-                  );
-                },
-              },
-            );
-          },
+      // Request the OTP FIRST — see the email flow above. (BUGS.md M10.)
+      requestOtp.mutate('change_phone', {
+        onError: (err) => {
+          const e = err as unknown as ApiError;
+          errorToast(e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Could not send OTP');
         },
-      );
+        onSuccess: () => {
+          DrawerService.showInputModal(
+            'Enter OTP',
+            `We sent a 6-digit code to ${maskPhone(me?.phone_number ?? '')} to confirm this change.`,
+            {
+              placeholder: '000000',
+              maxLength: 6,
+              confirmButtonText: 'Confirm',
+              showCancelButton: true,
+              onConfirm: (otp) => {
+                changePhone.mutate(
+                  { new_phone_number: newPhone, otp },
+                  {
+                    onSuccess: () => successToast('Phone number updated'),
+                    onError: (err) => {
+                      const e = err as unknown as ApiError;
+                      errorToast(
+                        e.reason === 'invalid_otp' ? 'Invalid OTP code' : 'Failed to update phone',
+                      );
+                    },
+                  },
+                );
+              },
+            },
+          );
+        },
+      });
     });
   };
 

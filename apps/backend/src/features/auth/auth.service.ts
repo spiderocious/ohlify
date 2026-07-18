@@ -7,6 +7,7 @@ import { generateRefreshToken, hashToken, signAccessToken } from '@lib/security/
 import { hashPassword, verifyPassword } from '@lib/security/password.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { accountFor } from '@lib/wallet/accounts.js';
+import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 import { createOtp, verifyOtp } from '@shared/utils/otp.js';
 
 import { AUTH_MESSAGES } from './auth.messages.js';
@@ -269,11 +270,16 @@ export const login = async (
     return new ServiceError('invalid_credentials', AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
   }
 
+  // Suspended/blocked accounts get the forbidden message the spec documents,
+  // not the invalid-credentials text — a suspended user shown "email or password
+  // is incorrect" keeps trying to reset a password that is fine. The `reason`
+  // already reveals the account state, so the old message added no
+  // anti-enumeration value. (BUG-auth-login-01.)
   if (user.status === 'suspended') {
-    return new ServiceError('account_suspended', AUTH_MESSAGES.INVALID_CREDENTIALS, 403);
+    return new ServiceError('account_suspended', MESSAGE_KEYS.FORBIDDEN, 403);
   }
   if (user.status === 'blocked' || user.status === 'deleted') {
-    return new ServiceError('account_blocked', AUTH_MESSAGES.INVALID_CREDENTIALS, 403);
+    return new ServiceError('account_blocked', MESSAGE_KEYS.FORBIDDEN, 403);
   }
 
   await redis.del(emailKey);

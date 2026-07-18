@@ -132,11 +132,6 @@ const ProfessionalDetailsScreen = lazy(() =>
     default: m.ProfessionalDetailsScreen,
   })),
 );
-const ScheduleCallScreen = lazy(() =>
-  import('./features/schedule-call/screen/schedule-call-screen.js').then((m) => ({
-    default: m.ScheduleCallScreen,
-  })),
-);
 
 const CallsScreen = lazy(() =>
   import('./features/calls/screen/calls-screen.js').then((m) => ({ default: m.CallsScreen })),
@@ -219,6 +214,21 @@ const CallSessionScreen = lazy(() =>
 const CallRatingScreen = lazy(() =>
   import('./features/call-session/screen/call-rating-screen.js').then((m) => ({
     default: m.CallRatingScreen,
+  })),
+);
+const InstantCallScreen = lazy(() =>
+  import('./features/instant-call/screen/instant-call-screen.js').then((m) => ({
+    default: m.InstantCallScreen,
+  })),
+);
+const ChatsScreen = lazy(() =>
+  import('./features/chat/screen/chats-screen.js').then((m) => ({
+    default: m.ChatsScreen,
+  })),
+);
+const ChatThreadScreen = lazy(() =>
+  import('./features/chat/screen/chat-thread-screen.js').then((m) => ({
+    default: m.ChatThreadScreen,
   })),
 );
 
@@ -314,11 +324,10 @@ const routes: RouteObject[] = [
                 children: [
                   { path: ROUTES.HOME.relativePath, element: lazyRoute(<HomeScreen />) },
                   { path: ROUTES.CALLS.relativePath, element: lazyRoute(<CallsScreen />) },
+                  { path: ROUTES.CHATS.relativePath, element: lazyRoute(<ChatsScreen />) },
                   { path: ROUTES.WALLET.relativePath, element: lazyRoute(<WalletScreen />) },
-                  {
-                    path: ROUTES.SCHEDULE_CALL.relativePath,
-                    element: lazyRoute(<ScheduleCallScreen />),
-                  },
+                  // Scheduling removed from UI (calls revamp P5). The screen +
+                  // API stay on disk (revivable); the route is just not mounted.
                   {
                     path: ROUTES.PROFESSIONAL.relativePath,
                     element: lazyRoute(<ProfessionalDetailsScreen />),
@@ -390,6 +399,14 @@ const routes: RouteObject[] = [
               {
                 path: ROUTES.CALL_SESSION.relativePath,
                 element: lazyRoute(<CallSessionScreen />),
+              },
+              {
+                path: ROUTES.INSTANT_CALL.relativePath,
+                element: lazyRoute(<InstantCallScreen />),
+              },
+              {
+                path: ROUTES.CHAT_THREAD.relativePath,
+                element: lazyRoute(<ChatThreadScreen />),
               },
             ],
           },

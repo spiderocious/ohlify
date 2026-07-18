@@ -14,7 +14,17 @@ export const verifyPaystackSignature = (
   signatureHeader?: string,
   querySecretKey?: string,
 ): boolean => {
-  if (querySecretKey && querySecretKey === env.PAYSTACK_WEBHOOK_SECRET) {
+  // Local-only replay affordance: `?webhookKey=<secret>` lets the dev replay
+  // tooling post an unsigned body. This is NEVER allowed in production — a
+  // secret in a query string leaks through access logs, proxies, and browser
+  // history, and accepting an unsigned body would let anyone who ever saw that
+  // URL forge a wallet credit. In production the ONLY accepted auth is a valid
+  // HMAC-SHA512 signature. (BUGS.md M2.)
+  if (
+    env.NODE_ENV !== 'production' &&
+    querySecretKey &&
+    querySecretKey === env.PAYSTACK_WEBHOOK_SECRET
+  ) {
     return true;
   }
   if (typeof signatureHeader !== 'string' || signatureHeader.length === 0) {

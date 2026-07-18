@@ -33,6 +33,11 @@ type Prefix =
   | 'adm' // admin user
   | 'rep' // user report
   | 'blk' // booking block (pro do-not-book window)
+  | 'mb' // minute balance (per user/pro/call_type)
+  | 'mp' // minute purchase
+  | 'ic' // instant call
+  | 'conv' // chat conversation
+  | 'msg' // chat message
   | 'faq'; // faq
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;

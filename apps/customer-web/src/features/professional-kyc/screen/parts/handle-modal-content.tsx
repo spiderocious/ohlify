@@ -51,6 +51,7 @@ export function HandleModalContent({
 }: HandleModalContentProps) {
   const [raw, setRaw] = useState(initial ?? '');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Lowercase + strip whitespace so the debounced value matches what the
   // server normalizes to. Keeps the UX in lockstep with `available: true,
@@ -58,7 +59,8 @@ export function HandleModalContent({
   const normalized = raw.trim().toLowerCase();
   const debounced = useDebouncedValue(normalized, DEBOUNCE_MS);
 
-  const isUnchanged = initial !== null && initial !== undefined && debounced === initial.toLowerCase();
+  const isUnchanged =
+    initial !== null && initial !== undefined && debounced === initial.toLowerCase();
   // Don't bother the server for the user's current handle — it'd come back as
   // taken (by themselves) which is misleading. Treat it as available no-op.
   const query = useCheckHandle(isUnchanged ? '' : debounced);
@@ -69,23 +71,25 @@ export function HandleModalContent({
   const isChecking = !isUnchanged && (stillTyping || query.isFetching);
 
   const result = query.data;
-  const isAvailable = isUnchanged || (result?.available === true);
+  const isAvailable = isUnchanged || result?.available === true;
   const unavailable = result && result.available === false ? result : null;
 
-  const canSubmit =
-    !isSaving &&
-    !isChecking &&
-    !isUnchanged &&
-    debounced.length > 0 &&
-    isAvailable;
+  const canSubmit = !isSaving && !isChecking && !isUnchanged && debounced.length > 0 && isAvailable;
 
   const handleSave = async () => {
     if (!canSubmit) return;
+    setSaveError(null);
     setIsSaving(true);
     try {
       await onSubmit(debounced);
       onSuccess?.();
-    } catch {
+    } catch (err) {
+      // Surface the save failure instead of swallowing it. (BUG-kyc-professional-cw-03.)
+      setSaveError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not save your username. Please try again.',
+      );
       setIsSaving(false);
     }
   };
@@ -126,7 +130,7 @@ export function HandleModalContent({
           maxLength={24}
           // Surface taken/reserved/format errors as the input's own error
           // message so it shares the bordered red treatment users already know.
-          errorMessage={helperKind === 'error' ? helperLine ?? undefined : undefined}
+          errorMessage={helperKind === 'error' ? (helperLine ?? undefined) : undefined}
         />
         {helperLine && helperKind !== 'error' ? (
           <p
@@ -161,6 +165,8 @@ export function HandleModalContent({
           </div>
         </div>
       ) : null}
+
+      {saveError ? <p className="mt-1.5 text-xs text-error">{saveError}</p> : null}
 
       <AppButton
         label={isSaving ? 'Saving…' : 'Save'}

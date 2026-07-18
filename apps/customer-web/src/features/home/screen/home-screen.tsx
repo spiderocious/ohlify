@@ -31,7 +31,7 @@ function toProfessional(p: ProfessionalListItem): Professional {
  */
 export function HomeScreen() {
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useHome();
+  const { data, isLoading, isError } = useHome();
 
   if (isLoading) {
     return (
@@ -64,10 +64,7 @@ export function HomeScreen() {
   return (
     <div className="min-h-full bg-surface-light">
       <div className="mx-auto w-full max-w-3xl px-5 pb-8 pt-5 lg:max-w-5xl">
-        <AppSearchBar
-          readOnly
-          onTap={() => navigate(`${ROUTES.PROFESSIONALS.absPath}?focus=1`)}
-        />
+        <AppSearchBar readOnly onTap={() => navigate(`${ROUTES.PROFESSIONALS.absPath}?focus=1`)} />
 
         <Show when={Boolean(activeMeeting)}>
           <div className="mt-4">
@@ -103,7 +100,8 @@ export function HomeScreen() {
             professionals={professionals}
             onViewAll={() => navigate(ROUTES.PROFESSIONALS.absPath)}
             onTap={(p) => navigate(ROUTES.PROFESSIONAL.build({ id: p.id }))}
-            onSchedule={(p) => navigate(ROUTES.SCHEDULE_CALL.build({ id: p.id }))}
+            // Scheduling removed from UI (calls revamp) — route to details, where "Call" lives.
+            onSchedule={(p) => navigate(ROUTES.PROFESSIONAL.build({ id: p.id }))}
           />
         </div>
       </div>

@@ -5,13 +5,16 @@ import { ROUTES } from '@ohlify/core';
 import { AppHeader, AppShell, appMainNavItems } from '@ohlify/ui';
 
 import { AppErrorBoundary } from '../errors/index.js';
+import { useHeartbeat } from '../hooks/use-heartbeat.js';
 import { RoutePrefetchWatcher } from '../prefetch/index.js';
+import { IncomingCallBanner } from './incoming-call-banner.js';
 import { JoinableCallBanner } from './joinable-call-banner.js';
 import { KycReviewBanner } from './kyc-review-banner.js';
 
 const TAB_PATHS = [
   ROUTES.HOME.absPath,
   ROUTES.CALLS.absPath,
+  ROUTES.CHATS.absPath,
   ROUTES.WALLET.absPath,
   ROUTES.PROFILE.absPath,
 ];
@@ -24,6 +27,9 @@ const TAB_PATHS = [
 export function MainShellLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Keep logged-in pros "online" for the instant-call presence check.
+  useHeartbeat();
 
   const activeIndex = (() => {
     for (let i = 0; i < TAB_PATHS.length; i++) {
@@ -50,6 +56,7 @@ export function MainShellLayout() {
           {/* Joinable-call banner sits above KYC review because an
               actionable incoming call should out-rank an info-only
               "your KYC is under review" notice. */}
+          <IncomingCallBanner />
           <JoinableCallBanner />
           <KycReviewBanner />
           <Show when={isHome}>

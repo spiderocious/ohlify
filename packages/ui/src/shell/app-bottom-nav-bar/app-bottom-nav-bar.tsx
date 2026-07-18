@@ -1,4 +1,4 @@
-import { IconCalendarDay, IconHome, IconUser, IconWallet, type LucideIcon } from '@icons';
+import { IconCalendarDay, IconChat, IconHome, IconUser, IconWallet, type LucideIcon } from '@icons';
 
 import { cn } from '../../utils/cn.js';
 
@@ -59,6 +59,7 @@ export function AppBottomNavBar({ items, currentIndex, onTap, className }: AppBo
 export const appMainNavItems: AppBottomNavBarItem[] = [
   { Icon: IconHome, label: 'Home' },
   { Icon: IconCalendarDay, label: 'Calls' },
+  { Icon: IconChat, label: 'Chats' },
   { Icon: IconWallet, label: 'Wallet' },
   { Icon: IconUser, label: 'Profile' },
 ];

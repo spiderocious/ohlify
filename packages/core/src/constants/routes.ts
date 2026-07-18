@@ -31,6 +31,8 @@ export const ROUTES = route('', {
   // Main shell tabs
   HOME: route('home'),
   CALLS: route('calls'),
+  CHATS: route('chats'),
+  CHAT_THREAD: route('chats/:id'),
   WALLET: route('wallet'),
   PROFILE: route('profile', {
     PERSONAL_INFO: route('personal-info'),
@@ -54,6 +56,8 @@ export const ROUTES = route('', {
   CALL: route('call/:id'),
   CALL_SESSION: route('call/session/:role/:kind/:selfId/:peerId/:sessionId'),
   CALL_RATING: route('call/session/rating'),
+  // Instant call (calls revamp) — query params carry pro/type or answer=<callId>.
+  INSTANT_CALL: route('instant-call'),
 
   // Notifications
   NOTIFICATIONS: route('notifications'),

@@ -1,9 +1,10 @@
 import { IconBack } from '@icons';
+import { Show } from 'meemaw';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ROUTES, type SortOption, type Professional } from '@ohlify/core';
-import { AppIconButton, AppSearchBar } from '@ohlify/ui';
+import { AppIconButton, AppSearchBar, AppErrorState, AppLoader } from '@ohlify/ui';
 import type { ProfessionalListItem } from '@ohlify/api';
 
 import { useProfessionals } from '../api/use-professionals.js';
@@ -48,7 +49,7 @@ export function ProfessionalSearchScreen() {
     };
   }, [rawInput]);
 
-  const { data } = useProfessionals({
+  const { data, isLoading, isError } = useProfessionals({
     q: query || undefined,
     category,
     sort: sort.key === 'price' ? 'price' : sort.key === 'name' ? 'name' : 'rating',
@@ -85,11 +86,24 @@ export function ProfessionalSearchScreen() {
       </div>
 
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-6 pt-4 lg:max-w-5xl">
-        <SearchResultsList
-          professionals={results}
-          onTap={(p) => navigate(ROUTES.PROFESSIONAL.build({ id: p.id }))}
-          onSchedule={(p) => navigate(ROUTES.SCHEDULE_CALL.build({ id: p.id }))}
-        />
+        <Show when={isLoading}>
+          <div className="flex justify-center py-16">
+            <AppLoader />
+          </div>
+        </Show>
+        {/* A request failure must render a distinct error state, not collapse
+            into "No professionals match your search." (BUG-professionals-discovery-cw-01) */}
+        <Show when={!isLoading && isError}>
+          <AppErrorState message="Could not load professionals. Please try again." />
+        </Show>
+        <Show when={!isLoading && !isError}>
+          <SearchResultsList
+            professionals={results}
+            onTap={(p) => navigate(ROUTES.PROFESSIONAL.build({ id: p.id }))}
+            // Scheduling removed from UI (calls revamp) — route to details, where "Call" lives.
+            onSchedule={(p) => navigate(ROUTES.PROFESSIONAL.build({ id: p.id }))}
+          />
+        </Show>
       </div>
     </main>
   );

@@ -13,6 +13,8 @@ export interface PostJournalInput {
     | 'call_settlement'
     | 'call_refund'
     | 'call_refund_post_settle'
+    | 'minutes_purchase'
+    | 'minutes_settlement'
     | 'withdrawal_requested'
     | 'withdrawal_completed'
     | 'withdrawal_reversed'
