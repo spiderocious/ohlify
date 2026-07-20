@@ -1,13 +1,14 @@
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppButton, ClientView, colors, AppText, showCustomModal, showFeedbackModal, showToast } from '@ohlify/mobile-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
 import type { RootStackParamList } from '../../../app.navigation';
+import type { MainTabParamList } from '../../../main-tabs.navigation';
 import { useMe } from '@features/profile/api/use-me';
 import { prewarmMeEmail, runFundWalletFlow } from '../providers/fund-wallet-flow';
 import { useWithdrawMutation, useWallet, useWalletStats, useWalletTransactions } from '../api/use-wallet';
@@ -20,6 +21,7 @@ import { formatKobo, walletTransactionIsCredit, type WalletTransaction } from '.
 import type { Transaction, TransactionStatus, TransactionType } from '../types/transaction';
 
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
+type WalletRouteProp = RouteProp<MainTabParamList, 'WalletTab'>;
 
 function adaptStatus(status: string): TransactionStatus {
   if (status === 'completed' || status === 'success') return 'completed';
@@ -50,6 +52,7 @@ function adaptTransaction(t: WalletTransaction): Transaction {
 /** Mirrors mobile/lib/features/wallet/screen/wallet_screen.dart. */
 export function WalletScreen() {
   const navigation = useNavigation<RootNavigation>();
+  const route = useRoute<WalletRouteProp>();
   const queryClient = useQueryClient();
   const wallet = useWallet();
   const stats = useWalletStats();
@@ -57,6 +60,7 @@ export function WalletScreen() {
   const me = useMe();
   const withdrawMutation = useWithdrawMutation();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const consumedOpenFund = useRef(false);
 
   const balanceLabel = wallet.data ? formatKobo(wallet.data.balanceKobo, wallet.data.currency) : '₦0';
   const statsData = useMemo(
@@ -175,6 +179,18 @@ export function WalletScreen() {
       showToast(msg, { type: 'error' });
     }
   }
+
+  // Auto-opens the Fund wallet modal when arriving via the insufficient-balance
+  // redirect from Buy minutes (see professional-details/buy-minutes-section.tsx).
+  // consumedOpenFund guards against re-firing on every re-render/refocus once
+  // the param has been acted on; clearing the param itself would also work but
+  // this avoids an extra navigation.setParams round-trip.
+  useEffect(() => {
+    if (route.params?.openFund && !consumedOpenFund.current) {
+      consumedOpenFund.current = true;
+      void openFund();
+    }
+  }, [route.params?.openFund]);
 
   const isLoadingBalance = wallet.isLoading && !wallet.data;
 

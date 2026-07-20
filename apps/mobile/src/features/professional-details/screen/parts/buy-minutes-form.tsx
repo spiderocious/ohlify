@@ -6,10 +6,14 @@ export interface BuyMinutesFormProps {
   perMinuteKobo: number;
   onChanged: (value: string) => void;
   onConfirm: () => void;
+  /** True while the caller's purchase is in flight — disables the input, shows a spinner on the button. */
+  isSaving?: boolean;
+  /** Purchase failure message from the caller, rendered inline instead of a toast. Not used for insufficient_balance, which gets its own full modal instead — see MinuteRow.buy in buy-minutes-section.tsx. */
+  errorMessage?: string;
 }
 
 /** Mirrors _BuyForm in mobile/lib/features/professional_details/screen/parts/buy_minutes_section.dart. */
-export function BuyMinutesForm({ perMinuteKobo, onChanged, onConfirm }: BuyMinutesFormProps) {
+export function BuyMinutesForm({ perMinuteKobo, onChanged, onConfirm, isSaving = false, errorMessage }: BuyMinutesFormProps) {
   const [amount, setAmount] = useState('');
 
   const estMinutes = (() => {
@@ -31,6 +35,7 @@ export function BuyMinutesForm({ perMinuteKobo, onChanged, onConfirm }: BuyMinut
         value={amount}
         placeholder="Enter amount"
         keyboardType="decimal-pad"
+        disabled={isSaving}
         onChangeText={(v) => {
           setAmount(v);
           onChanged(v);
@@ -44,8 +49,23 @@ export function BuyMinutesForm({ perMinuteKobo, onChanged, onConfirm }: BuyMinut
           </AppText>
         </>
       ) : null}
+      {errorMessage ? (
+        <>
+          <View style={{ height: 10 }} />
+          <AppText variant="bodySmall" color={colors.error} align="left">
+            {errorMessage}
+          </AppText>
+        </>
+      ) : null}
       <View style={{ height: 20 }} />
-      <AppButton label="Buy minutes" expanded radius={100} isDisabled={estMinutes <= 0} onPress={estMinutes <= 0 ? undefined : onConfirm} />
+      <AppButton
+        label="Buy minutes"
+        expanded
+        radius={100}
+        isLoading={isSaving}
+        isDisabled={estMinutes <= 0}
+        onPress={estMinutes <= 0 ? undefined : onConfirm}
+      />
     </View>
   );
 }

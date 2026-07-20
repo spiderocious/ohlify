@@ -16,7 +16,7 @@ export interface AppSearchBarProps {
 }
 
 export function AppSearchBar({
-  placeholder = 'Search for professional',
+  placeholder = 'Search',
   value,
   onChangeText,
   onPress,

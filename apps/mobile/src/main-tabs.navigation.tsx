@@ -39,7 +39,8 @@ export type MainTabParamList = {
   HomeTab: undefined;
   CallsTab: undefined;
   ChatsTab: { screen?: keyof ChatsStackParamList; params?: ChatsStackParamList['ChatThread'] } | undefined;
-  WalletTab: undefined;
+  /** openFund: true auto-opens the Fund wallet modal on arrival — used by the insufficient-balance redirect from Buy minutes. */
+  WalletTab: { openFund?: boolean } | undefined;
   ProfileTab: undefined;
 };
 

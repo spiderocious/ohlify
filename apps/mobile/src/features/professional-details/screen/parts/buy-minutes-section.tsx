@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppButton, AppText, colors, showCustomModal, showToast } from '@ohlify/mobile-ui';
+import { AppButton, AppText, colors, showCustomModal, showFeedbackModal, showToast } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -85,50 +85,42 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
     }
   }
 
-  async function buy(amountKobo: number) {
+  function promptFundWallet() {
+    showFeedbackModal('Insufficient wallet balance', "You don't have enough funds to buy these minutes. Fund your wallet to continue.", {
+      kind: 'warning',
+      showCloseButton: true,
+      confirmButtonText: 'Fund wallet',
+      onConfirm: () => navigation.navigate('Home', { screen: 'WalletTab', params: { openFund: true } }),
+    });
+  }
+
+  /** Returns null on success, or an error message on failure (except insufficient_balance, which shows its own modal directly). */
+  async function buy(amountKobo: number): Promise<string | null> {
     try {
       const res = await minutesApi.buyMinutes({ professionalId, callType, amountKobo });
       setMinutes(res.minutesRemaining);
       showToast(`Added ${res.minutesPurchased} minutes.`, { type: 'success' });
       await goToChat();
+      return null;
     } catch (e) {
       const error = e instanceof ApiError ? e : ApiError.network;
-      const msg = error.reason === 'insufficient_balance' ? 'Your wallet balance is too low. Fund your wallet and try again.' : apiErrorMessage(error);
-      showToast(msg, { type: 'error' });
+      if (error.reason === 'insufficient_balance') {
+        promptFundWallet();
+        return 'handled';
+      }
+      return apiErrorMessage(error);
     }
   }
 
   function openBuy() {
     const perMin = perMinuteKobo(rate);
-    let amount = '';
-    let dismiss: () => void = () => undefined;
     const handle = showCustomModal(
       `Buy ${callType} minutes`,
-      (onDismiss) => {
-        dismiss = onDismiss;
-        return (
-          <BuyMinutesForm
-            perMinuteKobo={perMin}
-            onChanged={(v) => {
-              amount = v;
-            }}
-            onConfirm={() => {
-              const clean = amount.replace(/[^0-9.]/g, '');
-              const naira = Number(clean) || 0;
-              const kobo = Math.round(naira * 100);
-              if (kobo <= 0) {
-                showToast('Enter a valid amount.', { type: 'error' });
-                return;
-              }
-              dismiss();
-              buy(kobo);
-            }}
-          />
-        );
-      },
+      (dismiss) => (
+        <BuyMinutesModalBody perMinuteKobo={perMin} onBuy={buy} onDone={dismiss} onBusyChange={(busy) => handle.setDismissible(!busy)} />
+      ),
       { position: 'bottom' },
     );
-    void handle;
   }
 
   const label = callType === 'audio' ? 'Audio' : 'Video';
@@ -145,7 +137,63 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
           </AppText>
         ) : null}
       </View>
-      <AppButton label="Buy" radius={100} onPress={openBuy} />
+      <AppButton label="Buy" radius={100} height={40} paddingHorizontal={22} onPress={openBuy} />
     </View>
+  );
+}
+
+/**
+ * Owns amount/save-in-flight/error state so the modal stays open (and locked
+ * shut via onBusyChange -> handle.setDismissible) while the purchase is in
+ * flight, and only dismisses on real success — instead of the old
+ * dismiss-then-buy pattern, which closed the modal immediately regardless of
+ * whether the purchase actually succeeded. A 'handled' result from onBuy
+ * means the insufficient-balance modal is already showing, so this closes
+ * without also surfacing an inline error.
+ */
+function BuyMinutesModalBody({
+  perMinuteKobo,
+  onBuy,
+  onDone,
+  onBusyChange,
+}: {
+  perMinuteKobo: number;
+  onBuy: (amountKobo: number) => Promise<string | null>;
+  onDone: () => void;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>();
+
+  async function handleConfirm() {
+    const clean = amount.replace(/[^0-9.]/g, '');
+    const naira = Number(clean) || 0;
+    const kobo = Math.round(naira * 100);
+    if (kobo <= 0) {
+      setErrorMessage('Enter a valid amount.');
+      return;
+    }
+    setIsSaving(true);
+    onBusyChange(true);
+    setErrorMessage(undefined);
+    const result = await onBuy(kobo);
+    setIsSaving(false);
+    onBusyChange(false);
+    if (result === null || result === 'handled') {
+      onDone();
+    } else {
+      setErrorMessage(result);
+    }
+  }
+
+  return (
+    <BuyMinutesForm
+      perMinuteKobo={perMinuteKobo}
+      onChanged={setAmount}
+      onConfirm={() => void handleConfirm()}
+      isSaving={isSaving}
+      errorMessage={errorMessage}
+    />
   );
 }

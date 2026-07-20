@@ -12,9 +12,7 @@ import type { MainTabParamList } from '../../../main-tabs.navigation';
 import { useHome } from '@features/home/api/use-home';
 import { CategoryFilter } from './parts/category-filter';
 import { PopularProfessionalsList } from './parts/popular-professionals-list';
-import { UpcomingCallBanner } from './parts/upcoming-call-banner';
-import { UpcomingCallsList } from './parts/upcoming-calls-list';
-import type { CategoryItem, ProfessionalListItem, UpcomingCallItem } from '../types/home-models';
+import type { CategoryItem, ProfessionalListItem } from '../types/home-models';
 
 type TabNavigation = BottomTabNavigationProp<MainTabParamList>;
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
@@ -69,22 +67,6 @@ export function HomeScreen() {
         >
           <View style={{ height: 20 }} />
           <AppSearchBar readOnly onPress={() => gotoSearch({ focus: true })} />
-          {home.data?.activeMeeting ? (
-            <>
-              <View style={{ height: 16 }} />
-              <UpcomingCallBanner
-                calleeName={home.data.activeMeeting.peerName}
-                scheduledTime="Now"
-                onJoin={() => root?.navigate('Call', { callId: home.data!.activeMeeting!.callId })}
-              />
-            </>
-          ) : null}
-          <View style={{ height: 24 }} />
-          <UpcomingCallsList
-            calls={(home.data?.upcomingCalls ?? []).map(toUpcomingCallCard)}
-            onViewAll={() => navigation.navigate('CallsTab')}
-            onPress={(call) => root?.navigate('Call', { callId: call.id })}
-          />
           <View style={{ height: 24 }} />
           <CategoryFilter categories={categories} onChange={(c: CategoryItem) => gotoSearch({ category: c.value })} />
           <View style={{ height: 24 }} />
@@ -99,16 +81,5 @@ export function HomeScreen() {
       )}
     </View>
   );
-}
-
-function toUpcomingCallCard(c: UpcomingCallItem) {
-  return {
-    id: c.id,
-    name: c.peerName,
-    role: c.callType === 'video' ? 'Video call' : 'Audio call',
-    rating: 0,
-    reviewCount: 0,
-    avatarKey: c.peerAvatarKey,
-  };
 }
 

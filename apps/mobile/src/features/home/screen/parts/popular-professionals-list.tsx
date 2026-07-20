@@ -18,7 +18,7 @@ export function PopularProfessionalsList({ professionals, onViewAll, onSchedule,
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <AppText variant="body" color={colors.textMuted} align="left">
-          Popular professional
+          Popular people
         </AppText>
         <Pressable onPress={onViewAll}>
           <AppText variant="body" color={colors.textBlack} weight="500" align="left">
