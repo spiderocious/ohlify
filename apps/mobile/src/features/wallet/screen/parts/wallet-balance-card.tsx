@@ -1,4 +1,4 @@
-import { AnimatedBalance, AppText, ProfessionalView, colors } from '@ohlify/mobile-ui';
+import { AnimatedBalance, AppIcon, AppText, ProfessionalView, colors } from '@ohlify/mobile-ui';
 import { Pressable, View } from 'react-native';
 
 import { formatKobo } from '@features/wallet/types/wallet-models';
