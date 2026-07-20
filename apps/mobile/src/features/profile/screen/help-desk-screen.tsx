@@ -1,6 +1,6 @@
 import { AppButton, AppIcon, AppText, AppTextInput, colors, showCustomModal, showToast, type AppIconName } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
@@ -56,6 +56,17 @@ export function HelpDeskScreen() {
     );
   }
 
+  async function openWhatsapp() {
+    const url = contact?.whatsappDeeplink;
+    if (!url) return;
+    const canOpen = await Linking.canOpenURL(url);
+    if (!canOpen) {
+      showToast(`Open WhatsApp at ${contact?.whatsapp}`, { type: 'info' });
+      return;
+    }
+    await Linking.openURL(url);
+  }
+
   function openFaqs() {
     showCustomModal(
       'FAQs',
@@ -104,7 +115,7 @@ export function HelpDeskScreen() {
             title="WhatsApp"
             subtitle="Chat with our support team"
             actionLabel={contact.whatsapp}
-            onAction={() => showToast(`Open WhatsApp at ${contact.whatsapp}`, { type: 'info' })}
+            onAction={() => void openWhatsapp()}
           />
         </>
       ) : null}

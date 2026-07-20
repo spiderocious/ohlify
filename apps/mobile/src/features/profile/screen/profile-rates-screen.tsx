@@ -12,6 +12,7 @@ import {
   type AddedRate,
   type RatesGroupRate,
 } from '@ohlify/mobile-ui';
+import type { CallType } from '@ohlify/core';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -19,7 +20,11 @@ import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
 import { ratesApi } from '@features/me/api/rates-api';
 import type { Rate } from '@features/me/types/me-models';
+import { useConfigArray, useConfigBool, useConfigNumber } from '@shared/providers/app-config-provider';
 import { ProfileSubscreenScaffold } from './parts/profile-subscreen-scaffold';
+
+const isCallType = (v: unknown): v is CallType => v === 'audio' || v === 'video';
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 function formatKoboAsNaira(kobo: number): string {
   const naira = kobo / 100;
@@ -47,6 +52,12 @@ export function ProfileRatesScreen() {
   const [rates, setRates] = useState<Rate[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const callTypes = useConfigArray<CallType>('rates.allowed_call_types', ['audio', 'video'], isCallType);
+  const durations = useConfigArray<number>('rates.allowed_durations_minutes', [10, 25, 45, 60], isFiniteNumber);
+  const minKobo = useConfigNumber('rates.min_kobo', 50_000);
+  const maxKobo = useConfigNumber('rates.max_kobo', 50_000_000);
+  const singleRatePerChannel = useConfigBool('rates.single_rate_per_channel', true);
+
   const load = useCallback(async () => {
     try {
       const list = await ratesApi.listMyRates();
@@ -63,33 +74,22 @@ export function ProfileRatesScreen() {
   }, [load]);
 
   function openAddRate() {
-    let pendingRate: AddedRate | undefined;
-    let dismiss: () => void = () => undefined;
     const handle = showCustomModal(
       'Add rate',
-      (onDismiss) => {
-        dismiss = onDismiss;
-        return (
-          <AddRateForm
-            onSave={(rate) => {
-              pendingRate = rate;
-              dismiss();
-            }}
-          />
-        );
-      },
+      (dismiss) => (
+        <AddRateModalBody
+          singleRatePerChannel={singleRatePerChannel}
+          callTypes={callTypes}
+          durations={durations}
+          minKobo={minKobo}
+          maxKobo={maxKobo}
+          onSaved={dismiss}
+          onSavingChange={(saving) => handle.setDismissible(!saving)}
+          load={load}
+        />
+      ),
       { position: 'bottom' },
     );
-    handle.onDismissed.then(async () => {
-      if (!pendingRate) return;
-      try {
-        await ratesApi.addRate({ callType: pendingRate.callType, durationMinutes: pendingRate.durationMinutes, priceKobo: priceToKobo(pendingRate.price) });
-        await load();
-        showToast('Rate added successfully', { type: 'success' });
-      } catch (e) {
-        showToast(apiErrorMessage(e instanceof ApiError ? e : ApiError.network), { type: 'error' });
-      }
-    });
   }
 
   function openEditRate(rate: RatesGroupRate) {
@@ -185,4 +185,49 @@ export function ProfileRatesScreen() {
   );
 
   return <ProfileSubscreenScaffold title="Rates" body={body ?? <View />} />;
+}
+
+/**
+ * Owns save-in-flight/error state so the modal stays open (and locked shut
+ * via onSavingChange -> handle.setDismissible) while the request is in
+ * flight, and only dismisses on real success — instead of the old
+ * dismiss-then-save pattern, which closed the modal immediately regardless
+ * of whether the save actually succeeded.
+ */
+function AddRateModalBody({
+  onSaved,
+  onSavingChange,
+  load,
+  ...formProps
+}: {
+  onSaved: () => void;
+  onSavingChange: (saving: boolean) => void;
+  load: () => Promise<void>;
+  singleRatePerChannel: boolean;
+  callTypes: readonly CallType[];
+  durations: readonly number[];
+  minKobo: number;
+  maxKobo: number;
+}) {
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>();
+
+  async function handleSave(rate: AddedRate) {
+    setIsSaving(true);
+    onSavingChange(true);
+    setErrorMessage(undefined);
+    try {
+      await ratesApi.addRate({ callType: rate.callType, durationMinutes: rate.durationMinutes, priceKobo: priceToKobo(rate.price) });
+      await load();
+      showToast('Rate added successfully', { type: 'success' });
+      onSaved();
+    } catch (e) {
+      setErrorMessage(apiErrorMessage(e instanceof ApiError ? e : ApiError.network));
+    } finally {
+      setIsSaving(false);
+      onSavingChange(false);
+    }
+  }
+
+  return <AddRateForm {...formProps} isSaving={isSaving} errorMessage={errorMessage} onSave={(rate) => void handleSave(rate)} />;
 }

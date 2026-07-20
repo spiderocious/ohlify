@@ -67,8 +67,11 @@ const config: ExpoConfig = {
     ],
     '@react-native-community/datetimepicker',
   ],
-  // extra.eas.projectId is added once this project is linked to an EAS
-  // account (`eas init`) — intentionally absent until then, not fabricated.
+  extra: {
+    eas: {
+      projectId: 'fe98feb6-a953-46b7-9abc-3d917e9b2915',
+    },
+  },
 };
 
 export default config;

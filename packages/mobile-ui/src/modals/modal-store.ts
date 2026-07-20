@@ -255,7 +255,13 @@ function makeHandle(id: string): ModalHandle {
   const onDismissed = new Promise<void>((resolve) => {
     dismissResolvers.set(id, resolve);
   });
-  return { id, dismiss: () => dismiss(id), onDismissed };
+  return {
+    id,
+    dismiss: () => dismiss(id),
+    onDismissed,
+    setDismissible: (dismissible) =>
+      updateOptions<CustomModalEntry>(id, { dismissible, showCloseButton: dismissible }),
+  };
 }
 
 function addFeedback(
