@@ -194,11 +194,11 @@ export function ProfessionalDetailsScreen() {
       </ScrollView>
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, backgroundColor: colors.surfaceLight, borderTopWidth: 1, borderTopColor: colors.border }}>
         <View style={{ flex: 1 }}>
-          <AppButton label="Message" onPress={openChat} radius={100} height={52} variant="outline" />
+          <AppButton label="Message" onPress={openChat} radius={100} height={52} variant="outline" expanded />
         </View>
         <View style={{ width: 12 }} />
         <View style={{ flex: 1 }}>
-          <AppButton label="Call" onPress={startCall} radius={100} height={52} isDisabled={calling} />
+          <AppButton label="Call" onPress={startCall} radius={100} height={52} isDisabled={calling} expanded />
         </View>
       </View>
     </View>

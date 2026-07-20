@@ -47,6 +47,7 @@ import type {
   WalletTransactionView,
   WithdrawalView,
 } from './wallet.types.js';
+import { lookupWalletTxVocabulary } from './wallet.vocabulary.js';
 
 // Stable client-facing transaction `type` derived from the journal kind.
 // Mobile uses these strings directly. Withdrawals come in slice B.
@@ -82,38 +83,10 @@ const journalKindToTxType = (kind: string): string => {
   }
 };
 
-// Free-form description of the row for receipts / customer support.
-const describeTransaction = (kind: string, credit: boolean): string => {
-  switch (kind) {
-    case 'wallet_funding':
-      return 'Wallet funding';
-    case 'wallet_funding_reversed':
-      return 'Wallet funding reversed';
-    case 'call_payment_reserve':
-      return 'Call booking payment';
-    case 'call_settlement':
-      return credit ? 'Call earning' : 'Call settlement';
-    case 'call_refund':
-    case 'call_refund_post_settle':
-      return 'Call refund';
-    case 'withdrawal_requested':
-      return 'Withdrawal to bank';
-    case 'withdrawal_completed':
-      return 'Withdrawal completed';
-    case 'withdrawal_reversed':
-      return 'Withdrawal reversed';
-    case 'admin_credit':
-      return 'Manual credit';
-    case 'admin_debit':
-      return 'Manual debit';
-    case 'admin_manual':
-      return 'Manual adjustment';
-    case 'platform_promo_grant':
-      return 'Promotional credit';
-    default:
-      return kind;
-  }
-};
+// Legacy free-form description helper was here — replaced by
+// `lookupWalletTxVocabulary` (see wallet.vocabulary.ts), the single source
+// for title/description/icon across all clients. Kept the export removed so
+// stale callers fail loudly.
 
 // ── GET /wallet ──────────────────────────────────────────────────────────────
 
@@ -181,6 +154,8 @@ export const listTransactions = async (dto: TransactionsQueryDto, userId: string
 
   const items: WalletTransactionView[] = page.map((row) => {
     const signed = BigInt(row.signed_amount_kobo);
+    const direction: 'credit' | 'debit' = signed > 0n ? 'credit' : 'debit';
+    const vocab = lookupWalletTxVocabulary(row.journal_kind, direction);
     return {
       id: row.entry_id,
       journal_id: row.journal_id,
@@ -193,7 +168,10 @@ export const listTransactions = async (dto: TransactionsQueryDto, userId: string
       // states by writing distinct journal kinds.
       status: 'completed',
       occurred_at: row.occurred_at.toISOString(),
-      description: describeTransaction(row.journal_kind, signed > 0n),
+      description: vocab.description,
+      title: vocab.title,
+      icon: vocab.icon,
+      direction,
       related_call_id: row.related_call_id,
       related_payment_id: row.related_payment_id,
       related_withdrawal_id: row.related_withdrawal_id,

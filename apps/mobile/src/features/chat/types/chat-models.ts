@@ -43,6 +43,17 @@ export function chatMessageIsSchedule(m: ChatMessage): boolean {
   return m.kind === 'schedule';
 }
 
+/** Local delivery state layered on top of a ChatMessage for optimistic send — never sent to or read from the server. */
+export type MessageDeliveryStatus = 'sent' | 'sending' | 'failed';
+
+export interface OptimisticChatMessage extends ChatMessage {
+  deliveryStatus: MessageDeliveryStatus;
+}
+
+export function withDeliveryStatus(message: ChatMessage, deliveryStatus: MessageDeliveryStatus = 'sent'): OptimisticChatMessage {
+  return { ...message, deliveryStatus };
+}
+
 export function chatMessageFromJson(json: Record<string, unknown>): ChatMessage {
   return {
     id: json.id as string,

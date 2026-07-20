@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   Text,
   View,
@@ -10,6 +11,7 @@ import {
 } from 'react-native';
 
 import { colors } from '../../theme/colors';
+import { duration } from '../../theme/motion';
 
 /**
  * A flexible branded button with four visual variants. 1:1 with
@@ -82,13 +84,24 @@ export function AppButton({
   style,
   testID,
 }: AppButtonProps) {
-  const [isPressed, setIsPressed] = useState(false);
   const effectivelyDisabled = isDisabled || isLoading || onPress === undefined;
+  const pressProgress = useRef(new Animated.Value(0)).current;
+
+  function onPressIn() {
+    Animated.timing(pressProgress, { toValue: 1, duration: duration.instant, useNativeDriver: true }).start();
+  }
+
+  function onPressOut() {
+    Animated.timing(pressProgress, { toValue: 0, duration: duration.instant, useNativeDriver: true }).start();
+  }
 
   const isBordered = bordered ?? variant === 'outline';
   const effectiveBorderColor =
     variant === 'outline' && bordered === undefined ? colors.primary : borderColor;
   const foreground = FOREGROUND_BY_VARIANT[variant];
+
+  const scale = pressProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] });
+  const pressOpacity = pressProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.85] });
 
   const containerStyle: ViewStyle = {
     height,
@@ -101,7 +114,7 @@ export function AppButton({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal,
-    opacity: effectivelyDisabled ? 0.45 : isPressed ? 0.85 : 1,
+    opacity: effectivelyDisabled ? 0.45 : 1,
   };
 
   const labelStyle: TextStyle = {
@@ -115,24 +128,31 @@ export function AppButton({
   return (
     <Pressable
       onPress={effectivelyDisabled ? undefined : onPress}
-      onPressIn={() => setIsPressed(true)}
-      onPressOut={() => setIsPressed(false)}
+      onPressIn={effectivelyDisabled ? undefined : onPressIn}
+      onPressOut={effectivelyDisabled ? undefined : onPressOut}
       disabled={effectivelyDisabled}
-      style={[containerStyle, style]}
       testID={testID}
     >
-      {children ?? (
-        <View className="flex-row items-center">
-          {startIcon}
-          {startIcon ? <View className="w-2" /> : null}
-          {isLoading ? (
-            <ActivityIndicator size="small" color={foreground} />
-          ) : (
-            <Text style={labelStyle}>{label}</Text>
-          )}
-          {endIcon ? <View className="ml-auto">{endIcon}</View> : null}
-        </View>
-      )}
+      <Animated.View
+        style={[
+          containerStyle,
+          style,
+          !effectivelyDisabled ? { opacity: pressOpacity, transform: [{ scale }] } : null,
+        ]}
+      >
+        {children ?? (
+          <View className="flex-row items-center">
+            {startIcon}
+            {startIcon ? <View className="w-2" /> : null}
+            {isLoading ? (
+              <ActivityIndicator size="small" color={foreground} />
+            ) : (
+              <Text style={labelStyle}>{label}</Text>
+            )}
+            {endIcon ? <View className="ml-auto">{endIcon}</View> : null}
+          </View>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }

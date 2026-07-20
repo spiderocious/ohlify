@@ -38,6 +38,13 @@ export interface PresenceConfig {
   online_window_seconds: number;
   // How long an instant call rings the callee before giving up (unavailable).
   ring_timeout_seconds: number;
+  // Dead switch: when false, both mobile clients (RN + Flutter) never call
+  // POST /me/presence/heartbeat at all. Public — clients read it via
+  // GET /platform-config/public before starting their heartbeat timer.
+  heartbeat_enabled: boolean;
+  // How often (seconds) an online pro's client calls the heartbeat endpoint.
+  // Public — clients read it via GET /platform-config/public.
+  heartbeat_interval_seconds: number;
 }
 
 export interface ChatConfig {
@@ -134,6 +141,8 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
   presence: {
     online_window_seconds: 60,
     ring_timeout_seconds: 30,
+    heartbeat_enabled: true,
+    heartbeat_interval_seconds: 30,
   },
   chat: {
     low_minutes_threshold: 5,
@@ -298,6 +307,14 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       ring_timeout_seconds: num(
         get('presence.ring_timeout_seconds', d.presence.ring_timeout_seconds),
         d.presence.ring_timeout_seconds,
+      ),
+      heartbeat_enabled: bool(
+        get('presence.heartbeat_enabled', d.presence.heartbeat_enabled),
+        d.presence.heartbeat_enabled,
+      ),
+      heartbeat_interval_seconds: num(
+        get('presence.heartbeat_interval_seconds', d.presence.heartbeat_interval_seconds),
+        d.presence.heartbeat_interval_seconds,
       ),
     },
     chat: {

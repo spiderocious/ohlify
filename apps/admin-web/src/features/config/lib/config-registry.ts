@@ -56,6 +56,7 @@ export interface ConfigGroup {
 export const CONFIG_GROUPS: ReadonlyArray<ConfigGroup> = [
   { id: 'wallet', label: 'Wallet & payouts', order: 10 },
   { id: 'bookings', label: 'Bookings & calls', order: 20 },
+  { id: 'presence', label: 'Presence & heartbeat', order: 25 },
   { id: 'rates', label: 'Rates', order: 30 },
   { id: 'professional', label: 'Pro strikes', order: 40 },
   { id: 'caller', label: 'Caller strikes', order: 50 },
@@ -70,7 +71,7 @@ export const CONFIG_GROUPS: ReadonlyArray<ConfigGroup> = [
 
 /**
  * The actual catalogue. Keep this in sync with the seeded values across
- * migrations 0016, 0036, 0047, 0049, 0051, 0062.
+ * migrations 0016, 0036, 0047, 0049, 0051, 0062, 0076.
  */
 export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
   // ── auth ────────────────────────────────────────────────────────────────
@@ -169,6 +170,42 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     label: 'Agora RTC token TTL',
     min: 60,
     max: 86400,
+  },
+
+  // ── presence ────────────────────────────────────────────────────────────
+  {
+    key: 'presence.heartbeat_enabled',
+    kind: 'boolean',
+    label: 'Heartbeat enabled',
+    help: 'Dead switch. When OFF, neither mobile app (React Native or Flutter) ever calls the presence heartbeat endpoint — instant-call reachability then always resolves to offline for every professional. Public.',
+    group: 'presence',
+  },
+  {
+    key: 'presence.heartbeat_interval_seconds',
+    kind: 'duration_seconds',
+    label: 'Heartbeat interval',
+    help: 'How often an online professional’s app pings the heartbeat endpoint. Public — both mobile apps read this to schedule their timer.',
+    min: 5,
+    max: 600,
+    group: 'presence',
+  },
+  {
+    key: 'presence.online_window_seconds',
+    kind: 'duration_seconds',
+    label: 'Online window',
+    help: 'How stale a professional’s last heartbeat can be before they’re considered offline for instant-call reachability. Server-only — not exposed to clients. Keep comfortably above the heartbeat interval to tolerate a missed ping or two.',
+    min: 10,
+    max: 3600,
+    group: 'presence',
+  },
+  {
+    key: 'presence.ring_timeout_seconds',
+    kind: 'duration_seconds',
+    label: 'Ring timeout',
+    help: 'How long an instant call rings the callee before giving up as unavailable.',
+    min: 5,
+    max: 120,
+    group: 'presence',
   },
 
   // ── rates ────────────────────────────────────────────────────────────────

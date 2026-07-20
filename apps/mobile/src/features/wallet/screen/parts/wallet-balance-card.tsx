@@ -1,13 +1,22 @@
-import { AppIcon, AppText, ProfessionalView, colors } from '@ohlify/mobile-ui';
+import { AnimatedBalance, AppText, ProfessionalView, colors } from '@ohlify/mobile-ui';
 import { Pressable, View } from 'react-native';
 
+import { formatKobo } from '@features/wallet/types/wallet-models';
+
 export interface WalletBalanceCardProps {
-  balance: string;
+  balanceKobo: number;
+  currency?: string;
   onWithdraw: () => void;
 }
 
-/** Mirrors mobile/lib/features/wallet/screen/parts/wallet_balance_card.dart. Withdraw is a payout of earnings, so it's professional-only. */
-export function WalletBalanceCard({ balance, onWithdraw }: WalletBalanceCardProps) {
+/**
+ * Mirrors mobile/lib/features/wallet/screen/parts/wallet_balance_card.dart.
+ * Withdraw is a payout of earnings, so it's professional-only. Balance
+ * counts up/down from its previous value on change (funding, withdrawal,
+ * refresh) rather than snapping — money screens are where users pay the
+ * most attention, so this is the highest-payoff single animation in the app.
+ */
+export function WalletBalanceCard({ balanceKobo, currency = 'NGN', onWithdraw }: WalletBalanceCardProps) {
   return (
     <View style={{ padding: 24, backgroundColor: colors.primary, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
       <View style={{ flex: 1 }}>
@@ -15,9 +24,14 @@ export function WalletBalanceCard({ balance, onWithdraw }: WalletBalanceCardProp
           Wallet balance
         </AppText>
         <View style={{ height: 6 }} />
-        <AppText variant="header" color={colors.textWhite} align="left" weight="700">
-          {balance}
-        </AppText>
+        <AnimatedBalance
+          value={balanceKobo}
+          format={(kobo) => formatKobo(kobo, currency)}
+          variant="header"
+          color={colors.textWhite}
+          align="left"
+          weight="700"
+        />
         <ProfessionalView>
           <View style={{ height: 20 }} />
           <WithdrawButton onPress={onWithdraw} />

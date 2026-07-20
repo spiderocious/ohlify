@@ -1,27 +1,61 @@
-import { AppIcon, AppText, colors, type AppIconName } from '@ohlify/mobile-ui';
+import { AppIcon, AppText, colors, type AppIconName, AppIconNames } from '@ohlify/mobile-ui';
 import { Fragment } from 'react';
 import { View } from 'react-native';
 
-import { transactionIsCredit, transactionIsDebit, transactionTitle, type Transaction, type TransactionStatus, type TransactionType } from '../../types/transaction';
+import {
+  formatKobo,
+  walletTransactionIsCredit,
+  walletTransactionIsSuccess,
+  type WalletTransaction,
+} from '../../types/wallet-models';
 
 export interface TransactionHistoryListProps {
-  transactions: Transaction[];
+  transactions: WalletTransaction[];
 }
 
-const ICON_BY_TYPE: Record<TransactionType, AppIconName> = {
-  withdrawalToBank: 'building',
-  paymentAudioCall: 'phone',
-  scheduledAudioCall: 'phone',
-  paymentVideoCall: 'video',
-};
-
-const STATUS_LABEL: Record<TransactionStatus, string> = {
+const STATUS_LABEL: Record<'completed' | 'pending' | 'failed', string> = {
   completed: 'Completed',
   pending: 'Pending',
   failed: 'Failed',
 };
 
-/** Mirrors mobile/lib/features/wallet/screen/parts/transaction_history_list.dart. */
+const FALLBACK_ICON: AppIconName = 'admin_shield';
+
+// Server ships an icon KEY; render the corresponding AppIcon. If the server
+// ships a key the client doesn't know yet, fall back cleanly rather than
+// crashing (the vocabulary is meant to be a closed set — see backend
+// wallet.vocabulary.ts — but we defend the edge).
+function iconFor(t: WalletTransaction): AppIconName {
+  return t.icon in AppIconNames ? (t.icon as AppIconName) : FALLBACK_ICON;
+}
+
+function statusFor(t: WalletTransaction): 'completed' | 'pending' | 'failed' {
+  if (walletTransactionIsSuccess(t)) return 'completed';
+  if (t.status === 'pending') return 'pending';
+  return 'failed';
+}
+
+function amountLabel(t: WalletTransaction): string {
+  const pretty = formatKobo(Math.abs(t.amountKobo), 'NGN');
+  if (!pretty.startsWith('₦')) return pretty;
+  return `${walletTransactionIsCredit(t) ? '+' : '-'}${pretty}`;
+}
+
+function amountColor(t: WalletTransaction): string {
+  return walletTransactionIsCredit(t) ? colors.success : colors.danger;
+}
+
+function statusColor(status: 'completed' | 'pending' | 'failed'): string {
+  switch (status) {
+    case 'completed':
+      return colors.success;
+    case 'pending':
+      return colors.warning;
+    case 'failed':
+      return colors.danger;
+  }
+}
+
 export function TransactionHistoryList({ transactions }: TransactionHistoryListProps) {
   return (
     <View>
@@ -39,44 +73,28 @@ export function TransactionHistoryList({ transactions }: TransactionHistoryListP
   );
 }
 
-function amountColor(tx: Transaction): string {
-  if (transactionIsCredit(tx)) return colors.success;
-  if (transactionIsDebit(tx)) return colors.danger;
-  return colors.textJet;
-}
-
-function statusColor(status: TransactionStatus): string {
-  switch (status) {
-    case 'completed':
-      return colors.success;
-    case 'pending':
-      return colors.warning;
-    case 'failed':
-      return colors.danger;
-  }
-}
-
-function TransactionRow({ tx }: { tx: Transaction }) {
+function TransactionRow({ tx }: { tx: WalletTransaction }) {
+  const status = statusFor(tx);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
-      <IconBubble icon={ICON_BY_TYPE[tx.type]} />
+      <IconBubble icon={iconFor(tx)} />
       <View style={{ width: 12 }} />
       <View style={{ flex: 1 }}>
         <AppText variant="body" color={colors.textJet} weight="600" align="left">
-          {transactionTitle(tx)}
+          {tx.title}
         </AppText>
         <View style={{ height: 2 }} />
         <AppText variant="label" color={colors.textMuted} align="left">
-          {tx.datetime}
+          {new Date(tx.createdAt).toLocaleString()}
         </AppText>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
         <AppText variant="body" color={amountColor(tx)} weight="600" align="right">
-          {tx.amount}
+          {amountLabel(tx)}
         </AppText>
         <View style={{ height: 2 }} />
-        <AppText variant="label" color={statusColor(tx.status)} align="right">
-          {STATUS_LABEL[tx.status]}
+        <AppText variant="label" color={statusColor(status)} align="right">
+          {STATUS_LABEL[status]}
         </AppText>
       </View>
     </View>
@@ -85,7 +103,16 @@ function TransactionRow({ tx }: { tx: Transaction }) {
 
 function IconBubble({ icon }: { icon: AppIconName }) {
   return (
-    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' }}>
+    <View
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <AppIcon name={icon} size={20} color={colors.primary} />
     </View>
   );

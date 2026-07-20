@@ -49,6 +49,7 @@ export const AppIconNames = {
   info: 'info-outline',
   warning: 'warning-amber',
   error: 'error-outline',
+  wifiOff: 'wifi-off',
 
   // Visibility
   eye: 'visibility',
@@ -91,6 +92,20 @@ export const AppIconNames = {
 
   // Finance
   building: 'account-balance',
+
+  // Wallet transaction vocabulary — keys shipped by GET /wallet/transactions
+  // (see backend `wallet.vocabulary.ts`). Mirror the Flutter registry in
+  // mobile/lib/ui/icons/app_icons.dart. Both registries MUST know every
+  // key the server can send, or icons render blank.
+  wallet_plus: 'account-balance-wallet',
+  wallet_minus: 'money-off',
+  phone_outgoing: 'call-made',
+  phone_incoming: 'call-received',
+  phone_refund: 'phone-callback',
+  bank_arrow_up: 'north',
+  bank_arrow_down: 'south',
+  admin_shield: 'admin-panel-settings',
+  gift: 'card-giftcard',
 
   // Dev tools
   components: 'widgets',

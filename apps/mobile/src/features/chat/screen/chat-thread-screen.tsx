@@ -1,11 +1,12 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppButton, AppIcon, AppIconButton, AppText, colors, showToast } from '@ohlify/mobile-ui';
+import { AppButton, AppIcon, AppIconButton, AppText, colors, showToast, spring } from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 import { pickDateTime } from '@shared/parts/pick-date-time';
+import { idempotencyKey } from '@shared/utils/idempotency';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import type { ChatsStackParamList } from '../../../main-tabs.navigation';
@@ -13,7 +14,12 @@ import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
 import { chatApi } from '../api/chat-api';
 import { CreditsBanner } from './parts/credits-banner';
 import { ScheduleCard } from './parts/schedule-card';
-import { chatMessageIsSchedule, type ChatMessage, type ConversationContext } from '../types/chat-models';
+import {
+  chatMessageIsSchedule,
+  withDeliveryStatus,
+  type ConversationContext,
+  type OptimisticChatMessage,
+} from '../types/chat-models';
 
 type ChatsNavigation = NativeStackNavigationProp<ChatsStackParamList>;
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
@@ -25,8 +31,11 @@ export function ChatThreadScreen() {
   const route = useRoute<RouteType>();
   const { conversationId } = route.params;
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<OptimisticChatMessage[]>([]);
   const [context, setContext] = useState<ConversationContext | undefined>(undefined);
+  // True only for the very first load — a background refetch (e.g. after
+  // markRead or a schedule action) keeps showing whatever's already on
+  // screen instead of re-blocking with a spinner every time.
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
 
@@ -34,7 +43,7 @@ export function ChatThreadScreen() {
     try {
       const [msgs, ctx] = await Promise.all([chatApi.listMessages(conversationId), chatApi.context(conversationId)]);
       // API returns newest-first; reverse for chronological display.
-      setMessages([...msgs].reverse());
+      setMessages([...msgs].reverse().map((m) => withDeliveryStatus(m)));
       setContext(ctx);
     } catch {
       // Non-fatal — screen stays with whatever it had.
@@ -54,14 +63,45 @@ export function ChatThreadScreen() {
     showToast(msg, { type: 'error' });
   }
 
-  async function send() {
-    const body = draft.trim();
+  /** Pushes `body` into the thread immediately as "sending", then reconciles
+   * with the server response (or marks it "failed — tap to retry" on error)
+   * rather than waiting for the round trip before showing anything. Chat is
+   * the highest-frequency screen in the app, so this is the single change
+   * that will make it feel most alive. */
+  async function send(retryOf?: OptimisticChatMessage) {
+    const body = retryOf?.body ?? draft.trim();
     if (!body || !canSend) return;
-    setDraft('');
+
+    const localId = retryOf?.id ?? idempotencyKey();
+    const optimistic: OptimisticChatMessage = retryOf
+      ? { ...retryOf, deliveryStatus: 'sending' }
+      : {
+          id: localId,
+          conversationId,
+          senderUserId: '',
+          mine: true,
+          body,
+          createdAt: new Date().toISOString(),
+          kind: 'text',
+          canAccept: false,
+          canDecline: false,
+          canReschedule: false,
+          canCancel: false,
+          deliveryStatus: 'sending',
+        };
+
+    if (retryOf) {
+      setMessages((prev) => prev.map((m) => (m.id === localId ? optimistic : m)));
+    } else {
+      setDraft('');
+      setMessages((prev) => [...prev, optimistic]);
+    }
+
     try {
-      const msg = await chatApi.send(conversationId, body);
-      setMessages((prev) => [...prev, msg]);
+      const sent = await chatApi.send(conversationId, body);
+      setMessages((prev) => prev.map((m) => (m.id === localId ? withDeliveryStatus(sent) : m)));
     } catch (e) {
+      setMessages((prev) => prev.map((m) => (m.id === localId ? { ...optimistic, deliveryStatus: 'failed' } : m)));
       toastError(apiErrorMessage(e instanceof ApiError ? e : ApiError.network));
     }
   }
@@ -151,7 +191,7 @@ export function ChatThreadScreen() {
               chatMessageIsSchedule(m) ? (
                 <ScheduleCard key={m.id} message={m} onAction={(action) => scheduleAction(m.id, action)} onReschedule={() => reschedule(m.id, m.scheduledAt)} onJoin={call} />
               ) : (
-                <Bubble key={m.id} message={m} />
+                <Bubble key={m.id} message={m} onRetry={() => send(m)} />
               ),
             )}
           </ScrollView>
@@ -180,29 +220,56 @@ export function ChatThreadScreen() {
           />
         </View>
         <View style={{ width: 8 }} />
-        <AppButton label="Send" radius={100} height={44} isDisabled={!canSend} onPress={canSend ? send : undefined} />
+        <AppButton label="Send" radius={100} height={44} isDisabled={!canSend} onPress={canSend ? () => send() : undefined} />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
-  return (
-    <View style={{ alignItems: message.mine ? 'flex-end' : 'flex-start' }}>
+/** New/incoming bubbles slide+fade in rather than popping into the list —
+ * a new message is the highest-frequency motion moment in this screen. */
+function Bubble({ message, onRetry }: { message: OptimisticChatMessage; onRetry: () => void }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(progress, { toValue: 1, useNativeDriver: true, ...spring.snappy }).start();
+    // Only animate this bubble's own mount — re-renders from a delivery
+    // status change (sending → sent/failed) should not replay the entrance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const opacity = progress;
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
+  const isFailed = message.deliveryStatus === 'failed';
+  const isSending = message.deliveryStatus === 'sending';
+
+  const content = (
+    <Animated.View style={{ alignItems: message.mine ? 'flex-end' : 'flex-start', opacity, transform: [{ translateY }] }}>
       <View
         style={{
-          marginBottom: 8,
+          marginBottom: 4,
           paddingHorizontal: 14,
           paddingVertical: 8,
           maxWidth: '75%',
           backgroundColor: message.mine ? colors.primary : colors.surfaceLight,
           borderRadius: 16,
+          opacity: isSending ? 0.6 : 1,
+          borderWidth: isFailed ? 1 : 0,
+          borderColor: colors.error,
         }}
       >
         <AppText variant="body" color={message.mine ? colors.textWhite : colors.textJet} align="left">
           {message.body}
         </AppText>
       </View>
-    </View>
+      {isFailed ? (
+        <AppText variant="bodySmall" color={colors.error} align="left">
+          Failed to send · Tap to retry
+        </AppText>
+      ) : null}
+      <View style={{ height: isFailed ? 4 : 8 }} />
+    </Animated.View>
   );
+
+  return isFailed ? <Pressable onPress={onRetry}>{content}</Pressable> : content;
 }

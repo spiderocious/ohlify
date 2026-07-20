@@ -26,7 +26,25 @@ export interface WalletTransactionView {
   currency: string;
   status: 'completed' | 'pending' | 'failed';
   occurred_at: string;
+  /** Long-form label (receipts, detail sheets). */
   description: string;
+  /**
+   * Short label for the transaction list row. Sourced from the server-side
+   * vocabulary (wallet.vocabulary.ts) so every client renders identical
+   * copy — no per-client mapper.
+   */
+  title: string;
+  /**
+   * Icon key both mobile clients agree on. See wallet.vocabulary.ts →
+   * `WALLET_TX_ICONS` for the closed set.
+   */
+  icon: string;
+  /**
+   * `credit` = money into this user's wallet, `debit` = money out. Derived
+   * from the sign of the wallet_entry — clients should render tint / +/-
+   * from this rather than string-sniffing the formatted amount.
+   */
+  direction: 'credit' | 'debit';
   related_call_id: string | null;
   related_payment_id: string | null;
   related_withdrawal_id: string | null;

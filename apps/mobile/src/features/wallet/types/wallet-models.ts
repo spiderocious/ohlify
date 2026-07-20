@@ -35,9 +35,14 @@ export function walletStatsFromJson(json: Record<string, unknown>): WalletStats 
   };
 }
 
-const CREDIT_TYPES = new Set(['wallet_funding', 'call_earning', 'call_refund', 'admin_credit', 'promo_credit']);
+/**
+ * Backend-shaped wallet transaction. `title`, `icon`, and `direction` are
+ * shipped by the server (see api-docs/slice-a-wallet-engine-apis.md §11) and
+ * rendered as-is. No client-side kind→label mapper — the server owns the
+ * vocabulary, the client trusts it.
+ */
+export type WalletTxDirection = 'credit' | 'debit';
 
-/** Backend `WalletTransaction.type` — kept raw, mapped to a UI label/icon at render time. */
 export interface WalletTransaction {
   id: string;
   type: string;
@@ -45,18 +50,36 @@ export interface WalletTransaction {
   /** `completed | pending | failed | reversed`. Older callers may send `success`. */
   status: string;
   createdAt: string;
-  description?: string;
+  /** Long-form label (receipts, detail sheets). */
+  description: string;
+  /** Short label for list rows. */
+  title: string;
+  /**
+   * Server-shipped icon key. See backend `WALLET_TX_ICONS` and the
+   * corresponding entries in `@ohlify/mobile-ui`'s `AppIconNames`.
+   */
+  icon: string;
+  direction: WalletTxDirection;
   reference?: string;
 }
 
 export function walletTransactionFromJson(json: Record<string, unknown>): WalletTransaction {
+  const direction =
+    (json.direction as WalletTxDirection | undefined) ??
+    // Legacy fallback for old backend responses that predate the direction
+    // field. Positive amount ⇒ credit, negative ⇒ debit.
+    (typeof json.amount_kobo === 'number' && json.amount_kobo > 0 ? 'credit' : 'debit');
+  const desc = (json.description as string | undefined) ?? '';
   return {
     id: json.id as string,
     type: (json.type as string) ?? 'unknown',
     amountKobo: typeof json.amount_kobo === 'number' ? json.amount_kobo : 0,
     status: (json.status as string) ?? 'completed',
     createdAt: ((json.occurred_at ?? json.created_at) as string) ?? new Date().toISOString(),
-    description: json.description as string | undefined,
+    description: desc,
+    title: (json.title as string | undefined) ?? desc,
+    icon: (json.icon as string | undefined) ?? 'admin_shield',
+    direction,
     reference: json.reference as string | undefined,
   };
 }
@@ -66,7 +89,7 @@ export function walletTransactionIsSuccess(t: WalletTransaction): boolean {
 }
 
 export function walletTransactionIsCredit(t: WalletTransaction): boolean {
-  return CREDIT_TYPES.has(t.type);
+  return t.direction === 'credit';
 }
 
 export interface FundInitResponse {

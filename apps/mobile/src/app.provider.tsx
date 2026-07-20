@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { AuthSessionProvider } from '@features/auth/providers/auth-session-provider';
+import { HeartbeatProvider } from '@features/presence/providers/heartbeat-provider';
 import { AppConfigProvider } from '@shared/providers/app-config-provider';
 
 /**
@@ -28,7 +29,9 @@ export function AppProvider({ children }: AppProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AppConfigProvider>
-        <AuthSessionProvider>{children}</AuthSessionProvider>
+        <AuthSessionProvider>
+          <HeartbeatProvider>{children}</HeartbeatProvider>
+        </AuthSessionProvider>
       </AppConfigProvider>
     </QueryClientProvider>
   );

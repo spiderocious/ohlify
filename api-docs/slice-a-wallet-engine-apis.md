@@ -328,7 +328,10 @@ Cursor-paginated user transaction list.
       "currency": "NGN",
       "status": "completed",
       "occurred_at": "2026-04-27T...",
+      "title": "Wallet funding",
       "description": "Wallet funding",
+      "icon": "wallet_plus",
+      "direction": "credit",
       "related_call_id": null,
       "related_payment_id": "pay_01j...",
       "related_withdrawal_id": null
@@ -339,8 +342,11 @@ Cursor-paginated user transaction list.
 ```
 
 **Notes**
-- `amount_kobo` is **signed**. Positive = credit to user's wallet, negative = debit. Client uses sign to render `+₦500.00` vs `-₦300.00`.
-- `type` strings are stable derivations from journal kind: `wallet_funding`, `call_payment`, `call_earning`, `call_refund`, `withdrawal`, `withdrawal_completed`, `withdrawal_reversed`, `admin_credit`, `admin_debit`, `admin_manual`, `promo_credit`.
+- `amount_kobo` is **signed**. Positive = credit to user's wallet, negative = debit. Client renders `+₦500.00` vs `-₦300.00` from the `direction` field (or the sign), not from string-sniffing.
+- `direction` (`credit | debit`) is the canonical "money in vs money out" signal — derived from the sign of `signed_amount_kobo` for this user's wallet entry. Prefer this over inspecting `amount_kobo`.
+- `title` is the short label the list row displays. `description` is the long-form label used on receipts / detail sheets. Both come from the **server-side vocabulary** (`apps/backend/src/features/wallet/wallet.vocabulary.ts`) so every client renders identical copy.
+- `icon` is a stable key from a closed set both mobile clients agree on: `wallet_plus`, `wallet_minus`, `phone_outgoing`, `phone_incoming`, `phone_refund`, `bank_arrow_up`, `bank_arrow_down`, `admin_shield`, `gift`, `clock`. Adding a new icon requires registering it in **both** `@ohlify/mobile-ui` (RN) and `mobile/lib/ui/icons/app_icons.dart` (Flutter) before shipping it here.
+- `type` strings are stable derivations from journal kind: `wallet_funding`, `call_payment`, `call_earning`, `call_refund`, `withdrawal`, `withdrawal_completed`, `withdrawal_reversed`, `admin_credit`, `admin_debit`, `admin_manual`, `promo_credit`, `minutes_purchase`, `minutes_settlement`. Kept for backward-compat and for callers that want a coarse client-side switch; render UI off `title` + `icon` + `direction`.
 - `reference` is **our internal reference** (surfaced to users). Paystack's reference is stored in `payments.paystack_reference` but never exposed.
 - Slice A: every visible row has `status = 'completed'`. Withdrawal in-flight states arrive in slice B.
 

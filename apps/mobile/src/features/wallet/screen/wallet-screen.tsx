@@ -1,9 +1,18 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppButton, ClientView, colors, AppText, showCustomModal, showFeedbackModal, showToast } from '@ohlify/mobile-ui';
+import {
+  AppButton,
+  ClientView,
+  colors,
+  AppText,
+  showCustomModal,
+  showFeedbackModal,
+  showToast,
+  TransactionHistorySkeleton,
+} from '@ohlify/mobile-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
@@ -17,37 +26,10 @@ import { TransactionHistoryList } from './parts/transaction-history-list';
 import { WalletBalanceCard } from './parts/wallet-balance-card';
 import { WalletStatsRow } from './parts/wallet-stats-row';
 import { WithdrawModalContent } from './parts/withdraw-modal-content';
-import { formatKobo, walletTransactionIsCredit, type WalletTransaction } from '../types/wallet-models';
-import type { Transaction, TransactionStatus, TransactionType } from '../types/transaction';
+import type { WalletTransaction } from '../types/wallet-models';
 
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 type WalletRouteProp = RouteProp<MainTabParamList, 'WalletTab'>;
-
-function adaptStatus(status: string): TransactionStatus {
-  if (status === 'completed' || status === 'success') return 'completed';
-  if (status === 'pending') return 'pending';
-  return 'failed';
-}
-
-function adaptType(type: string): TransactionType {
-  if (type === 'withdrawal') return 'withdrawalToBank';
-  if (['wallet_funding', 'call_earning', 'call_refund', 'admin_credit', 'promo_credit'].includes(type)) return 'scheduledAudioCall';
-  if (type === 'call_payment') return 'paymentAudioCall';
-  return 'scheduledAudioCall';
-}
-
-function adaptTransaction(t: WalletTransaction): Transaction {
-  const isCredit = walletTransactionIsCredit(t);
-  const pretty = formatKobo(t.amountKobo, 'NGN');
-  const signed = pretty.startsWith('₦') ? `${isCredit ? '+' : '-'}${pretty}` : pretty;
-  return {
-    id: t.id,
-    type: adaptType(t.type),
-    datetime: new Date(t.createdAt).toLocaleString(),
-    amount: signed,
-    status: adaptStatus(t.status),
-  };
-}
 
 /** Mirrors mobile/lib/features/wallet/screen/wallet_screen.dart. */
 export function WalletScreen() {
@@ -62,7 +44,8 @@ export function WalletScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const consumedOpenFund = useRef(false);
 
-  const balanceLabel = wallet.data ? formatKobo(wallet.data.balanceKobo, wallet.data.currency) : '₦0';
+  const balanceKobo = wallet.data?.balanceKobo ?? 0;
+  const balanceCurrency = wallet.data?.currency ?? 'NGN';
   const statsData = useMemo(
     () => ({
       thisWeek: stats.data ? Math.round(stats.data.thisWeekKobo / 100) : 0,
@@ -71,7 +54,10 @@ export function WalletScreen() {
     }),
     [stats.data],
   );
-  const txItems = useMemo(() => transactions.data?.pages.flatMap((p) => p.items).map(adaptTransaction) ?? [], [transactions.data]);
+  const txItems = useMemo<WalletTransaction[]>(
+    () => transactions.data?.pages.flatMap((p) => p.items) ?? [],
+    [transactions.data],
+  );
 
   async function refreshAll() {
     setIsRefreshing(true);
@@ -205,7 +191,7 @@ export function WalletScreen() {
           Wallet
         </AppText>
         <View style={{ height: 20 }} />
-        <WalletBalanceCard balance={balanceLabel} onWithdraw={openWithdraw} />
+        <WalletBalanceCard balanceKobo={balanceKobo} currency={balanceCurrency} onWithdraw={openWithdraw} />
         <ClientView>
           <View style={{ height: 12 }} />
           <AppButton label="Fund wallet" variant="outline" expanded radius={100} onPress={openFund} />
@@ -214,9 +200,7 @@ export function WalletScreen() {
         <WalletStatsRow stats={statsData} />
         <View style={{ height: 24 }} />
         {isLoadingBalance ? (
-          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
+          <TransactionHistorySkeleton />
         ) : (
           <TransactionHistoryList transactions={txItems} />
         )}
