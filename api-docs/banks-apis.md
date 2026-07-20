@@ -20,7 +20,9 @@
 
 ## 1. `GET /api/v1/banks`
 
-Returns the full list of active banks. Cached aggressively at the CDN; the server emits a strong cache header + a weak ETag derived from `MAX(banks.synced_at)`.
+Returns the full list of active Nigerian banks, sourced live from **Paystack `GET /bank`** and cached server-side in **Redis for 24h** (key `paystack:banks:list:v1`). The server emits a strong cache header + a weak ETag derived from the cache's `synced_at` timestamp so downstream CDNs and clients can revalidate cheaply.
+
+**Stale-while-error:** if the Redis "fresh" window (24h) has elapsed and Paystack is unreachable, the server serves the last-known cached list (retained up to 7 days) rather than returning `[]` or a 502. Only when there is **no** cached list at all AND Paystack is down does the endpoint fail — at which point it surfaces the upstream error.
 
 **Auth:** Bearer.
 
@@ -45,7 +47,7 @@ Returns the full list of active banks. Cached aggressively at the CDN; the serve
 | Header | Value | Notes |
 |---|---|---|
 | `Cache-Control` | `public, max-age=86400` | 24 hours |
-| `ETag` | `W/"banks-<sha256-prefix>"` | Weak, derived from `MAX(synced_at)` |
+| `ETag` | `W/"banks-<sha256-prefix>"` | Weak, derived from the Redis cache's `synced_at` ISO timestamp |
 
 **Errors**
 | Status | code | When |
@@ -58,8 +60,8 @@ Returns the full list of active banks. Cached aggressively at the CDN; the serve
 **Notes for clients**
 - The list is sorted alphabetically by `name`.
 - `code` is the Paystack bank code — that's the value to send to `PUT /me/bank-account` and `GET /banks/resolve`.
-- `logo_url` may be `null` until banks are synced from Paystack with logos. Render a placeholder.
-- The list refreshes when an admin re-syncs banks; the ETag changes as a side effect, so clients on `If-None-Match` immediately re-fetch.
+- `logo_url` is currently always `null` (Paystack `/bank` does not ship logos). Render a placeholder.
+- The list refreshes automatically every 24h from Paystack; the ETag changes as a side effect, so clients on `If-None-Match` immediately re-fetch.
 
 ---
 
@@ -89,7 +91,7 @@ Synchronous Paystack name-enquiry. Use this on the bank-account form to show the
 |---|---|---|
 | 400 | `validation_error` | Bad query shape — includes `field_errors` for `account_number` and/or `bank_code` |
 | 401 | `unauthorized` | Bearer header missing/invalid |
-| 422 | `bank_not_found` | `bank_code` is unknown or marked inactive in our `banks` table |
+| 422 | `bank_not_found` | `bank_code` is not present in Paystack's live bank list (or that bank is marked inactive by Paystack) |
 | 422 | `unresolvable_account` | Paystack returned no match for `(account_number, bank_code)` |
 | 429 | `rate_limited` | Per-user (30/60s or 100/60m) or global limit hit; includes `Retry-After` |
 | 502 | `upstream_unavailable` | Paystack upstream error (timeout, 5xx). Response includes `Retry-After: 5`. Retry after that hint (or longer with exponential backoff). |

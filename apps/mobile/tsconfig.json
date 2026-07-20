@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@app/*": ["./src/*"],
+      "@features/*": ["./src/features/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@icons": ["./src/ui/icons/index.ts"],
+      "@ohlify/mobile-ui": ["../../packages/mobile-ui/src/index.ts"],
+      "@ohlify/mobile-ui/*": ["../../packages/mobile-ui/src/*"],
+      "@ohlify/core": ["../../packages/core/src/index.ts"],
+      "@ohlify/core/*": ["../../packages/core/src/*"],
+      "@ohlify/api": ["../../packages/api/src/index.ts"],
+      "@ohlify/api/*": ["../../packages/api/src/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "nativewind-env.d.ts",
+    "../../packages/mobile-ui/src/**/*.ts",
+    "../../packages/mobile-ui/src/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

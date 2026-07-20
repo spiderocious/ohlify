@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    // DOM is included only because @ohlify/core's token-storage.ts references
+    // `window` (that module isn't used by RN code — see apps/mobile's own
+    // shared/services/token-service.ts — but TS still type-checks it
+    // transitively through the @ohlify/core barrel import). No RN code in
+    // this package should ever reference `window`/DOM APIs directly.
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "nativewind",
+    "noEmit": true,
+    "types": ["react-native", "node", "nativewind/types"],
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@icons": ["./src/icons/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "nativewind-env.d.ts"]
+}

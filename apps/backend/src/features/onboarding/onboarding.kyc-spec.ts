@@ -14,6 +14,7 @@ import type {
   KycResubmission,
   KycSpecResponse,
   KycSubmissionRow,
+  OnboardingStep,
 } from './onboarding.types.js';
 
 const KNOWN_KEY_SET = new Set<string>(KNOWN_KYC_ITEM_KEYS);
@@ -249,6 +250,29 @@ export const findIncompleteKeys = async (user: UserRow): Promise<KycItemKey[]> =
     if (!built.complete) incomplete.push(item.key);
   }
   return incomplete;
+};
+
+/**
+ * Coarse onboarding-step hint for use at boot-time endpoints (login, register).
+ * Mirrors the derivation in `onboarding.service.ts#stepFor` — items over
+ * kyc_status — but is spec-aware so it never says "complete" for a user
+ * whose required items aren't all filled in. Auth used to compute this
+ * from `user.full_name` alone, which silently bypassed the OnboardingGuard
+ * whenever a professional had a name but no rates/identity/etc.
+ *
+ * Rejection short-circuits over everything (matches /onboarding/status).
+ * Callers still get a "hint" — the fine-grained routing is owned by
+ * GET /onboarding/status.
+ */
+export const deriveOnboardingStep = async (user: UserRow): Promise<OnboardingStep> => {
+  if (user.kyc_status === 'rejected') return 'kyc_rejected';
+
+  // Role not confirmed yet (identical guard to onboarding.service.getStatus).
+  if (user.kyc_status === 'none' && !user.full_name) return 'role_selection';
+
+  const incomplete = await findIncompleteKeys(user);
+  if (incomplete.length === 0) return 'complete';
+  return user.role === 'professional' ? 'professional_kyc' : 'client_kyc';
 };
 
 /**

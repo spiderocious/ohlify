@@ -1,0 +1,44 @@
+{
+  "name": "@ohlify/mobile-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme": "./src/theme/index.ts",
+    "./icons": "./src/icons/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --config ../../eslint.web.config.mjs 'src/**/*.{ts,tsx}'",
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "expo-image": "*",
+    "react": "^19.0.0",
+    "react-native": "*",
+    "react-native-safe-area-context": "*"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@ohlify/api": "workspace:*",
+    "@ohlify/core": "workspace:*",
+    "clsx": "^2.1.1",
+    "meemaw": "^1.0.2"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "@types/react": "~19.2.2",
+    "expo-image": "~3.0.11",
+    "nativewind": "^4.1.23",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "^15.8.0",
+    "typescript": "~6.0.3"
+  }
+}

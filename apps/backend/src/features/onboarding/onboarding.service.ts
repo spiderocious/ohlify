@@ -4,6 +4,7 @@ import * as authRepo from '@features/auth/auth.repo.js';
 import { mintTokens } from '@features/auth/auth.service.js';
 import type { UserRow } from '@features/auth/auth.types.js';
 import { invalidateProfessionalCaches } from '@features/professionals/professionals.cache.js';
+import { platformConfig } from '@lib/config/platform-config.service.js';
 import { redis } from '@lib/redis/client.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { HANDLE_REGEX, RESERVED_HANDLES } from '@shared/constants/reserved-handles.js';
@@ -608,11 +609,15 @@ export const completeKyc = async (userId: string) => {
     }
   }
 
-  // Every submission goes through admin review — there's no auto-approve
-  // path. The admin KYC queue is the source of truth for approvals.
+  // Clients only self-attest simple fields (name, interests, ...) — nothing
+  // that needs human verification — so they always auto-approve regardless
+  // of the platform's professional-facing review setting. Professionals go
+  // through document/identity checks, so they follow `kyc.auto_approve`
+  // (MVP default true; the admin queue takes over once it's flipped off).
   // completeKycInTx writes BOTH the users row AND the latest
   // kyc_submissions row in a single transaction so they can never drift.
-  const finalStatus: KycStatus = 'pending_review';
+  const finalStatus: KycStatus =
+    user.role === 'client' || platformConfig.kyc().auto_approve ? 'approved' : 'pending_review';
   await repo.completeKycInTx(userId, finalStatus);
 
   // `next_step: 'complete'` means "onboarding flow is finished, let the

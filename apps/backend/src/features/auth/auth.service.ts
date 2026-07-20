@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import { deriveOnboardingStep } from '@features/onboarding/onboarding.kyc-spec.js';
 import { logger } from '@lib/logger.js';
 import { notificationService } from '@lib/notifications/notification.service.js';
 import { redis } from '@lib/redis/client.js';
@@ -288,12 +289,15 @@ export const login = async (
   // onboarding_step here is a coarse hint for the client to decide
   // whether to drop into the onboarding flow at all. The fine-grained
   // routing (which onboarding screen) is owned by GET /onboarding/status,
-  // which the OnboardingGuard fetches immediately after login. We don't
-  // duplicate the full step machine here — but we do flag rejection
-  // explicitly so the client can short-circuit to the rejection screen
-  // without an extra round-trip when it's a clear-cut case.
-  const nextOnboardingStep = user.full_name ? 'complete' : 'profile';
-  const onboardingStep = user.kyc_status === 'rejected' ? 'kyc_rejected' : nextOnboardingStep;
+  // which the OnboardingGuard fetches immediately after login.
+  //
+  // Delegate to `deriveOnboardingStep` — same spec-driven derivation used
+  // by /onboarding/status. The prior `full_name ? 'complete' : 'profile'`
+  // heuristic silently marked professionals with a name but no rates /
+  // identity / etc. as complete, so the client's login fast-path skipped
+  // straight to home. Now: if any required item is missing, we return
+  // the correct KYC step and the client routes into the flow.
+  const onboardingStep = await deriveOnboardingStep(user);
 
   return new ServiceSuccess(
     {

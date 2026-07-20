@@ -1,0 +1,38 @@
+{
+  "name": "mobile",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/mobile/src",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm dev", "cwd": "apps/mobile" }
+    },
+    "serve:native": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm dev:native", "cwd": "apps/mobile" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm typecheck", "cwd": "apps/mobile" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm lint", "cwd": "apps/mobile" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm test", "cwd": "apps/mobile" }
+    },
+    "build-android-preview": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm build:android:preview", "cwd": "apps/mobile" }
+    },
+    "build-ios-preview": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm build:ios:preview", "cwd": "apps/mobile" }
+    }
+  },
+  "tags": ["scope:mobile", "type:app"],
+  "implicitDependencies": ["mobile-ui", "core", "api"]
+}

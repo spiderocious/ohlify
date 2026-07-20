@@ -5,6 +5,7 @@ import { env } from '../../env.js';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 const RESOLVE_TIMEOUT_MS = 5000;
 const TRANSACTION_TIMEOUT_MS = 10_000;
+const LIST_BANKS_TIMEOUT_MS = 8000;
 
 export class PaystackUpstreamError extends Error {
   constructor(
@@ -97,6 +98,62 @@ export const resolveBankAccount = async (
   }
 
   return { account_name: body.data.account_name };
+};
+
+// ── Bank list ───────────────────────────────────────────────────────────────
+
+interface PaystackListBanksResponse {
+  status: boolean;
+  message: string;
+  data?: Array<{
+    name: string;
+    code: string;
+    longcode?: string | null;
+    active?: boolean;
+    country?: string;
+    currency?: string;
+    type?: string;
+  }>;
+}
+
+export interface PaystackBank {
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+// Lists banks from Paystack. Nigeria + NGN by default; perPage=100 comfortably
+// covers the ~50 Nigerian institutions Paystack lists. Throws
+// PaystackUpstreamError on transport / 5xx / bad payload — caller is
+// responsible for caching and stale-while-error semantics.
+export const listBanks = async (): Promise<PaystackBank[]> => {
+  const url = `${PAYSTACK_BASE_URL}/bank?country=nigeria&currency=NGN&perPage=100`;
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, LIST_BANKS_TIMEOUT_MS);
+  } catch (err) {
+    logger.warn({ err }, 'paystack /bank transport error');
+    throw new PaystackUpstreamError('paystack request failed');
+  }
+
+  let body: PaystackListBanksResponse;
+  try {
+    body = (await res.json()) as PaystackListBanksResponse;
+  } catch {
+    throw new PaystackUpstreamError('paystack returned non-json', res.status);
+  }
+
+  if (!res.ok || body.status !== true || !Array.isArray(body.data)) {
+    logger.warn({ status: res.status, body }, 'paystack /bank upstream failure');
+    throw new PaystackUpstreamError(body.message || 'paystack upstream error', res.status);
+  }
+
+  return body.data.map((b) => ({
+    code: b.code,
+    name: b.name,
+    active: b.active !== false,
+  }));
 };
 
 // ── Transaction (charge) initialization & verification ──────────────────────

@@ -20,6 +20,8 @@
       "@ohlify/core/*": ["./packages/core/src/*"],
       "@ohlify/api": ["./packages/api/src/index.ts"],
       "@ohlify/api/*": ["./packages/api/src/*"],
+      "@ohlify/mobile-ui": ["./packages/mobile-ui/src/index.ts"],
+      "@ohlify/mobile-ui/*": ["./packages/mobile-ui/src/*"],
       "@icons": ["./packages/ui/src/icons/index.ts"]
     }
   }
