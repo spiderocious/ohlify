@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { AppButton, AppText, AppTextAreaInput } from '@ohlify/ui';
+import { AppButton, AppText, AppTextAreaInput, DrawerService } from '@ohlify/ui';
 import type { AdminConfigItem } from '@ohlify/api';
 
 import { PageHeader } from '../../../shared/parts/page-header.js';
 import { QueryView } from '../../../shared/parts/empty-or-error.js';
 import { SearchInput } from '../../../shared/parts/search-input.js';
-import { promptForReason, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
+import { toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { useAdminConfig, usePatchConfig } from '../api/use-config.js';
 import { ConfigField } from '../parts/config-field.js';
 import { ConfigRow, ConfigSection } from '../parts/config-section.js';
+import { ConfigSaveDiffModal, type ConfigDiffEntry } from '../parts/config-save-diff-modal.js';
 import { decodeForInput, encodeFromInput, valuesEqual } from '../lib/config-codec.js';
 import {
   CONFIG_GROUPS,
@@ -90,7 +91,10 @@ export function ConfigScreen() {
   }, [drafts]);
 
   const erroredKeys = useMemo(
-    () => Object.entries(drafts).filter(([, d]) => d.error !== null).map(([k]) => k),
+    () =>
+      Object.entries(drafts)
+        .filter(([, d]) => d.error !== null)
+        .map(([k]) => k),
     [drafts],
   );
 
@@ -103,10 +107,34 @@ export function ConfigScreen() {
       toastError(`${erroredKeys.length} field${erroredKeys.length === 1 ? '' : 's'} need fixing`);
       return;
     }
-    const note = await promptForReason({
-      title: `Save ${dirtyKeys.length} config change${dirtyKeys.length === 1 ? '' : 's'}?`,
-      message: 'Required: explain why this change is being made (logged with before/after).',
-      placeholder: 'e.g. Lowering platform fee from 15% to 10% per finance review',
+
+    const diffEntries: ConfigDiffEntry[] = dirtyKeys.map((key) => {
+      const draft = drafts[key]!;
+      const label = draft.def?.label ?? humanizeKey(key);
+      const before = draft.def
+        ? decodeForInput(draft.def.kind, draft.initial)
+        : jsonOrString(draft.initial);
+      return { key, label, before, after: draft.raw };
+    });
+
+    const note = await new Promise<string | null>((resolve) => {
+      const handle = DrawerService.showCustomModal(
+        `Save ${dirtyKeys.length} config change${dirtyKeys.length === 1 ? '' : 's'}?`,
+        (onDismiss) => (
+          <ConfigSaveDiffModal
+            entries={diffEntries}
+            onSubmit={(value) => {
+              resolve(value);
+              onDismiss();
+            }}
+            onCancel={() => {
+              resolve(null);
+              onDismiss();
+            }}
+          />
+        ),
+      );
+      void handle;
     });
     if (!note) return;
 
@@ -178,9 +206,7 @@ export function ConfigScreen() {
               variant="solid"
               height={36}
               isLoading={patch.isPending}
-              onPressed={
-                dirtyKeys.length > 0 && erroredKeys.length === 0 ? onSave : undefined
-              }
+              onPressed={dirtyKeys.length > 0 && erroredKeys.length === 0 ? onSave : undefined}
             />
           </div>
         }
