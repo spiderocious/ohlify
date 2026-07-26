@@ -12,11 +12,10 @@
 #  - google-services.json is gitignored and injected from a secure env var.
 
 definitions:
-  # Anchors reused by both workflows. Codemagic merges these via YAML aliases.
-  env_versions: &env_versions
-    node: 22.14.0
-    pnpm: 9.15.9
-
+  # NOTE: versions are written out in full in each workflow rather than shared
+  # via a YAML merge key (`<<: *anchor`). Merge keys are not reliably expanded
+  # here, which silently leaves node/pnpm unset and falls back to whatever the
+  # build image defaults to. Keep the two blocks in sync by hand.
   scripts:
     - &install_deps
       name: Install workspace dependencies (pnpm, from repo root)
@@ -63,6 +62,13 @@ definitions:
         pnpm run typecheck
         pnpm run lint
 
+    - &accept_sdk_licenses
+      name: Accept Android SDK licenses
+      script: |
+        # Expo/AGP resolve compileSdk 36 at prebuild time. Codemagic images ship
+        # the SDK but an unaccepted license silently fails the first build.
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
     - &prebuild
       name: Expo prebuild (generate native android/ios projects)
       script: |
@@ -82,7 +88,8 @@ workflows:
     instance_type: linux_x2
     max_build_duration: 60
     environment:
-      <<: *env_versions
+      node: 22.14.0
+      pnpm: 9.15.9
       java: 17
       groups:
         - ohlify_mobile_public   # EXPO_PUBLIC_* vars
@@ -116,17 +123,31 @@ workflows:
       - *write_env_file
       - *write_google_services
       - *verify
+      - *accept_sdk_licenses
       - *prebuild
       - name: Build Android APK
         script: |
           cd apps/mobile/android
+          # JDK 17 is REQUIRED. React Native 0.86 + AGP fail on JDK 21/26 with
+          # "Failed to transform core-for-system-modules.jar ... JdkImageTransform".
+          # `java: 17` in the environment block sets this, but Codemagic images
+          # ship several JDKs, so pin JAVA_HOME explicitly and assert it.
+          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          java -version
+          case "$(java -version 2>&1)" in
+            *'version "17'*) echo "JDK 17 confirmed" ;;
+            *) echo "ERROR: expected JDK 17, aborting"; exit 1 ;;
+          esac
           # assembleRelease produces an installable APK. Switch to bundleRelease
           # (and change the artifact glob) when you are ready to ship to Play.
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon
     artifacts:
+      # Verified locally: build lands at app/build/outputs/apk/release/app-release.apk (~103 MB).
       - apps/mobile/android/app/build/outputs/**/*.apk
-      - apps/mobile/android/app/build/outputs/**/mapping.txt
-      - apps/mobile/**/build/reports/**
+      - apps/mobile/android/app/build/outputs/**/*.aab
+      # mapping.txt only exists once minifyEnabled is on; a glob that matches
+      # nothing is not a build failure in Codemagic.
+      - apps/mobile/android/app/build/outputs/mapping/**/mapping.txt
     publishing:
       email:
         recipients:
@@ -144,7 +165,8 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 90
     environment:
-      <<: *env_versions
+      node: 22.14.0
+      pnpm: 9.15.9
       xcode: latest
       cocoapods: default
       groups:
@@ -192,6 +214,8 @@ workflows:
       - name: Build iOS IPA
         script: |
           cd apps/mobile/ios
+          # Scheme/workspace name derives from app.config.ts `name: 'Ohlify'`
+          # (matches android/settings.gradle rootProject.name = 'Ohlify').
           xcode-project build-ipa \
             --workspace "Ohlify.xcworkspace" \
             --scheme "Ohlify"
