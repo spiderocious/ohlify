@@ -1,0 +1,207 @@
+# Codemagic CI for apps/mobile (Expo / React Native) inside this pnpm + Nx monorepo.
+#
+# Key monorepo facts this config has to respect:
+#  - This file MUST live at the repo root (Codemagic only looks here), but every
+#    mobile command runs from apps/mobile. Codemagic has no global "working
+#    directory" for a workflow, so each script cd's in explicitly.
+#  - pnpm install must run at the ROOT (workspace protocol: @ohlify/mobile depends
+#    on @ohlify/api, @ohlify/core, @ohlify/mobile-ui via "workspace:*").
+#  - .npmrc sets node-linker=hoisted, which Metro requires. Do not override it.
+#  - apps/mobile/android and /ios are gitignored (managed Expo workflow), so CI
+#    must run `expo prebuild` to generate them before any native build.
+#  - google-services.json is gitignored and injected from a secure env var.
+
+definitions:
+  # Anchors reused by both workflows. Codemagic merges these via YAML aliases.
+  env_versions: &env_versions
+    node: 22.14.0
+    pnpm: 9.15.9
+
+  scripts:
+    - &install_deps
+      name: Install workspace dependencies (pnpm, from repo root)
+      script: |
+        # corepack pins the exact pnpm from package.json's packageManager field.
+        corepack enable
+        corepack prepare pnpm@9.15.9 --activate
+        pnpm install --frozen-lockfile
+
+    - &write_env_file
+      name: Write apps/mobile/.env from Codemagic env vars
+      script: |
+        # EXPO_PUBLIC_* vars are inlined into the JS bundle by Metro at build
+        # time. They are public by definition (extractable from the APK), but
+        # they live in a Codemagic variable group so changing an API URL does
+        # not require a commit.
+        cat > apps/mobile/.env <<EOF
+        EXPO_PUBLIC_API_BASE_URL=$EXPO_PUBLIC_API_BASE_URL
+        EXPO_PUBLIC_FILE_SERVICE_URL=$EXPO_PUBLIC_FILE_SERVICE_URL
+        EXPO_PUBLIC_APP_ENV=$EXPO_PUBLIC_APP_ENV
+        EXPO_PUBLIC_USE_MOCKS=$EXPO_PUBLIC_USE_MOCKS
+        EXPO_PUBLIC_PAYSTACK_CALLBACK_URL=$EXPO_PUBLIC_PAYSTACK_CALLBACK_URL
+        EXPO_PUBLIC_CALL_APP_URL=$EXPO_PUBLIC_CALL_APP_URL
+        EOF
+        echo "Wrote apps/mobile/.env with $(grep -c . apps/mobile/.env) vars"
+
+    - &write_google_services
+      name: Restore google-services.json (gitignored; FCM client config)
+      script: |
+        # Stored base64 in a secure Codemagic env var because the repo is public.
+        # app.config.ts references ./google-services.json and the
+        # @react-native-firebase/app plugin fails prebuild without it.
+        if [ -z "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+          echo "GOOGLE_SERVICES_JSON_BASE64 is not set — add it to the 'ohlify_mobile_secrets' group"
+          exit 1
+        fi
+        echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > apps/mobile/google-services.json
+        node -e "JSON.parse(require('fs').readFileSync('apps/mobile/google-services.json','utf8'));console.log('google-services.json restored and valid')"
+
+    - &verify
+      name: Typecheck and lint apps/mobile
+      script: |
+        cd apps/mobile
+        pnpm run typecheck
+        pnpm run lint
+
+    - &prebuild
+      name: Expo prebuild (generate native android/ios projects)
+      script: |
+        cd apps/mobile
+        # --clean guarantees a deterministic native project on every run; the
+        # android/ and ios/ dirs are gitignored so there is nothing to preserve.
+        # --no-install because pnpm already installed at the workspace root.
+        npx expo prebuild --clean --no-install
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # Android — start here. Needs no Apple account, so it is the fastest path to a
+  # green build. Produces a signed APK (preview) you can install directly.
+  # ---------------------------------------------------------------------------
+  android-preview:
+    name: Android Preview (APK)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      <<: *env_versions
+      java: 17
+      groups:
+        - ohlify_mobile_public   # EXPO_PUBLIC_* vars
+        - ohlify_mobile_secrets  # GOOGLE_SERVICES_JSON_BASE64
+      # Uncomment once you upload a keystore in Codemagic (Settings > Code signing
+      # identities > Android keystores) with the reference name below.
+      # android_signing:
+      #   - ohlify_upload_keystore
+    cache:
+      cache_paths:
+        - $HOME/.pnpm-store
+        - $HOME/.gradle/caches
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      # Only rebuild when mobile-relevant code changes — skips backend-only pushes.
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'apps/mobile'
+          - 'packages'
+          - 'pnpm-lock.yaml'
+          - 'codemagic.yaml'
+    scripts:
+      - *install_deps
+      - *write_env_file
+      - *write_google_services
+      - *verify
+      - *prebuild
+      - name: Build Android APK
+        script: |
+          cd apps/mobile/android
+          # assembleRelease produces an installable APK. Switch to bundleRelease
+          # (and change the artifact glob) when you are ready to ship to Play.
+          ./gradlew assembleRelease
+    artifacts:
+      - apps/mobile/android/app/build/outputs/**/*.apk
+      - apps/mobile/android/app/build/outputs/**/mapping.txt
+      - apps/mobile/**/build/reports/**
+    publishing:
+      email:
+        recipients:
+          - adenijiadewale12@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  # ---------------------------------------------------------------------------
+  # iOS — requires an Apple Developer account connected in Codemagic. Left as a
+  # separate workflow so a missing Apple setup can never break Android.
+  # ---------------------------------------------------------------------------
+  ios-preview:
+    name: iOS Preview (IPA)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    environment:
+      <<: *env_versions
+      xcode: latest
+      cocoapods: default
+      groups:
+        - ohlify_mobile_public
+        - ohlify_mobile_secrets
+      # Requires an App Store Connect API key added under
+      # Settings > Code signing identities. Uncomment when ready.
+      # ios_signing:
+      #   distribution_type: ad_hoc
+      #   bundle_identifier: com.ohlify.ohlify
+    cache:
+      cache_paths:
+        - $HOME/.pnpm-store
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'apps/mobile'
+          - 'packages'
+          - 'pnpm-lock.yaml'
+          - 'codemagic.yaml'
+    scripts:
+      - *install_deps
+      - *write_env_file
+      - *write_google_services
+      - *verify
+      - *prebuild
+      - name: Install CocoaPods dependencies
+        script: |
+          cd apps/mobile/ios
+          pod install
+      - name: Set up provisioning profiles
+        script: |
+          # No-op unless ios_signing above is uncommented; keychain is
+          # pre-populated by Codemagic when signing is configured.
+          xcode-project use-profiles || echo "No provisioning profiles configured yet — skipping"
+      - name: Build iOS IPA
+        script: |
+          cd apps/mobile/ios
+          xcode-project build-ipa \
+            --workspace "Ohlify.xcworkspace" \
+            --scheme "Ohlify"
+    artifacts:
+      - apps/mobile/ios/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - adenijiadewale12@gmail.com
+        notify:
+          success: true
+          failure: true

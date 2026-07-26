@@ -2,7 +2,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AppHeader, AppSvg, colors } from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
@@ -11,7 +10,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './app.navigation';
 import { CallsScreen } from '@features/calls/screen/calls-screen';
-import { ChatThreadScreen } from '@features/chat/screen/chat-thread-screen';
 import { ChatsScreen } from '@features/chat/screen/chats-screen';
 import { HomeScreen } from '@features/home/screen/home-screen';
 import { ProfileStackNavigator } from '@features/profile/profile-stack.navigation';
@@ -30,31 +28,16 @@ import { KycReviewBanner } from '@shared/parts/kyc-review-banner';
  * router/nav-items actually specify, not the buggy 4-item active-highlight
  * list — see docs/mobile-work/todo.md for this call).
  */
-export type ChatsStackParamList = {
-  ChatsList: undefined;
-  ChatThread: { conversationId: string };
-};
-
 export type MainTabParamList = {
   HomeTab: undefined;
   CallsTab: undefined;
-  ChatsTab: { screen?: keyof ChatsStackParamList; params?: ChatsStackParamList['ChatThread'] } | undefined;
+  ChatsTab: undefined;
   /** openFund: true auto-opens the Fund wallet modal on arrival — used by the insufficient-balance redirect from Buy minutes. */
   WalletTab: { openFund?: boolean } | undefined;
   ProfileTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-const ChatsStack = createNativeStackNavigator<ChatsStackParamList>();
-
-function ChatsStackNavigator() {
-  return (
-    <ChatsStack.Navigator screenOptions={{ headerShown: false }}>
-      <ChatsStack.Screen name="ChatsList" component={ChatsScreen} />
-      <ChatsStack.Screen name="ChatThread" component={ChatThreadScreen} />
-    </ChatsStack.Navigator>
-  );
-}
 
 const TAB_SVGS: Record<keyof MainTabParamList, 'navHome' | 'navCalls' | 'navChats' | 'navWallet' | 'navProfile'> = {
   HomeTab: 'navHome',
@@ -193,7 +176,7 @@ function withTabTransition<P extends object>(Screen: ComponentType<P>) {
 
 const AnimatedHomeScreen = withTabTransition(HomeScreen);
 const AnimatedCallsScreen = withTabTransition(CallsScreen);
-const AnimatedChatsStackNavigator = withTabTransition(ChatsStackNavigator);
+const AnimatedChatsScreen = withTabTransition(ChatsScreen);
 const AnimatedWalletScreen = withTabTransition(WalletScreen);
 const AnimatedProfileStackNavigator = withTabTransition(ProfileStackNavigator);
 
@@ -246,7 +229,7 @@ export function MainTabsNavigator() {
     >
       <Tab.Screen name="HomeTab" component={AnimatedHomeScreen} options={{ headerShown: true, header: HomeTabHeader }} />
       <Tab.Screen name="CallsTab" component={AnimatedCallsScreen} options={{ headerShown: true, header: TabKycBannerHeader }} />
-      <Tab.Screen name="ChatsTab" component={AnimatedChatsStackNavigator} options={{ headerShown: true, header: TabKycBannerHeader }} />
+      <Tab.Screen name="ChatsTab" component={AnimatedChatsScreen} options={{ headerShown: true, header: TabKycBannerHeader }} />
       <Tab.Screen name="WalletTab" component={AnimatedWalletScreen} options={{ headerShown: true, header: TabKycBannerHeader }} />
       <Tab.Screen name="ProfileTab" component={AnimatedProfileStackNavigator} options={{ headerShown: true, header: TabKycBannerHeader }} />
     </Tab.Navigator>

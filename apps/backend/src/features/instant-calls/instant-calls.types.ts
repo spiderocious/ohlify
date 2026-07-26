@@ -16,6 +16,11 @@ export const LIVE_INSTANT_CALL_STATUSES: readonly InstantCallStatus[] = [
   InstantCallStatus.ACTIVE,
 ];
 
+// How long a call rings before the ring resolver marks it missed. Shared by
+// the push payload (client auto-dismiss), the ring-timeout cron, and the
+// caller's dialing UI so all three give up at the same moment.
+export const INSTANT_CALL_RING_SECONDS = 45;
+
 export interface InstantCallRow {
   id: string;
   caller_user_id: string;

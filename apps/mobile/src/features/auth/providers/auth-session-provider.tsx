@@ -5,6 +5,8 @@ import { roleStore } from '@ohlify/mobile-ui';
 import { profileApi } from '@features/profile/api/profile-api';
 import type { MeResponse } from '@features/profile/types/me-response';
 import { setOnForceLogout } from '@shared/api/api-client';
+import { setPushSessionReady } from '@shared/push/push-intents';
+import { registerDeviceTokenWithBackend, unregisterDeviceToken } from '@shared/push/push-service';
 import { tokenService } from '@shared/services/token-service';
 import { ApiError } from '@shared/types/api-error';
 
@@ -74,6 +76,15 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
     roleStore.setRole(user?.role ?? null);
   }, [user]);
 
+  // Push lifecycle follows the session: a signed-in user registers this
+  // device's FCM token (idempotent upsert; also prompts for notification
+  // permission on Android 13+), and queued notification-tap navigations
+  // only flush once a session exists.
+  useEffect(() => {
+    setPushSessionReady(user !== null && !isRestoring);
+    if (user !== null) void registerDeviceTokenWithBackend();
+  }, [user, isRestoring]);
+
   /**
    * Rehydrates the in-memory session on app start when tokens are present in
    * secure storage. Without this the app would treat every cold start as
@@ -142,6 +153,9 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Must run while the access token is still valid — a signed-out phone
+    // should stop ringing for this account.
+    await unregisterDeviceToken();
     const refresh = tokenService.refreshToken;
     if (refresh) {
       try {

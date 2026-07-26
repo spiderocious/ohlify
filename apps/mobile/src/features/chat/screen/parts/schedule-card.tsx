@@ -11,103 +11,165 @@ export interface ScheduleCardProps {
   onJoin: () => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Awaiting response',
-  accepted: 'Accepted',
-  declined: 'Declined',
-  cancelled: 'Cancelled',
-};
+const STATUS = {
+  pending: { label: 'Awaiting response', color: colors.warning, bg: '#FFF7ED' },
+  accepted: { label: 'Accepted', color: colors.success, bg: '#DCFCE7' },
+  declined: { label: 'Declined', color: colors.danger, bg: '#FEE2E2' },
+  cancelled: { label: 'Cancelled', color: colors.textMuted, bg: colors.surfaceDark },
+} as const;
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function formatWhen(iso?: string): string {
-  if (!iso) return '';
+function parts(iso?: string) {
+  if (!iso) return null;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} · ${hh}:${mm}`;
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    weekday: WEEKDAYS[d.getDay()]!,
+    day: d.getDate(),
+    month: MONTHS[d.getMonth()]!,
+    time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+  };
 }
 
 /**
- * A chat-native scheduled call card. Either party can propose; the invitee
- * sees Accept/Decline; the proposer sees Reschedule/Cancel inline. Mirrors
- * mobile/lib/features/chat/screen/parts/schedule_card.dart (RN has no
- * PopupMenuButton equivalent, so the overflow menu becomes two inline
- * icon buttons instead of a dropdown).
+ * A chat-native scheduled-call card — a bold date block, a status pill, and
+ * contextual actions (accept/decline for the invitee; reschedule/cancel for
+ * the proposer; join when accepted). Mirrors
+ * mobile/lib/features/chat/screen/parts/schedule_card.dart.
  */
 export function ScheduleCard({ message, onAction, onReschedule, onJoin }: ScheduleCardProps) {
   const { width } = useWindowDimensions();
-  const status = message.scheduleStatus ?? 'pending';
-  const accepted = status === 'accepted';
+  const statusKey = (message.scheduleStatus ?? 'pending') as keyof typeof STATUS;
+  const status = STATUS[statusKey] ?? STATUS.pending;
+  const accepted = statusKey === 'accepted';
   const hasInvite = message.canAccept || message.canDecline;
+  const when = parts(message.scheduledAt);
 
   return (
-    <View style={{ alignItems: message.mine ? 'flex-end' : 'flex-start' }}>
+    // paddingHorizontal mirrors MessageBubble's tail inset so cards share the
+    // same edge as the bubbles.
+    <View style={{ alignItems: message.mine ? 'flex-end' : 'flex-start', marginBottom: 12, paddingHorizontal: 8 }}>
       <View
         style={{
-          marginBottom: 8,
-          padding: 14,
-          maxWidth: width * 0.85,
+          maxWidth: width * 0.82,
+          width: width * 0.72,
           backgroundColor: colors.background,
           borderWidth: 1,
           borderColor: colors.border,
-          borderRadius: 16,
+          borderRadius: 20,
+          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          elevation: 2,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-          <View style={{ flex: 1 }}>
-            <AppText variant="bodySmall" color={colors.textMuted} align="left">
-              📅 Scheduled call
-            </AppText>
-            <AppText variant="body" weight="700" color={colors.textJet} align="left">
-              {formatWhen(message.scheduledAt)}
-            </AppText>
-            {message.body ? (
-              <AppText variant="bodySmall" color={colors.textMuted} align="left">
-                {message.body}
-              </AppText>
-            ) : null}
+        {/* Header strip */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.surfaceDark }}>
+          <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+            <AppIcon name="event" size={15} color={colors.textWhite} />
           </View>
+          <View style={{ width: 8 }} />
+          <AppText variant="bodySmall" weight="700" color={colors.textJet} align="left">
+            Scheduled call
+          </AppText>
+          <View style={{ flex: 1 }} />
           {message.canReschedule ? (
-            <Pressable onPress={onReschedule} style={{ padding: 4 }}>
-              <AppIcon name="clock" size={16} color={colors.textMuted} />
+            <Pressable onPress={onReschedule} hitSlop={8} style={{ padding: 4 }}>
+              <AppIcon name="clock" size={17} color={colors.textMuted} />
             </Pressable>
           ) : null}
           {message.canCancel ? (
-            <Pressable onPress={() => onAction('cancel')} style={{ padding: 4 }}>
-              <AppIcon name="close" size={16} color={colors.textMuted} />
+            <Pressable onPress={() => onAction('cancel')} hitSlop={8} style={{ padding: 4, marginLeft: 2 }}>
+              <AppIcon name="close" size={17} color={colors.textMuted} />
             </Pressable>
           ) : null}
         </View>
-        <View style={{ height: 6 }} />
-        <AppText variant="bodySmall" color={accepted ? colors.success : colors.textMuted} align="left">
-          {STATUS_LABELS[status] ?? status}
-        </AppText>
-        {hasInvite ? (
-          <>
-            <View style={{ height: 12 }} />
-            <View style={{ flexDirection: 'row' }}>
-              {message.canAccept ? (
-                <View style={{ flex: 1 }}>
-                  <AppButton label="Accept" radius={100} height={38} onPress={() => onAction('accept')} />
+
+        {/* Body */}
+        <View style={{ padding: 14 }}>
+          {when ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  width: 54,
+                  height: 60,
+                  borderRadius: 14,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <AppText variant="bodySmallest" weight="700" color="rgba(255,255,255,0.85)">
+                  {when.month.toUpperCase()}
+                </AppText>
+                <AppText variant="medium" weight="800" color={colors.textWhite}>
+                  {String(when.day)}
+                </AppText>
+              </View>
+              <View style={{ width: 14 }} />
+              <View style={{ flex: 1 }}>
+                <AppText variant="body" weight="700" color={colors.textJet} align="left">
+                  {when.weekday}
+                </AppText>
+                <View style={{ height: 2 }} />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <AppIcon name="clock" size={14} color={colors.textMuted} />
+                  <View style={{ width: 5 }} />
+                  <AppText variant="bodySmall" weight="600" color={colors.textMuted} align="left">
+                    {when.time}
+                  </AppText>
                 </View>
-              ) : null}
-              {message.canAccept && message.canDecline ? <View style={{ width: 8 }} /> : null}
-              {message.canDecline ? (
-                <View style={{ flex: 1 }}>
-                  <AppButton label="Decline" radius={100} height={38} variant="outline" onPress={() => onAction('decline')} />
-                </View>
-              ) : null}
+              </View>
             </View>
-          </>
-        ) : null}
-        {accepted ? (
-          <>
-            <View style={{ height: 12 }} />
-            <AppButton label="Join call" radius={100} height={38} expanded onPress={onJoin} />
-          </>
-        ) : null}
+          ) : null}
+
+          {message.body ? (
+            <>
+              <View style={{ height: 10 }} />
+              <AppText variant="bodySmall" color={colors.textMuted} align="left">
+                {message.body}
+              </AppText>
+            </>
+          ) : null}
+
+          <View style={{ height: 12 }} />
+          <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: status.bg }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: status.color }} />
+            <View style={{ width: 6 }} />
+            <AppText variant="bodySmallest" weight="700" color={status.color}>
+              {status.label}
+            </AppText>
+          </View>
+
+          {hasInvite ? (
+            <>
+              <View style={{ height: 14 }} />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {message.canAccept ? (
+                  <View style={{ flex: 1 }}>
+                    <AppButton label="Accept" radius={100} height={40} onPress={() => onAction('accept')} />
+                  </View>
+                ) : null}
+                {message.canDecline ? (
+                  <View style={{ flex: 1 }}>
+                    <AppButton label="Decline" radius={100} height={40} variant="outline" onPress={() => onAction('decline')} />
+                  </View>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {accepted ? (
+            <>
+              <View style={{ height: 14 }} />
+              <AppButton label="Join call" radius={100} height={40} expanded startIcon={<AppIcon name="phone" size={16} color={colors.textWhite} />} onPress={onJoin} />
+            </>
+          ) : null}
+        </View>
       </View>
     </View>
   );

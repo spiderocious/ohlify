@@ -92,38 +92,46 @@ export const buildFcmProvider = async (opts: BuildOptions): Promise<PushProvider
       notification: PushNotification,
     ): Promise<PushSendResult> => {
       if (tokens.length === 0) return { delivered: 0, invalidTokens: [] };
+      // No title AND no body → data-only message: the OS renders nothing;
+      // the app's background handler owns the UX (ring UI, dismissals).
+      const dataOnly = notification.title === undefined && notification.body === undefined;
       const res = await messaging.sendEachForMulticast({
         tokens: [...tokens],
-        // Notification is the visible part; `data` carries the payload
-        // the client reads to deep-link (call_id, peer info, etc.).
-        notification: {
-          title: notification.title,
-          body: notification.body,
-        },
-        data: notification.data,
+        // `data` carries the payload the client reads to deep-link or
+        // render the ring (call_id, peer info, etc.). FCM requires all
+        // values to be strings; `category` rides along for routing.
+        data: { ...notification.data, category: notification.category },
+        ...(dataOnly
+          ? {}
+          : { notification: { title: notification.title, body: notification.body } }),
         android: {
-          // High priority so call notifications wake the device.
+          // High priority so call messages wake the device even in Doze.
           priority: 'high',
-          notification: {
-            channelId: 'calls',
-            // CallKit-equivalent on Android needs `flutter_callkit_incoming`;
-            // we just deliver the data payload — the app constructs the UI.
-          },
+          ...(dataOnly
+            ? {}
+            : {
+                notification: {
+                  channelId: notification.androidChannelId ?? 'default',
+                  sound: 'default',
+                },
+              }),
         },
-        apns: {
-          headers: {
-            'apns-priority': '10',
-            // VoIP push interruption — the client deals with CallKit.
-            'apns-push-type': 'alert',
-          },
-          payload: {
-            aps: {
-              alert: { title: notification.title, body: notification.body },
-              sound: 'default',
-              'content-available': 1,
+        apns: dataOnly
+          ? {
+              // Silent background push — iOS mandates priority 5 and the
+              // `background` push type for content-available-only pushes.
+              headers: { 'apns-priority': '5', 'apns-push-type': 'background' },
+              payload: { aps: { 'content-available': 1 } },
+            }
+          : {
+              headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
+              payload: {
+                aps: {
+                  alert: { title: notification.title, body: notification.body },
+                  sound: 'default',
+                },
+              },
             },
-          },
-        },
       });
 
       const invalidTokens: string[] = [];

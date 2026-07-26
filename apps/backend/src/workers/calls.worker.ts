@@ -5,12 +5,17 @@ import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
 import { resolveCall } from '@features/calls/calls.resolver.js';
 import { CallStatus } from '@features/calls/calls.types.js';
+import * as instantCallsRepo from '@features/instant-calls/instant-calls.repo.js';
+import {
+  INSTANT_CALL_RING_SECONDS,
+  InstantCallStatus,
+} from '@features/instant-calls/instant-calls.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 
-// Three call cron jobs run on independent intervals:
+// Four call cron jobs run on independent intervals:
 //
 // 1. CALL STARTER — every 30s, find calls that hit start_at and flip them
 //    from `scheduled` to `waiting_for_parties`. Fires `call.starting_soon`
@@ -24,12 +29,19 @@ import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/i
 //    past their scheduled end + buffer. Resolve as completed (or
 //    disconnected_X if one side never left).
 //
+// 4. RING-TIMEOUT RESOLVER — every 10s, find instant calls still `ringing`
+//    past the ring window. Resolve as missed (no charge), dismiss the ring
+//    on every device (push.call_cancelled) and leave the callee a visible
+//    "missed call" push. Guarantees no ring dangles forever even when
+//    every push was lost and neither client ever called /end.
+//
 // Each worker uses SELECT ... FOR UPDATE SKIP LOCKED so multiple instances
 // can run in parallel without claiming the same row twice.
 
 const STARTER_INTERVAL_MS = 30_000;
 const NO_SHOW_INTERVAL_MS = 30_000;
 const STUCK_CALL_INTERVAL_MS = 60_000;
+const RING_RESOLVER_INTERVAL_MS = 10_000;
 // Resolve in_progress calls that are past their scheduled end + 5 min buffer.
 // The 5-min buffer absorbs Agora webhook delivery jitter.
 const STUCK_BUFFER_SECONDS = 300;
@@ -188,6 +200,60 @@ const tickStuckCallResolver = async (): Promise<void> => {
   }
 };
 
+const tickRingResolver = async (): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const rows = await instantCallsRepo.findExpiredRinging(
+      client,
+      INSTANT_CALL_RING_SECONDS,
+      BATCH_SIZE,
+    );
+    for (const row of rows) {
+      await runWithSavepoint(client, row.id, 'ring-resolver', async () => {
+        await instantCallsRepo.finalize(client, {
+          callId: row.id,
+          status: InstantCallStatus.MISSED,
+          connectedSeconds: 0,
+          settledKobo: 0n,
+          settlementJournalId: null,
+        });
+        const caller = await authRepo.findUserById(row.caller_user_id);
+        // Dismiss any ring UI still showing, on both sides.
+        for (const targetUserId of [row.callee_user_id, row.caller_user_id]) {
+          await insertEvent(client, {
+            aggregateType: OutboxAggregateType.CALL,
+            aggregateId: row.id,
+            eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+            payload: { call_id: row.id, target_user_id: targetUserId, reason: 'timeout' },
+          });
+        }
+        // Visible "you missed a call from X" for the callee.
+        await insertEvent(client, {
+          aggregateType: OutboxAggregateType.CALL,
+          aggregateId: row.id,
+          eventType: OutboxEventType.PUSH_CALL_MISSED,
+          payload: {
+            call_id: row.id,
+            target_user_id: row.callee_user_id,
+            caller_user_id: row.caller_user_id,
+            caller_full_name: caller?.full_name ?? null,
+            caller_avatar_url: caller?.avatar_url ?? null,
+            call_type: row.call_type,
+          },
+        });
+      });
+    }
+    await client.query('COMMIT');
+    if (rows.length > 0) logger.info({ resolved: rows.length }, 'ring-timeout resolver cron');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.warn({ err }, 'ring-timeout resolver tick failed');
+  } finally {
+    client.release();
+  }
+};
+
 const startInterval = (
   name: string,
   intervalMs: number,
@@ -232,6 +298,7 @@ export interface CallsWorkersFlags {
   starter?: boolean;
   noShowResolver?: boolean;
   stuckCallResolver?: boolean;
+  ringResolver?: boolean;
 }
 
 // Each cron is independently toggleable. Skipped crons return a no-op handle
@@ -241,6 +308,7 @@ export const startCallWorkers = (flags: CallsWorkersFlags = {}): CallsWorkersHan
   const starterEnabled = flags.starter ?? true;
   const noShowEnabled = flags.noShowResolver ?? true;
   const stuckEnabled = flags.stuckCallResolver ?? true;
+  const ringEnabled = flags.ringResolver ?? true;
 
   const noop = { stop: (): Promise<void> => Promise.resolve() };
 
@@ -254,10 +322,13 @@ export const startCallWorkers = (flags: CallsWorkersFlags = {}): CallsWorkersHan
   const stuck = stuckEnabled
     ? startInterval('stuck-call-resolver', STUCK_CALL_INTERVAL_MS, tickStuckCallResolver, 15_000)
     : (logger.info({ worker: 'stuck-call-resolver' }, 'worker disabled via env'), noop);
+  const ring = ringEnabled
+    ? startInterval('ring-timeout-resolver', RING_RESOLVER_INTERVAL_MS, tickRingResolver, 20_000)
+    : (logger.info({ worker: 'ring-timeout-resolver' }, 'worker disabled via env'), noop);
 
   return {
     stop: async () => {
-      await Promise.all([starter.stop(), noShow.stop(), stuck.stop()]);
+      await Promise.all([starter.stop(), noShow.stop(), stuck.stop(), ring.stop()]);
     },
   };
 };

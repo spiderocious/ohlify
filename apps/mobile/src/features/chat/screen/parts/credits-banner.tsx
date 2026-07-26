@@ -1,4 +1,4 @@
-import { AppButton, AppText, colors } from '@ohlify/mobile-ui';
+import { AppButton, AppIcon, AppText, colors } from '@ohlify/mobile-ui';
 import { View } from 'react-native';
 
 import type { ConversationContext } from '../../types/chat-models';
@@ -28,13 +28,30 @@ export function CreditsBanner({ context, onBuyMinutes }: CreditsBannerProps) {
     : `Only ${minutes} minute${minutes === 1 ? '' : 's'} left — top up to keep chatting and calling.`;
 
   return (
-    <View style={{ backgroundColor: `${color}1A`, paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
+    <View
+      style={{
+        marginHorizontal: 12,
+        marginBottom: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 16,
+        backgroundColor: `${color}14`,
+        borderWidth: 1,
+        borderColor: `${color}33`,
+        flexDirection: 'row',
+        alignItems: 'center',
+      }}
+    >
+      <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: `${color}1F`, alignItems: 'center', justifyContent: 'center' }}>
+        <AppIcon name={isOut ? 'error' : 'warning'} size={16} color={color} />
+      </View>
+      <View style={{ width: 10 }} />
       <View style={{ flex: 1 }}>
-        <AppText variant="bodySmall" color={color} align="left">
+        <AppText variant="bodyNormal" weight="600" color={color} align="left">
           {message}
         </AppText>
       </View>
-      <View style={{ width: 8 }} />
+      <View style={{ width: 10 }} />
       <AppButton label="Buy minutes" radius={100} height={34} onPress={onBuyMinutes} />
     </View>
   );

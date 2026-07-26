@@ -1,95 +1,342 @@
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppText, colors } from '@ohlify/mobile-ui';
-import { Fragment, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { AppAvatar, AppIcon, AppText, colors, stagger } from '@ohlify/mobile-ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, View } from 'react-native';
 
+import { apiErrorMessage, ApiError } from '@shared/types/api-error';
+import { fileService } from '@shared/services/file-service';
+
+import type { RootStackParamList } from '../../../app.navigation';
 import { chatApi } from '../api/chat-api';
-import type { ChatsStackParamList } from '../../../main-tabs.navigation';
+import { formatChatListTime } from '../helpers/format-chat-time';
+import { ChatEmptyState } from './parts/chat-empty-state';
+import { ChatErrorState } from './parts/chat-error-state';
+import { ChatSearchBar } from './parts/chat-search-bar';
+import { ConversationListSkeleton } from './parts/conversation-skeleton';
 import type { Conversation } from '../types/chat-models';
 
-type ChatsNavigation = NativeStackNavigationProp<ChatsStackParamList>;
+type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 
-/** The Chats tab — a list of conversations. Tapping opens the thread. Mirrors mobile/lib/features/chat/screen/chats_screen.dart. */
+/** Poll the conversation list every 12s while the tab is focused so a new
+ * inbound message (or unread bump) shows up without a manual refresh. */
+const POLL_INTERVAL_MS = 12_000;
+
+const PAGE_SIZE = 20;
+
+/** Fresh page first (it carries the newest last_message_at ordering), then any
+ * previously-loaded items the page doesn't cover — keeps deeper pages on
+ * screen when a silent poll refreshes page one, without ever duplicating a
+ * conversation that migrated between pages. */
+function mergePages(fresh: Conversation[], existing: Conversation[]): Conversation[] {
+  const freshIds = new Set(fresh.map((c) => c.id));
+  return [...fresh, ...existing.filter((c) => !freshIds.has(c.id))];
+}
+
+/**
+ * The Chats tab — floating white conversation cards on a lavender wash, a
+ * search field to filter them, and cursor-driven infinite scroll. Tapping a
+ * card opens the full-screen thread. Mirrors
+ * mobile/lib/features/chat/screen/chats_screen.dart.
+ */
 export function ChatsScreen() {
-  const navigation = useNavigation<ChatsNavigation>();
+  const navigation = useNavigation<RootNavigation>();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<ApiError | undefined>(undefined);
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+  const loadingMoreRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    chatApi
-      .listConversations()
-      .then((list) => {
-        if (!cancelled) setConversations(list);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    try {
+      const page = await chatApi.listConversations({ limit: PAGE_SIZE });
+      setConversations((prev) => (opts?.silent ? mergePages(page.items, prev) : page.items));
+      // A silent poll only refreshes page one — never rewind the cursor a
+      // deeper scroll position has already advanced past.
+      if (!opts?.silent) setNextCursor(page.nextCursor);
+      setError(undefined);
+    } catch (e) {
+      if (!opts?.silent) setError(e instanceof ApiError ? e : ApiError.network);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Poll only while focused; refetch immediately on focus too (covers
+  // returning from a thread where you just read/sent messages).
+  useFocusEffect(
+    useCallback(() => {
+      load({ silent: true });
+      const timer = setInterval(() => load({ silent: true }), POLL_INTERVAL_MS);
+      return () => clearInterval(timer);
+    }, [load]),
+  );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load({ silent: true });
+    setRefreshing(false);
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMoreRef.current || query.trim()) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await chatApi.listConversations({ cursor: nextCursor, limit: PAGE_SIZE });
+      setConversations((prev) => {
+        const seen = new Set(prev.map((c) => c.id));
+        return [...prev, ...page.items.filter((c) => !seen.has(c.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch {
+      // Non-fatal — the next end-reach retries.
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }
+
+  function openThread(c: Conversation) {
+    navigation.navigate('ChatThread', {
+      conversationId: c.id,
+      peerName: c.peerName,
+      peerAvatarUrl: c.peerAvatarUrl,
+    });
+  }
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!trimmedQuery) return conversations;
+    return conversations.filter(
+      (c) =>
+        (c.peerName ?? '').toLowerCase().includes(trimmedQuery) ||
+        (c.lastMessagePreview ?? '').toLowerCase().includes(trimmedQuery),
+    );
+  }, [conversations, trimmedQuery]);
+
+  const unreadChats = conversations.filter((c) => c.unreadCount > 0).length;
+  const showSearch = conversations.length > 0 || trimmedQuery.length > 0;
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flex: 1, paddingHorizontal: 16 }}>
-        <View style={{ height: 8 }} />
-        <AppText variant="header" weight="700" color={colors.textJet} align="left">
-          Chats
-        </AppText>
-        <View style={{ height: 12 }} />
-        {loading ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={colors.primary} />
+    <View style={{ flex: 1, backgroundColor: colors.surfaceDark }}>
+      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <AppText variant="header" weight="800" color={colors.textJet} align="left">
+            Chats
+          </AppText>
+          <View style={{ flex: 1 }} />
+          {unreadChats > 0 ? (
+            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.primary }}>
+              <AppText variant="bodySmall" weight="700" color={colors.textWhite}>
+                {unreadChats} new
+              </AppText>
+            </View>
+          ) : null}
+        </View>
+        {showSearch ? (
+          <View style={{ paddingTop: 14 }}>
+            <ChatSearchBar value={query} onChangeText={setQuery} />
           </View>
-        ) : conversations.length === 0 ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <AppText variant="body" color={colors.textMuted} align="center">
-              No conversations yet. Buy minutes with a professional to start chatting.
-            </AppText>
-          </View>
-        ) : (
-          <View style={{ flex: 1 }}>
-            {conversations.map((c, i) => (
-              <Fragment key={c.id}>
-                {i > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
-                <ConversationTile conversation={c} onTap={() => navigation.navigate('ChatThread', { conversationId: c.id })} />
-              </Fragment>
-            ))}
-          </View>
-        )}
+        ) : null}
       </View>
+
+      {loading ? (
+        <ConversationListSkeleton />
+      ) : error && conversations.length === 0 ? (
+        <ChatErrorState message={apiErrorMessage(error)} isNetwork={error.isNetwork} onRetry={() => { setLoading(true); load(); }} />
+      ) : conversations.length === 0 ? (
+        <ChatEmptyState onBrowse={() => navigation.navigate('Professionals', undefined)} />
+      ) : filtered.length === 0 ? (
+        <SearchEmptyState query={query.trim()} />
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(c) => c.id}
+          renderItem={({ item, index }) => <ConversationCard conversation={item} index={index} onPress={() => openThread(item)} />}
+          ItemSeparatorComponent={CardGap}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 28, paddingTop: 2 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : !nextCursor && !trimmedQuery && conversations.length >= PAGE_SIZE ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <AppText variant="bodySmall" color={colors.textSlate}>
+                  You’re all caught up
+                </AppText>
+              </View>
+            ) : null
+          }
+        />
+      )}
     </View>
   );
 }
 
-function ConversationTile({ conversation, onTap }: { conversation: Conversation; onTap: () => void }) {
-  const initial = (conversation.peerName ?? '?').charAt(0).toUpperCase();
+function CardGap() {
+  return <View style={{ height: 10 }} />;
+}
+
+/** Shown when the search query matches nothing in the loaded list. */
+function SearchEmptyState({ query }: { query: string }) {
   return (
-    <Pressable onPress={onTap}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }}>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceLight, alignItems: 'center', justifyContent: 'center' }}>
-          <AppText variant="body" weight="700" color={colors.textJet}>
-            {initial}
-          </AppText>
-        </View>
-        <View style={{ width: 12 }} />
-        <View style={{ flex: 1 }}>
-          <AppText variant="body" weight="600" color={colors.textJet} align="left">
-            {conversation.peerName ?? 'Professional'}
-          </AppText>
-          <AppText variant="bodySmall" color={colors.textMuted} align="left" numberOfLines={1}>
-            {conversation.lastMessagePreview ?? 'Say hello'}
-          </AppText>
-        </View>
-        {conversation.unreadCount > 0 ? (
-          <View style={{ paddingHorizontal: 7, paddingVertical: 2, backgroundColor: colors.primary, borderRadius: 999 }}>
-            <Text style={{ fontFamily: 'MonaSans-Bold', fontSize: 12, fontWeight: '700', color: colors.textWhite }}>{conversation.unreadCount}</Text>
-          </View>
-        ) : null}
+    <View style={{ flex: 1, alignItems: 'center', paddingTop: 72, paddingHorizontal: 40 }}>
+      <View
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: colors.background,
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#3D3A6E',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          elevation: 2,
+        }}
+      >
+        <AppIcon name="search" size={30} color={colors.textSlate} />
       </View>
-    </Pressable>
+      <View style={{ height: 16 }} />
+      <AppText variant="medium" weight="700" color={colors.textJet} align="center">
+        No chats found
+      </AppText>
+      <View style={{ height: 6 }} />
+      <AppText variant="body" color={colors.textMuted} align="center">
+        Nothing matches “{query}”. Try a different name or keyword.
+      </AppText>
+    </View>
+  );
+}
+
+/**
+ * A floating conversation card — white on the lavender wash, ringed avatar
+ * when unread, name + relative time, preview + trailing unread pill. Cards
+ * cascade in with a staggered fade+slide on first paint and compress subtly
+ * under the finger on press.
+ */
+function ConversationCard({ conversation, index, onPress }: { conversation: Conversation; index: number; onPress: () => void }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 260,
+      delay: Math.min(index, stagger.maxStaggeredItems) * stagger.perItemDelayMs,
+      useNativeDriver: true,
+    }).start();
+    // Mount-only — a poll re-ordering the list must not replay the cascade.
+  }, []);
+
+  const opacity = progress;
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
+  const hasUnread = conversation.unreadCount > 0;
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, speed: 20, bounciness: 0 }).start()}
+        onPressOut={() => Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start()}
+        android_ripple={{ color: colors.callico, borderless: false }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: 14,
+          borderRadius: 22,
+          backgroundColor: colors.background,
+          shadowColor: '#3D3A6E',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: hasUnread ? 0.1 : 0.05,
+          shadowRadius: 12,
+          elevation: hasUnread ? 3 : 1,
+        }}
+      >
+        {/* Unread ring — a 2px primary halo around the avatar. */}
+        <View
+          style={{
+            padding: 2,
+            borderRadius: 999,
+            borderWidth: 2,
+            borderColor: hasUnread ? colors.primary : 'transparent',
+          }}
+        >
+          <AppAvatar fileKey={conversation.peerAvatarUrl} resolveUri={fileService.mintViewUri} name={conversation.peerName} size={50} />
+        </View>
+
+        <View style={{ width: 13 }} />
+
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <AppText
+                variant="body"
+                weight={hasUnread ? '700' : '600'}
+                color={colors.textJet}
+                align="left"
+                numberOfLines={1}
+                style={{ fontSize: 15 }}
+              >
+                {conversation.peerName ?? 'Professional'}
+              </AppText>
+            </View>
+            <View style={{ width: 8 }} />
+            <AppText variant="bodySmall" weight={hasUnread ? '700' : '500'} color={hasUnread ? colors.primary : colors.textSlate}>
+              {formatChatListTime(conversation.lastMessageAt)}
+            </AppText>
+          </View>
+          <View style={{ height: 4 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <AppText
+                variant="bodyNormal"
+                weight={hasUnread ? '600' : '400'}
+                color={hasUnread ? colors.textCharcoal : colors.textMuted}
+                align="left"
+                numberOfLines={1}
+              >
+                {conversation.lastMessagePreview ?? 'Say hello 👋'}
+              </AppText>
+            </View>
+            {hasUnread ? (
+              <>
+                <View style={{ width: 8 }} />
+                <View
+                  style={{
+                    minWidth: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: colors.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 6,
+                  }}
+                >
+                  <AppText variant="bodySmall" weight="700" color={colors.textWhite}>
+                    {conversation.unreadCount > 99 ? '99+' : String(conversation.unreadCount)}
+                  </AppText>
+                </View>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }

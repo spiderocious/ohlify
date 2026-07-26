@@ -3,6 +3,7 @@ import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { withTransaction } from '@lib/db/tx.js';
 import { encodeCursor, resolveLimit } from '@lib/pagination.js';
+import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 
 import { CHAT_MESSAGES } from './chat.messages.js';
@@ -70,6 +71,35 @@ const assertHasMinutes = async (
     return new ServiceError('forbidden', CHAT_MESSAGES.NEEDS_MINUTES, 403);
   }
   return null;
+};
+
+// Queues the push notification for a freshly-inserted message, inside the
+// same tx — so a rolled-back send never notifies. The outbox worker fans out
+// to the recipient's devices; the client deep-links via conversation_id.
+const queueMessagePush = async (
+  client: Parameters<Parameters<typeof withTransaction>[0]>[0],
+  conv: ConversationRow,
+  senderUserId: string,
+  messageId: string,
+  preview: string,
+): Promise<void> => {
+  const targetUserId =
+    conv.client_user_id === senderUserId ? conv.professional_id : conv.client_user_id;
+  const sender = await authRepo.findUserById(senderUserId);
+  await insertEvent(client, {
+    aggregateType: OutboxAggregateType.CHAT,
+    aggregateId: conv.id,
+    eventType: OutboxEventType.PUSH_CHAT_MESSAGE,
+    payload: {
+      conversation_id: conv.id,
+      message_id: messageId,
+      target_user_id: targetUserId,
+      sender_user_id: senderUserId,
+      sender_full_name: sender?.full_name ?? null,
+      sender_avatar_url: sender?.avatar_url ?? null,
+      preview: preview.length > 140 ? `${preview.slice(0, 139)}…` : preview,
+    },
+  });
 };
 
 // Ensures the viewer is a participant of the conversation.
@@ -216,6 +246,7 @@ export const sendMessage = async (conversationId: string, senderUserId: string, 
 
     const msg = await repo.insertMessage(client, conversationId, senderUserId, body);
     await repo.bumpAfterMessage(client, conv, senderUserId, body);
+    await queueMessagePush(client, conv, senderUserId, msg.id, body);
     return new ServiceSuccess(toMessageView(msg, senderUserId), CHAT_MESSAGES.MESSAGE_SENT);
   });
 };
@@ -259,6 +290,7 @@ export const proposeSchedule = async (
     const body = note?.trim() ? note.trim() : 'Proposed a call';
     const msg = await repo.insertScheduleMessage(client, conversationId, senderUserId, body, when);
     await repo.bumpAfterMessage(client, conv, senderUserId, `📅 ${body}`);
+    await queueMessagePush(client, conv, senderUserId, msg.id, `📅 ${body}`);
     return new ServiceSuccess(toMessageView(msg, senderUserId), CHAT_MESSAGES.SCHEDULE_PROPOSED);
   });
 };

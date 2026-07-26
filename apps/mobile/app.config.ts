@@ -29,17 +29,32 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.ohlify.ohlify',
+    // Firebase client config (FCM). Gitignored — cloud EAS builds get it
+    // via an EAS file secret; local prebuild reads it straight from disk.
+    googleServicesFile: './google-services.json',
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#4A3FE5',
     },
-    permissions: ['RECORD_AUDIO', 'CAMERA', 'MODIFY_AUDIO_SETTINGS', 'INTERNET'],
+    permissions: [
+      'RECORD_AUDIO',
+      'CAMERA',
+      'MODIFY_AUDIO_SETTINGS',
+      'INTERNET',
+      // Android 13+ runtime notification permission (prompted on login).
+      'POST_NOTIFICATIONS',
+      // Full-screen incoming-call UI over the lock screen. Auto-granted
+      // for calling apps; Play can revoke it for non-calling apps only.
+      'USE_FULL_SCREEN_INTENT',
+    ],
   },
   web: {
     favicon: './assets/favicon.png',
     bundler: 'metro',
   },
   plugins: [
+    // Wires the google-services gradle plugin at prebuild (FCM).
+    '@react-native-firebase/app',
     [
       'expo-splash-screen',
       {
@@ -52,7 +67,10 @@ const config: ExpoConfig = {
       'expo-build-properties',
       {
         ios: { newArchEnabled: true },
-        android: { newArchEnabled: true },
+        // usesCleartextTraffic: dev builds talk to the LAN backend over
+        // plain http (release builds block it by default). Drop when the
+        // app points at the https production API.
+        android: { newArchEnabled: true, usesCleartextTraffic: true },
       },
     ],
     'expo-font',

@@ -14,10 +14,15 @@ import { logger } from '@lib/logger.js';
  * uninstalled apps + rotated tokens; we surface that as `invalidTokens`.
  */
 export interface PushNotification {
-  /** Short headline (~40 chars). e.g. "Your call is ready." */
-  title: string;
+  /**
+   * Short headline (~40 chars). e.g. "Your call is ready." Omit BOTH
+   * title and body to send a data-only message: nothing is rendered by
+   * the OS — the client's background handler owns the UX entirely
+   * (incoming-call ring, dismiss-the-ring, badge sync).
+   */
+  title?: string;
   /** One-line body (~120 chars). e.g. "Adedeji is waiting in the room." */
-  body: string;
+  body?: string;
   /**
    * Structured payload the client reads to deep-link / show CallKit. The
    * provider serializes this into FCM's `data` field on Android and
@@ -25,11 +30,17 @@ export interface PushNotification {
    */
   data: Record<string, string>;
   /**
-   * Category — drives client routing. `call.joinable` triggers the
-   * incoming-call UI; future categories: `call.cancelled`,
-   * `booking.confirmed`, etc.
+   * Category — drives client routing. `call.incoming` triggers the
+   * incoming-call UI; `call.cancelled` dismisses it; `chat.message`
+   * deep-links into the thread.
    */
   category: string;
+  /**
+   * Android notification channel for system-rendered (title/body)
+   * notifications. The mobile app creates channels at startup; unknown
+   * channels degrade to Android's fallback bucket. Ignored for data-only.
+   */
+  androidChannelId?: string;
 }
 
 export interface PushSendResult {

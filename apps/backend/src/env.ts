@@ -91,6 +91,7 @@ const EnvSchema = z.object({
   WORKER_CALL_STARTER_ENABLED: z.string().optional(),
   WORKER_NO_SHOW_RESOLVER_ENABLED: z.string().optional(),
   WORKER_STUCK_CALL_RESOLVER_ENABLED: z.string().optional(),
+  WORKER_RING_RESOLVER_ENABLED: z.string().optional(),
   WORKER_EMAIL_ENABLED: z.string().optional(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),

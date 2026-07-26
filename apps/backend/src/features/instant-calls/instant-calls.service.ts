@@ -1,9 +1,11 @@
+import * as authRepo from '@features/auth/auth.repo.js';
 import { resolveReachability, ReachabilityReason } from '@features/presence/index.js';
 import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { agoraUidForUserId, issueAgoraRtcToken } from '@lib/agora/index.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { withTransaction } from '@lib/db/tx.js';
 import { koboToJson } from '@lib/money.js';
+import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { settleMinutes } from '@lib/wallet/flows/minutes-settle.js';
 
@@ -11,6 +13,7 @@ import { INSTANT_CALL_MESSAGES } from './instant-calls.messages.js';
 import * as repo from './instant-calls.repo.js';
 import type { StartCallDto } from './instant-calls.schema.js';
 import {
+  INSTANT_CALL_RING_SECONDS,
   InstantCallStatus,
   type InstantCallJoinView,
   type InstantCallRow,
@@ -92,18 +95,41 @@ export const startCall = async (dto: StartCallDto, callerUserId: string) => {
     return reasonToError(reason);
   }
 
+  // Caller identity rides in the push payload so the callee's ring UI can
+  // render a name/avatar without a round-trip.
+  const caller = await authRepo.findUserById(callerUserId);
+
   // Create the ringing call. The unique partial index rejects a second live
   // call for the same callee (23505) — surface as busy.
   try {
-    const call = await withTransaction((client) =>
-      repo.create(client, {
+    const call = await withTransaction(async (client) => {
+      const created = await repo.create(client, {
         callerUserId,
         calleeUserId: dto.professional_id,
         callType: dto.call_type,
         perMinuteKobo: BigInt(balance.rate_snapshot_kobo),
         minutesAllotted: balance.minutes_remaining,
-      }),
-    );
+      });
+      // Same tx as the insert: the wake-up push only fires iff the ringing
+      // row commits. Delivery is the outbox worker's problem (retries).
+      await insertEvent(client, {
+        aggregateType: OutboxAggregateType.CALL,
+        aggregateId: created.id,
+        eventType: OutboxEventType.PUSH_INCOMING_CALL,
+        payload: {
+          call_id: created.id,
+          target_user_id: dto.professional_id,
+          caller_user_id: callerUserId,
+          caller_full_name: caller?.full_name ?? null,
+          caller_avatar_url: caller?.avatar_url ?? null,
+          call_type: dto.call_type,
+          ring_expires_at: new Date(
+            created.created_at.getTime() + INSTANT_CALL_RING_SECONDS * 1000,
+          ).toISOString(),
+        },
+      });
+      return created;
+    });
     return new ServiceSuccess(
       buildJoinView(call, callerUserId, dto.professional_id),
       INSTANT_CALL_MESSAGES.STARTED,
@@ -128,6 +154,13 @@ export const answerCall = async (callId: string, calleeUserId: string) => {
       return new ServiceError('call_not_joinable', INSTANT_CALL_MESSAGES.NOT_RINGING, 409);
     }
     await repo.markActive(client, callId);
+    // Dismiss the ring on the callee's OTHER devices (answered here).
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.CALL,
+      aggregateId: callId,
+      eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+      payload: { call_id: callId, target_user_id: calleeUserId, reason: 'answered_elsewhere' },
+    });
     const updated = (await repo.findByIdForUpdate(client, callId))!;
     return new ServiceSuccess(
       buildJoinView(updated, calleeUserId, updated.caller_user_id),
@@ -173,8 +206,8 @@ export const endCall = async (callId: string, userId: string, connectedSeconds: 
 
     // Ended while still ringing → nobody connected → missed/cancelled, no charge.
     if (call.status === InstantCallStatus.RINGING) {
-      const status =
-        userId === call.caller_user_id ? InstantCallStatus.CANCELLED : InstantCallStatus.MISSED;
+      const isCaller = userId === call.caller_user_id;
+      const status = isCaller ? InstantCallStatus.CANCELLED : InstantCallStatus.MISSED;
       await repo.finalize(client, {
         callId,
         status,
@@ -182,6 +215,27 @@ export const endCall = async (callId: string, userId: string, connectedSeconds: 
         settledKobo: 0n,
         settlementJournalId: null,
       });
+      // Kill the ring on every callee device (caller hung up / callee
+      // declined on one of several devices).
+      await insertEvent(client, {
+        aggregateType: OutboxAggregateType.CALL,
+        aggregateId: callId,
+        eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+        payload: {
+          call_id: callId,
+          target_user_id: call.callee_user_id,
+          reason: isCaller ? 'cancelled' : 'declined',
+        },
+      });
+      // Callee declined → the caller's dialing UI needs to stop too.
+      if (!isCaller) {
+        await insertEvent(client, {
+          aggregateType: OutboxAggregateType.CALL,
+          aggregateId: callId,
+          eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+          payload: { call_id: callId, target_user_id: call.caller_user_id, reason: 'declined' },
+        });
+      }
       const updated = (await repo.findByIdForUpdate(client, callId))!;
       return new ServiceSuccess(toView(updated), INSTANT_CALL_MESSAGES.ENDED);
     }

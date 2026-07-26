@@ -23,6 +23,18 @@ export const OutboxEventType = {
   // The outbox push handler fans out to every device token registered
   // for `target_user_id` (the callee).
   PUSH_CALL_JOINABLE: 'push.call_joinable',
+  // Push: an instant call is ringing for `target_user_id` (the callee).
+  // Data-only, high priority — the mobile client renders the full-screen
+  // incoming-call UI itself (notifee); no system-rendered notification.
+  PUSH_INCOMING_CALL: 'push.incoming_call',
+  // Push: a ringing instant call stopped ringing (caller hung up, ring
+  // window expired, or another device answered). Data-only — its sole job
+  // is to dismiss the incoming-call UI on `target_user_id`'s devices.
+  PUSH_CALL_CANCELLED: 'push.call_cancelled',
+  // Push: visible "you missed a call from X" for `target_user_id`.
+  PUSH_CALL_MISSED: 'push.call_missed',
+  // Push: visible chat-message notification for `target_user_id`.
+  PUSH_CHAT_MESSAGE: 'push.chat_message',
 } as const;
 
 export type OutboxEventType = (typeof OutboxEventType)[keyof typeof OutboxEventType];
@@ -32,6 +44,7 @@ export const OutboxAggregateType = {
   CALL: 'call',
   WITHDRAWAL: 'withdrawal',
   USER: 'user',
+  CHAT: 'chat',
 } as const;
 
 export type OutboxAggregateType = (typeof OutboxAggregateType)[keyof typeof OutboxAggregateType];

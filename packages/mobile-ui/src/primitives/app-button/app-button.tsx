@@ -88,11 +88,19 @@ export function AppButton({
   const pressProgress = useRef(new Animated.Value(0)).current;
 
   function onPressIn() {
-    Animated.timing(pressProgress, { toValue: 1, duration: duration.instant, useNativeDriver: true }).start();
+    Animated.timing(pressProgress, {
+      toValue: 1,
+      duration: duration.instant,
+      useNativeDriver: true,
+    }).start();
   }
 
   function onPressOut() {
-    Animated.timing(pressProgress, { toValue: 0, duration: duration.instant, useNativeDriver: true }).start();
+    Animated.timing(pressProgress, {
+      toValue: 0,
+      duration: duration.instant,
+      useNativeDriver: true,
+    }).start();
   }
 
   const isBordered = bordered ?? variant === 'outline';
@@ -103,10 +111,19 @@ export function AppButton({
   const scale = pressProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] });
   const pressOpacity = pressProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.85] });
 
-  const containerStyle: ViewStyle = {
-    height,
+  // Sizing lives on the Pressable (the outermost flex child) — if it sat on
+  // the inner view instead, a parent with `alignItems: 'center'` would
+  // collapse the unstyled Pressable to content width and `expanded`'s
+  // `width: '100%'` would resolve against that collapsed box (the historical
+  // "modal buttons don't fill" bug).
+  const pressableStyle: ViewStyle = {
     width: expanded ? '100%' : width,
     alignSelf: expanded || width !== undefined ? undefined : 'flex-start',
+  };
+
+  const containerStyle: ViewStyle = {
+    height,
+    width: '100%',
     backgroundColor: BACKGROUND_BY_VARIANT[variant],
     borderRadius: radius,
     borderWidth: isBordered ? 1.5 : 0,
@@ -131,6 +148,7 @@ export function AppButton({
       onPressIn={effectivelyDisabled ? undefined : onPressIn}
       onPressOut={effectivelyDisabled ? undefined : onPressOut}
       disabled={effectivelyDisabled}
+      style={pressableStyle}
       testID={testID}
     >
       <Animated.View

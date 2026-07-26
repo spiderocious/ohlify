@@ -43,6 +43,7 @@ const startWorkers = (): WorkerHandles => {
       starter: isEnabled(env.WORKER_CALL_STARTER_ENABLED),
       noShowResolver: isEnabled(env.WORKER_NO_SHOW_RESOLVER_ENABLED),
       stuckCallResolver: isEnabled(env.WORKER_STUCK_CALL_RESOLVER_ENABLED),
+      ringResolver: isEnabled(env.WORKER_RING_RESOLVER_ENABLED),
     }),
   };
 };

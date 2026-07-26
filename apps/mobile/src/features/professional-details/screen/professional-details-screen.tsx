@@ -112,8 +112,26 @@ export function ProfessionalDetailsScreen() {
     const hasVideo = proRates.some((r) => r.callType === 'video');
     const callType = hasVideo ? 'video' : 'audio';
     try {
-      await instantCallsApi.start({ professionalId, callType });
-      showToast('Calling…', { type: 'success' });
+      const join = await instantCallsApi.start({ professionalId, callType });
+      // The pro's devices are ringing (server pushed) — go dial in the
+      // call session; the callee joining the channel completes the call.
+      navigation.navigate('CallSession', {
+        sessionId: join.callId,
+        kind: join.callType === 'video' ? 'video' : 'audio',
+        role: 'caller',
+        selfId: '',
+        peerId: professionalId,
+        peerName: detail?.name ?? 'Professional',
+        peerRole: 'professional',
+        peerAvatarUrl: detail?.avatarKey,
+        instant: {
+          appId: join.agoraAppId,
+          channel: join.agoraChannelName,
+          uid: join.agoraUid,
+          agoraToken: join.agoraToken,
+          expiresAt: join.expiresAt,
+        },
+      });
     } catch (e) {
       const error = e instanceof ApiError ? e : ApiError.network;
       showToast(error.reason === 'insufficient_balance' ? 'You don’t have minutes with this professional. Buy minutes to call.' : apiErrorMessage(error), { type: 'error' });
@@ -125,7 +143,7 @@ export function ProfessionalDetailsScreen() {
   async function openChat() {
     try {
       const conversationId = await chatApi.openConversation(professionalId);
-      navigation.navigate('Home', { screen: 'ChatsTab', params: { screen: 'ChatThread', params: { conversationId } } });
+      navigation.navigate('ChatThread', { conversationId, peerName: detail?.name, peerAvatarUrl: detail?.avatarKey });
     } catch (e) {
       const error = e instanceof ApiError ? e : ApiError.network;
       showToast(error.reason === 'forbidden' ? 'Buy minutes with this professional to start chatting.' : apiErrorMessage(error), { type: 'error' });

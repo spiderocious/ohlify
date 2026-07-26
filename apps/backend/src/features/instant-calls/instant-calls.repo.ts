@@ -77,6 +77,26 @@ export const findLiveForCallee = async (calleeUserId: string): Promise<InstantCa
   return res.rows[0] ?? null;
 };
 
+// Ringing calls whose ring window has elapsed — the ring-timeout cron
+// resolves these as missed. Claimed with SKIP LOCKED so parallel worker
+// instances never double-resolve a row.
+export const findExpiredRinging = async (
+  runner: QueryRunner,
+  ringSeconds: number,
+  limit: number,
+): Promise<InstantCallRow[]> => {
+  const res = await runner.query<InstantCallRow>(
+    `SELECT * FROM instant_calls
+      WHERE status = '${InstantCallStatus.RINGING}'
+        AND created_at < now() - ($1 * INTERVAL '1 second')
+      ORDER BY created_at ASC
+      LIMIT $2
+      FOR UPDATE SKIP LOCKED`,
+    [ringSeconds, limit],
+  );
+  return res.rows;
+};
+
 export const markActive = async (runner: QueryRunner, callId: string): Promise<void> => {
   await runner.query(
     `UPDATE instant_calls

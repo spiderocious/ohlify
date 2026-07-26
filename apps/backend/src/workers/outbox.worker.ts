@@ -115,40 +115,117 @@ const dispatchToEmail = async (row: OutboxRow): Promise<void> => {
 };
 
 /**
- * Maps an outbox event to a push notification fan-out. Only fires for
- * `push.*` events today — email goes through `dispatchToEmail`. The
- * provider falls back to a no-op when FCM creds aren't set, so this is
- * safe to call regardless.
+ * Maps a `push.*` outbox event to the notification to fan out, or null
+ * for non-push events. Data-only messages (no title/body) render nothing
+ * — the mobile background handler owns the UX (ring, dismiss).
+ */
+const buildPushNotification = (row: OutboxRow): PushNotification | null => {
+  const payload = row.payload;
+  switch (row.event_type) {
+    case OutboxEventType.PUSH_CALL_JOINABLE: {
+      const peerName = asString(payload['peer_full_name']) ?? 'A caller';
+      return {
+        title: 'Your call is ready',
+        body: `${peerName} is waiting in the room.`,
+        category: 'call.joinable',
+        androidChannelId: 'calls',
+        data: {
+          type: 'call.joinable',
+          call_id: asString(payload['call_id']) ?? '',
+          peer_user_id: asString(payload['peer_user_id']) ?? '',
+          peer_full_name: peerName,
+          peer_avatar_url: asString(payload['peer_avatar_url']) ?? '',
+          kind: asString(payload['kind']) ?? 'audio',
+          // Polite-decline window opens at the booking's start_at — clients
+          // use this to grey-out / hide the decline button after expiry.
+          polite_decline_until: asString(payload['polite_decline_until']) ?? '',
+        },
+      };
+    }
+    // Instant call ringing — data-only + high priority: the client wakes
+    // and renders the full-screen ring itself (notifee / CallKit later).
+    case OutboxEventType.PUSH_INCOMING_CALL:
+      return {
+        category: 'call.incoming',
+        data: {
+          type: 'call.incoming',
+          call_id: asString(payload['call_id']) ?? '',
+          caller_user_id: asString(payload['caller_user_id']) ?? '',
+          caller_full_name: asString(payload['caller_full_name']) ?? 'Ohlify caller',
+          caller_avatar_url: asString(payload['caller_avatar_url']) ?? '',
+          call_type: asString(payload['call_type']) ?? 'audio',
+          ring_expires_at: asString(payload['ring_expires_at']) ?? '',
+        },
+      };
+    // Stop-ringing signal — data-only; clients dismiss the ring UI for
+    // this call_id (caller hung up / answered elsewhere / timed out).
+    case OutboxEventType.PUSH_CALL_CANCELLED:
+      return {
+        category: 'call.cancelled',
+        data: {
+          type: 'call.cancelled',
+          call_id: asString(payload['call_id']) ?? '',
+          reason: asString(payload['reason']) ?? 'cancelled',
+        },
+      };
+    case OutboxEventType.PUSH_CALL_MISSED: {
+      const callerName = asString(payload['caller_full_name']) ?? 'Someone';
+      return {
+        title: 'Missed call',
+        body: `${callerName} tried to call you.`,
+        category: 'call.missed',
+        androidChannelId: 'calls',
+        data: {
+          type: 'call.missed',
+          call_id: asString(payload['call_id']) ?? '',
+          caller_user_id: asString(payload['caller_user_id']) ?? '',
+          caller_full_name: callerName,
+          caller_avatar_url: asString(payload['caller_avatar_url']) ?? '',
+          call_type: asString(payload['call_type']) ?? 'audio',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CHAT_MESSAGE: {
+      const senderName = asString(payload['sender_full_name']) ?? 'New message';
+      return {
+        title: senderName,
+        body: asString(payload['preview']) ?? 'Sent you a message',
+        category: 'chat.message',
+        androidChannelId: 'chat',
+        data: {
+          type: 'chat.message',
+          conversation_id: asString(payload['conversation_id']) ?? '',
+          message_id: asString(payload['message_id']) ?? '',
+          sender_user_id: asString(payload['sender_user_id']) ?? '',
+          sender_full_name: senderName,
+          sender_avatar_url: asString(payload['sender_avatar_url']) ?? '',
+        },
+      };
+    }
+    default:
+      return null;
+  }
+};
+
+/**
+ * Fans a `push.*` outbox event out to every device token registered for
+ * the payload's `target_user_id`. The provider falls back to a no-op
+ * when FCM creds aren't set, so this is safe to call regardless.
  */
 const dispatchToPush = async (row: OutboxRow): Promise<void> => {
-  if (row.event_type !== OutboxEventType.PUSH_CALL_JOINABLE) return;
-  const payload = row.payload;
-  const targetUserId = asString(payload['target_user_id']);
+  const notification = buildPushNotification(row);
+  if (notification === null) return;
+
+  const targetUserId = asString(row.payload['target_user_id']);
   if (targetUserId === null) {
-    logger.warn({ outboxId: row.id }, 'push.call_joinable missing target_user_id — skipping');
+    logger.warn(
+      { outboxId: row.id, eventType: row.event_type },
+      'push event missing target_user_id — skipping',
+    );
     return;
   }
   const tokens = await deviceTokensRepo.findActiveTokensForUser(targetUserId);
   if (tokens.length === 0) return;
-
-  const peerName = asString(payload['peer_full_name']) ?? 'A caller';
-  const callId = asString(payload['call_id']) ?? '';
-  const notification: PushNotification = {
-    title: 'Your call is ready',
-    body: `${peerName} is waiting in the room.`,
-    category: 'call.joinable',
-    data: {
-      type: 'call.joinable',
-      call_id: callId,
-      peer_user_id: asString(payload['peer_user_id']) ?? '',
-      peer_full_name: peerName,
-      peer_avatar_url: asString(payload['peer_avatar_url']) ?? '',
-      kind: asString(payload['kind']) ?? 'audio',
-      // Polite-decline window opens at the booking's start_at — clients
-      // use this to grey-out / hide the decline button after expiry.
-      polite_decline_until: asString(payload['polite_decline_until']) ?? '',
-    },
-  };
 
   const provider = await getPushProvider();
   if (!provider.isEnabled()) return;
@@ -161,11 +238,11 @@ const dispatchToPush = async (row: OutboxRow): Promise<void> => {
   logger.info(
     {
       outboxId: row.id,
-      callId,
+      eventType: row.event_type,
       delivered: result.delivered,
       pruned: result.invalidTokens.length,
     },
-    'push.call_joinable dispatched',
+    'push event dispatched',
   );
 };
 

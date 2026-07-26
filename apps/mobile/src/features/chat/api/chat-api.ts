@@ -9,12 +9,35 @@ import {
   type ConversationContext,
 } from '../types/chat-models';
 
+/** One page of a cursor-paginated list. `nextCursor` is the opaque token from
+ * `meta.next_cursor` — pass it back verbatim to fetch the next page; null
+ * means the list is exhausted. */
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+function pageFromEnvelope<T>(data: unknown, itemFromJson: (json: Record<string, unknown>) => T): Page<T> {
+  // Paginated endpoints reply with `{ data: [...], meta: {...} }` and the
+  // api-client hands the whole envelope root to fromJson (so callers can read
+  // `meta`). Mapping the root object directly would call `{}.map` → throw →
+  // surface as a bogus "You're offline" error.
+  const root = data as Record<string, unknown>;
+  const items = Array.isArray(root.data) ? root.data : [];
+  const meta = (root.meta ?? {}) as Record<string, unknown>;
+  return {
+    items: items.map((e) => itemFromJson(e as Record<string, unknown>)),
+    nextCursor: typeof meta.next_cursor === 'string' ? meta.next_cursor : null,
+  };
+}
+
 /** Mirrors mobile/lib/features/chat/chat_api.dart's ChatApiHttp. */
 export const chatApi = {
-  async listConversations(): Promise<Conversation[]> {
+  async listConversations(opts?: { cursor?: string; limit?: number }): Promise<Page<Conversation>> {
     return apiClient.get('chat/conversations', {
-      fromJson: (data) => (data as unknown[]).map((e) => conversationFromJson(e as Record<string, unknown>)),
-    }) as Promise<Conversation[]>;
+      queryParams: { cursor: opts?.cursor, limit: opts?.limit },
+      fromJson: (data) => pageFromEnvelope(data, conversationFromJson),
+    }) as Promise<Page<Conversation>>;
   },
 
   async openConversation(professionalId: string): Promise<string> {
@@ -23,10 +46,11 @@ export const chatApi = {
     }) as Promise<string>;
   },
 
-  async listMessages(conversationId: string): Promise<ChatMessage[]> {
+  async listMessages(conversationId: string, opts?: { cursor?: string; limit?: number }): Promise<Page<ChatMessage>> {
     return apiClient.get(`chat/conversations/${conversationId}/messages`, {
-      fromJson: (data) => (data as unknown[]).map((e) => chatMessageFromJson(e as Record<string, unknown>)),
-    }) as Promise<ChatMessage[]>;
+      queryParams: { cursor: opts?.cursor, limit: opts?.limit },
+      fromJson: (data) => pageFromEnvelope(data, chatMessageFromJson),
+    }) as Promise<Page<ChatMessage>>;
   },
 
   async send(conversationId: string, body: string): Promise<ChatMessage> {

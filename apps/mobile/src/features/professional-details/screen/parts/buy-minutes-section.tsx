@@ -79,7 +79,7 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
   async function goToChat() {
     try {
       const conversationId = await chatApi.openConversation(professionalId);
-      navigation.navigate('Home', { screen: 'ChatsTab', params: { screen: 'ChatThread', params: { conversationId } } });
+      navigation.navigate('ChatThread', { conversationId });
     } catch {
       // Non-fatal — the purchase succeeded; stay on the details page.
     }

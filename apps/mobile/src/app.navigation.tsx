@@ -10,6 +10,10 @@ import { ProfessionalKycScreen } from '@features/onboarding/screen/professional-
 import { KycRejectedScreen } from '@features/kyc-rejected/screen/kyc-rejected-screen';
 import { RoleSelectionScreen } from '@features/role-selection/screen/role-selection-screen';
 import { CallDetailsScreen } from '@features/call-details/screen/call-details-screen';
+import { ChatThreadScreen } from '@features/chat/screen/chat-thread-screen';
+import { IncomingCallScreen } from '@features/instant-calls/screen/incoming-call-screen';
+import { navigationRef } from '@shared/navigation/navigation-ref';
+import { flushPushIntent } from '@shared/push/push-intents';
 import { CallRatingScreen } from '@features/call-session/screen/call-rating-screen';
 import { CallSessionScreen } from '@features/call-session/screen/call-session-screen';
 import { NotificationsScreen } from '@features/notifications/screen/notifications-screen';
@@ -62,12 +66,41 @@ export type RootStackParamList = {
     peerRole: string;
     peerAvatarUrl?: string;
     selfAvatarUrl?: string;
+    // Present for instant (ring-to-answer) calls: the Agora join creds the
+    // start/answer response already returned, so the session screen joins
+    // directly instead of calling the scheduled-calls join endpoint.
+    instant?: {
+      appId: string;
+      channel: string;
+      uid: number;
+      agoraToken: string;
+      expiresAt: string;
+    };
+  };
+  // Full-screen ring UI for an incoming instant call (reached from the
+  // push notification / lock-screen full-screen intent).
+  IncomingCall: {
+    callId: string;
+    callerUserId: string;
+    callerName: string;
+    callerAvatarUrl?: string;
+    callType: 'audio' | 'video';
+    ringExpiresAt?: string;
+    autoAccept?: boolean;
   };
   CallRating: { peerName: string; peerAvatarUrl?: string; callId?: string };
   Professional: { professionalId: string };
   Professionals: { focus?: boolean; category?: string } | undefined;
   ScheduleCall: { professionalId: string };
   Notifications: undefined;
+  // A chat thread is a full-screen, tab-less experience (like every modern
+  // messenger) — so it's pushed onto the ROOT stack, not the nested Chats
+  // tab stack, which keeps the bottom tab bar from showing under it. The
+  // Chats tab list still deep-links here. peerName/peerAvatarUrl are passed
+  // through when the caller already knows them (from a conversation tile or
+  // a professional profile) so the header shows the right person instantly,
+  // before the context request resolves.
+  ChatThread: { conversationId: string; peerName?: string; peerAvatarUrl?: string };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -90,7 +123,13 @@ function ClientKycRoute() {
 
 export function AppNavigation() {
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      // Push-tap intents wait for a navigable state (session restored, past
+      // Splash/Auth) — re-check on ready and every transition.
+      onReady={flushPushIntent}
+      onStateChange={flushPushIntent}
+    >
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         <RootStack.Screen name="Splash" component={SplashScreen} />
         <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -103,11 +142,13 @@ export function AppNavigation() {
         <RootStack.Screen name="PaystackWebView" component={PaystackWebViewScreen} options={{ presentation: 'fullScreenModal' }} />
         <RootStack.Screen name="Call" component={CallDetailsScreen} />
         <RootStack.Screen name="CallSession" component={CallSessionScreen} options={{ gestureEnabled: false }} />
+        <RootStack.Screen name="IncomingCall" component={IncomingCallScreen} options={{ gestureEnabled: false, animation: 'fade' }} />
         <RootStack.Screen name="CallRating" component={CallRatingScreen} />
         <RootStack.Screen name="Professional" component={ProfessionalDetailsScreen} />
         <RootStack.Screen name="Professionals" component={ProfessionalSearchScreen} />
         <RootStack.Screen name="ScheduleCall">{() => <RouteNotBuiltYet name="ScheduleCall" />}</RootStack.Screen>
         <RootStack.Screen name="Notifications" component={NotificationsScreen} />
+        <RootStack.Screen name="ChatThread" component={ChatThreadScreen} />
       </RootStack.Navigator>
     </NavigationContainer>
   );

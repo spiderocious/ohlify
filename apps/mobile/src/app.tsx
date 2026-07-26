@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { FONT_ASSETS } from '@shared/config/fonts';
+import { initForegroundPush } from '@shared/push/push-service';
 import { AppNavigation } from './app.navigation';
 import { AppProvider } from './app.provider';
 
@@ -25,6 +26,12 @@ export function App() {
       setAppReady(true);
     }
   }, [fontsLoaded, fontError]);
+
+  // Notification channels + foreground push listeners + cold-start
+  // notification-tap intents. Idempotent; no-op on web.
+  useEffect(() => {
+    void initForegroundPush();
+  }, []);
 
   const onLayoutRootView = useCallback(async () => {
     if (appReady) {

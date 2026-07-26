@@ -28,6 +28,7 @@ export * from './primitives/skeleton/composed-skeletons';
 export * from './primitives/empty-state/empty-state';
 export * from './primitives/error-state/error-state';
 export * from './primitives/animated-balance/animated-balance';
+export * from './primitives/date-time-picker/app-date-time-picker';
 export * from './primitives/screen-continue-bar/screen-continue-bar';
 export * from './shell/app-tab-view/app-tab-view';
 export * from './shell/app-error-boundary/app-error-boundary';

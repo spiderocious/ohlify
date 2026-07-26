@@ -21,3 +21,6 @@ yarn-error.*
 *.tsbuildinfo
 /ios
 /android
+
+# Firebase client config — kept out of the public repo (fed to EAS as a file secret for cloud builds)
+google-services.json
