@@ -227,7 +227,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - adenijiadewale12@gmail.com
+          - feranmidev@gmail.com
         notify:
           success: true
           failure: true
