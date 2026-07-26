@@ -89,7 +89,9 @@ workflows:
     max_build_duration: 60
     environment:
       node: 22.14.0
-      pnpm: 9.15.9
+      # No `pnpm:` key here — Codemagic's environment block only accepts
+      # node/java/xcode/cocoapods/flutter/ruby. pnpm 9.15.9 is pinned by
+      # corepack in the install script instead.
       java: 17
       groups:
         - ohlify_mobile_public   # EXPO_PUBLIC_* vars
@@ -166,7 +168,7 @@ workflows:
     max_build_duration: 90
     environment:
       node: 22.14.0
-      pnpm: 9.15.9
+      # See the android-preview note: pnpm is pinned via corepack, not here.
       xcode: latest
       cocoapods: default
       groups:
