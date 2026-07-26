@@ -72,7 +72,32 @@ function activeMeetingFromJson(json: Record<string, unknown>): ActiveMeeting {
   };
 }
 
+/** A professional the client still holds prepaid time with. */
+export interface ContinueWithItem {
+  professionalId: string;
+  name?: string;
+  avatarKey?: string;
+  occupation?: string;
+  secondsRemaining: number;
+  callType: string;
+  perMinuteKobo: number;
+}
+
+export function continueWithItemFromJson(json: Record<string, unknown>): ContinueWithItem {
+  return {
+    professionalId: json.professional_id as string,
+    name: (json.name as string) ?? undefined,
+    avatarKey: (json.avatar_key as string) ?? undefined,
+    occupation: (json.occupation as string) ?? undefined,
+    secondsRemaining: typeof json.seconds_remaining === 'number' ? json.seconds_remaining : 0,
+    callType: (json.call_type as string) ?? 'audio',
+    perMinuteKobo: typeof json.per_minute_kobo === 'number' ? json.per_minute_kobo : 0,
+  };
+}
+
 export interface HomeResponse {
+  /** Leads the client home — already chosen, already paid. */
+  continueWith: ContinueWithItem[];
   popularProfessionals: ProfessionalListItem[];
   categories: CategoryItem[];
   upcomingCalls: UpcomingCallItem[];
@@ -81,6 +106,9 @@ export interface HomeResponse {
 
 export function homeResponseFromJson(json: Record<string, unknown>): HomeResponse {
   return {
+    continueWith: ((json.continue_with as unknown[]) ?? []).map((e) =>
+      continueWithItemFromJson(e as Record<string, unknown>),
+    ),
     popularProfessionals: ((json.popular_professionals as unknown[]) ?? []).map((e) =>
       professionalListItemFromJson(e as Record<string, unknown>),
     ),

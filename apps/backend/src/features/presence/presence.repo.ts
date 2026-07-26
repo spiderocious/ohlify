@@ -9,11 +9,6 @@ export interface PresenceRow {
   last_seen_at: Date | null;
 }
 
-// Bump the user's last_seen_at to now — the heartbeat that keeps them "online".
-export const touchLastSeen = async (userId: string): Promise<void> => {
-  await pool.query(`UPDATE users SET last_seen_at = now() WHERE id = $1`, [userId]);
-};
-
 export const findPresence = async (userId: string): Promise<PresenceRow | null> => {
   const res = await pool.query<PresenceRow>(
     `SELECT id, role, status::text AS status, kyc_status::text AS kyc_status,

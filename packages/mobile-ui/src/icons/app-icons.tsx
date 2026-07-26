@@ -71,6 +71,7 @@ export const AppIconNames = {
   // Profile / settings
   person: 'person-outline',
   settings: 'settings',
+  lock: 'lock-outline',
   clock: 'schedule',
   atSign: 'alternate-email',
   work: 'work-outline',

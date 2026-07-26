@@ -34,17 +34,33 @@ export interface BankAccountConfig {
 }
 
 export interface PresenceConfig {
-  // A pro is "online" if they've heartbeated within this many seconds.
-  online_window_seconds: number;
   // How long an instant call rings the callee before giving up (unavailable).
   ring_timeout_seconds: number;
-  // Dead switch: when false, both mobile clients (RN + Flutter) never call
-  // POST /me/presence/heartbeat at all. Public — clients read it via
-  // GET /platform-config/public before starting their heartbeat timer.
-  heartbeat_enabled: boolean;
-  // How often (seconds) an online pro's client calls the heartbeat endpoint.
-  // Public — clients read it via GET /platform-config/public.
-  heartbeat_interval_seconds: number;
+  /** How long a professional has to approve an invite before it auto-declines. */
+  invite_approval_timeout_seconds: number;
+  /** How long an approved invitee's devices ring before the invite expires. */
+  invite_ring_timeout_seconds: number;
+}
+
+/**
+ * Capabilities that can be switched off platform-wide, for maintenance or in a
+ * hurry. Every one defaults ON, so an environment that has never touched them
+ * behaves exactly as before.
+ *
+ * Deliberately NOT covering the public-config or app-version endpoints: those
+ * are how a client learns it must upgrade, and gating them would leave a bad
+ * release with no way to tell users how to escape it.
+ */
+export interface EnablementConfig {
+  login: boolean;
+  registration: boolean;
+  wallet_funding: boolean;
+  withdrawals: boolean;
+  calls: boolean;
+  chat: boolean;
+  minutes_purchase: boolean;
+  /** Shown to the user in place of whatever they were trying to do. */
+  message: string;
 }
 
 export interface ChatConfig {
@@ -80,6 +96,49 @@ export interface SupportConfig {
   whatsapp_deeplink: string;
 }
 
+export const ProcessorFeeMode = {
+  /** The user pays the processor's cut on top of the amount they asked for. */
+  PASS_ON: 'pass_on',
+  /** The platform swallows it out of margin. */
+  ABSORB: 'absorb',
+} as const;
+
+export type ProcessorFeeMode = (typeof ProcessorFeeMode)[keyof typeof ProcessorFeeMode];
+
+export const PayoutMode = {
+  INSTANT: 'instant',
+  DAILY_BATCH: 'daily_batch',
+  MANUAL_REVIEW: 'manual_review',
+} as const;
+
+export type PayoutMode = (typeof PayoutMode)[keyof typeof PayoutMode];
+
+export const PlatformFeeMode = {
+  DEDUCT_FROM_PAYEE: 'deduct_from_payee',
+  ADD_TO_PAYER: 'add_to_payer',
+} as const;
+
+export type PlatformFeeMode = (typeof PlatformFeeMode)[keyof typeof PlatformFeeMode];
+
+const PROCESSOR_FEE_MODES = Object.values(ProcessorFeeMode);
+/**
+ * What happens to a manual-review withdrawal nobody acted on.
+ *
+ * Defaults to APPROVE: auto-rejecting punishes a professional for admin
+ * inattention, and the funds are already debited either way.
+ */
+export const WithdrawalTimeoutAction = {
+  APPROVE: 'approve',
+  REJECT: 'reject',
+} as const;
+
+export type WithdrawalTimeoutAction =
+  (typeof WithdrawalTimeoutAction)[keyof typeof WithdrawalTimeoutAction];
+
+const PAYOUT_MODES = Object.values(PayoutMode);
+const WITHDRAWAL_TIMEOUT_ACTIONS = Object.values(WithdrawalTimeoutAction);
+const PLATFORM_FEE_MODES = Object.values(PlatformFeeMode);
+
 export interface WalletConfig {
   withdrawal_cooldown_seconds: number;
   max_withdrawals_per_day: number;
@@ -87,12 +146,25 @@ export interface WalletConfig {
   min_withdrawal_kobo: number;
   min_funding_kobo: number;
   max_funding_kobo: number;
-  payout_mode: 'instant' | 'daily_batch' | 'manual_review';
+  payout_mode: PayoutMode;
+  /** Hours a manual-review withdrawal may sit before auto-resolving. 0 disables. */
+  auto_resolve_after_hours: number;
+  on_timeout: WithdrawalTimeoutAction;
   platform_fee_bps: number;
-  fee_mode: 'deduct_from_payee' | 'add_to_payer';
+  fee_mode: PlatformFeeMode;
   min_billable_seconds: number;
   caller_no_show_refund_pct_bps: number;
   caller_no_show_payee_pct_bps: number;
+  // Paystack's charge for taking money IN. Public: the funding sheet quotes
+  // the fee before the user confirms, so it has to be readable client-side.
+  funding_fee_mode: ProcessorFeeMode;
+  funding_fee_bps: number;
+  funding_fee_flat_kobo: number;
+  funding_fee_cap_kobo: number;
+  // Paystack's charge for paying money OUT. Server-only — professionals never
+  // see it while `absorb` is the mode.
+  withdrawal_fee_mode: ProcessorFeeMode;
+  withdrawal_fee_flat_kobo: number;
 }
 
 export interface BookingsConfig {
@@ -108,6 +180,12 @@ export interface BookingsConfig {
    * declines fall back to the standard no-show flow (refund + strike).
    */
   polite_decline_window_seconds: number;
+  /**
+   * Slack past an instant call's allotted seconds before the stale-active
+   * resolver settles it on the parties' behalf. Absorbs the gap between a
+   * client's last metered second and its `/end` request actually landing.
+   */
+  stale_active_grace_seconds: number;
 }
 
 export interface ProfessionalConfig {
@@ -139,10 +217,20 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     min_name_match_percent: 45,
   },
   presence: {
-    online_window_seconds: 60,
     ring_timeout_seconds: 30,
-    heartbeat_enabled: true,
-    heartbeat_interval_seconds: 30,
+    invite_approval_timeout_seconds: 30,
+    invite_ring_timeout_seconds: 30,
+  },
+  enablement: {
+    login: true,
+    registration: true,
+    wallet_funding: true,
+    withdrawals: true,
+    calls: true,
+    chat: true,
+    minutes_purchase: true,
+    message:
+      'This is temporarily unavailable while we carry out maintenance. Please try again shortly.',
   },
   chat: {
     low_minutes_threshold: 5,
@@ -177,12 +265,20 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     min_withdrawal_kobo: 100_000,
     min_funding_kobo: 50_000,
     max_funding_kobo: 100_000_000,
-    payout_mode: 'instant',
+    payout_mode: PayoutMode.INSTANT,
+    auto_resolve_after_hours: 48,
+    on_timeout: WithdrawalTimeoutAction.APPROVE,
     platform_fee_bps: 1500,
-    fee_mode: 'deduct_from_payee',
+    fee_mode: PlatformFeeMode.DEDUCT_FROM_PAYEE,
     min_billable_seconds: 30,
     caller_no_show_refund_pct_bps: 2000,
     caller_no_show_payee_pct_bps: 8000,
+    funding_fee_mode: ProcessorFeeMode.PASS_ON,
+    funding_fee_bps: 150,
+    funding_fee_flat_kobo: 10_000,
+    funding_fee_cap_kobo: 200_000,
+    withdrawal_fee_mode: ProcessorFeeMode.ABSORB,
+    withdrawal_fee_flat_kobo: 5_000,
   },
   bookings: {
     no_show_grace_seconds: 300,
@@ -191,6 +287,7 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     network_flap_window_seconds: 60,
     token_expires_seconds: 3600,
     polite_decline_window_seconds: 60,
+    stale_active_grace_seconds: 120,
   },
   professional: {
     strike_on_no_show: true,
@@ -211,6 +308,7 @@ interface ConfigSnapshot {
   rate: RateConfig;
   bankAccount: BankAccountConfig;
   presence: PresenceConfig;
+  enablement: EnablementConfig;
   chat: ChatConfig;
   handle: HandleConfig;
   kyc: KycConfig;
@@ -250,6 +348,12 @@ const bool = (v: unknown, fallback: boolean): boolean => {
   if (typeof v === 'boolean') return v;
   return fallback;
 };
+
+// Narrows a raw config value to one of a known set, falling back when the DB
+// holds something the code doesn't recognise (hand-edited row, rolled-back
+// deploy). Keeps enum-shaped keys from silently becoming arbitrary strings.
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+  allowed.includes(v as T) ? (v as T) : fallback;
 
 const numArr = (v: unknown, fallback: readonly number[]): readonly number[] => {
   if (Array.isArray(v) && v.every((x) => typeof x === 'number' && Number.isFinite(x))) {
@@ -300,22 +404,40 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       ),
     },
     presence: {
-      online_window_seconds: num(
-        get('presence.online_window_seconds', d.presence.online_window_seconds),
-        d.presence.online_window_seconds,
+      invite_approval_timeout_seconds: num(
+        get('presence.invite_approval_timeout_seconds', d.presence.invite_approval_timeout_seconds),
+        d.presence.invite_approval_timeout_seconds,
+      ),
+      invite_ring_timeout_seconds: num(
+        get('presence.invite_ring_timeout_seconds', d.presence.invite_ring_timeout_seconds),
+        d.presence.invite_ring_timeout_seconds,
       ),
       ring_timeout_seconds: num(
         get('presence.ring_timeout_seconds', d.presence.ring_timeout_seconds),
         d.presence.ring_timeout_seconds,
       ),
-      heartbeat_enabled: bool(
-        get('presence.heartbeat_enabled', d.presence.heartbeat_enabled),
-        d.presence.heartbeat_enabled,
+    },
+    enablement: {
+      login: bool(get('enablement.login', d.enablement.login), d.enablement.login),
+      registration: bool(
+        get('enablement.registration', d.enablement.registration),
+        d.enablement.registration,
       ),
-      heartbeat_interval_seconds: num(
-        get('presence.heartbeat_interval_seconds', d.presence.heartbeat_interval_seconds),
-        d.presence.heartbeat_interval_seconds,
+      wallet_funding: bool(
+        get('enablement.wallet_funding', d.enablement.wallet_funding),
+        d.enablement.wallet_funding,
       ),
+      withdrawals: bool(
+        get('enablement.withdrawals', d.enablement.withdrawals),
+        d.enablement.withdrawals,
+      ),
+      calls: bool(get('enablement.calls', d.enablement.calls), d.enablement.calls),
+      chat: bool(get('enablement.chat', d.enablement.chat), d.enablement.chat),
+      minutes_purchase: bool(
+        get('enablement.minutes_purchase', d.enablement.minutes_purchase),
+        d.enablement.minutes_purchase,
+      ),
+      message: str(get('enablement.message', d.enablement.message), d.enablement.message),
     },
     chat: {
       low_minutes_threshold: num(
@@ -407,20 +529,29 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
         get('wallet.max_funding_kobo', d.wallet.max_funding_kobo),
         d.wallet.max_funding_kobo,
       ),
-      payout_mode: ((): WalletConfig['payout_mode'] => {
-        const v = get('wallet.payout_mode', d.wallet.payout_mode);
-        if (v === 'instant' || v === 'daily_batch' || v === 'manual_review') return v;
-        return d.wallet.payout_mode;
-      })(),
+      payout_mode: oneOf(
+        get('wallet.payout_mode', d.wallet.payout_mode),
+        PAYOUT_MODES,
+        d.wallet.payout_mode,
+      ),
+      auto_resolve_after_hours: num(
+        get('wallet.auto_resolve_after_hours', d.wallet.auto_resolve_after_hours),
+        d.wallet.auto_resolve_after_hours,
+      ),
+      on_timeout: oneOf(
+        get('wallet.on_timeout', d.wallet.on_timeout),
+        WITHDRAWAL_TIMEOUT_ACTIONS,
+        d.wallet.on_timeout,
+      ),
       platform_fee_bps: num(
         get('wallet.platform_fee_bps', d.wallet.platform_fee_bps),
         d.wallet.platform_fee_bps,
       ),
-      fee_mode: ((): WalletConfig['fee_mode'] => {
-        const v = get('wallet.fee_mode', d.wallet.fee_mode);
-        if (v === 'deduct_from_payee' || v === 'add_to_payer') return v;
-        return d.wallet.fee_mode;
-      })(),
+      fee_mode: oneOf(
+        get('wallet.fee_mode', d.wallet.fee_mode),
+        PLATFORM_FEE_MODES,
+        d.wallet.fee_mode,
+      ),
       min_billable_seconds: num(
         get('wallet.min_billable_seconds', d.wallet.min_billable_seconds),
         d.wallet.min_billable_seconds,
@@ -432,6 +563,32 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       caller_no_show_payee_pct_bps: num(
         get('wallet.caller_no_show_payee_pct_bps', d.wallet.caller_no_show_payee_pct_bps),
         d.wallet.caller_no_show_payee_pct_bps,
+      ),
+      funding_fee_mode: oneOf(
+        get('wallet.funding_fee_mode', d.wallet.funding_fee_mode),
+        PROCESSOR_FEE_MODES,
+        d.wallet.funding_fee_mode,
+      ),
+      funding_fee_bps: num(
+        get('wallet.funding_fee_bps', d.wallet.funding_fee_bps),
+        d.wallet.funding_fee_bps,
+      ),
+      funding_fee_flat_kobo: num(
+        get('wallet.funding_fee_flat_kobo', d.wallet.funding_fee_flat_kobo),
+        d.wallet.funding_fee_flat_kobo,
+      ),
+      funding_fee_cap_kobo: num(
+        get('wallet.funding_fee_cap_kobo', d.wallet.funding_fee_cap_kobo),
+        d.wallet.funding_fee_cap_kobo,
+      ),
+      withdrawal_fee_mode: oneOf(
+        get('wallet.withdrawal_fee_mode', d.wallet.withdrawal_fee_mode),
+        PROCESSOR_FEE_MODES,
+        d.wallet.withdrawal_fee_mode,
+      ),
+      withdrawal_fee_flat_kobo: num(
+        get('wallet.withdrawal_fee_flat_kobo', d.wallet.withdrawal_fee_flat_kobo),
+        d.wallet.withdrawal_fee_flat_kobo,
       ),
     },
     bookings: {
@@ -458,6 +615,10 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       polite_decline_window_seconds: num(
         get('bookings.polite_decline_window_seconds', d.bookings.polite_decline_window_seconds),
         d.bookings.polite_decline_window_seconds,
+      ),
+      stale_active_grace_seconds: num(
+        get('bookings.stale_active_grace_seconds', d.bookings.stale_active_grace_seconds),
+        d.bookings.stale_active_grace_seconds,
       ),
     },
     professional: {
@@ -547,6 +708,7 @@ export const platformConfig = {
   rate: (): RateConfig => snapshot.rate,
   bankAccount: (): BankAccountConfig => snapshot.bankAccount,
   presence: (): PresenceConfig => snapshot.presence,
+  enablement: (): EnablementConfig => snapshot.enablement,
   chat: (): ChatConfig => snapshot.chat,
   handle: (): HandleConfig => snapshot.handle,
   kyc: (): KycConfig => snapshot.kyc,

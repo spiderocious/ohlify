@@ -1,16 +1,25 @@
 import * as authRepo from '@features/auth/auth.repo.js';
+import * as eventsRepo from '@features/call-session-events/call-session-events.repo.js';
+import { recordCallEvent } from '@features/chat/chat.service.js';
+import { CallEventOutcome } from '@features/chat/chat.types.js';
+import { DurationEvent } from '@features/call-session-events/duration.js';
 import { resolveReachability, ReachabilityReason } from '@features/presence/index.js';
 import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { agoraUidForUserId, issueAgoraRtcToken } from '@lib/agora/index.js';
+
+import * as participantsRepo from './call-participants.repo.js';
+import { CallParticipantRole, CallParticipantStatus } from './call-participants.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { withTransaction } from '@lib/db/tx.js';
 import { koboToJson } from '@lib/money.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
-import { settleMinutes } from '@lib/wallet/flows/minutes-settle.js';
+import { nowUtc } from '@lib/time.js';
+import type { MessageKey } from '@shared/constants/message-keys.js';
 
 import { INSTANT_CALL_MESSAGES } from './instant-calls.messages.js';
 import * as repo from './instant-calls.repo.js';
+import { settleActiveCall } from './instant-calls.settlement.js';
 import type { StartCallDto } from './instant-calls.schema.js';
 import {
   INSTANT_CALL_RING_SECONDS,
@@ -43,8 +52,9 @@ const buildJoinView = (
     call_type: call.call_type,
     remote_user_id: remoteUserId,
     per_minute_kobo: koboToJson(BigInt(call.per_minute_kobo)),
-    minutes_allotted: call.minutes_allotted,
-    max_seconds: call.minutes_allotted * 60,
+    seconds_allotted: call.seconds_allotted,
+    max_seconds: call.seconds_allotted,
+    minutes_allotted: Math.floor(call.seconds_allotted / 60),
   };
 };
 
@@ -55,7 +65,7 @@ const toView = (row: InstantCallRow): InstantCallView => ({
   call_type: row.call_type,
   status: row.status,
   per_minute_kobo: koboToJson(BigInt(row.per_minute_kobo)),
-  minutes_allotted: row.minutes_allotted,
+  seconds_allotted: row.seconds_allotted,
   connected_seconds: row.connected_seconds,
   settled_kobo: koboToJson(BigInt(row.settled_kobo)),
   connected_at: row.connected_at ? row.connected_at.toISOString() : null,
@@ -63,18 +73,17 @@ const toView = (row: InstantCallRow): InstantCallView => ({
   created_at: row.created_at.toISOString(),
 });
 
-const reasonToError = (reason: ReachabilityReason): ServiceError => {
-  switch (reason) {
-    case ReachabilityReason.OFFLINE:
-      return new ServiceError('professional_unavailable', INSTANT_CALL_MESSAGES.OFFLINE, 409);
-    case ReachabilityReason.NOT_ACCEPTING:
-      return new ServiceError('professional_unavailable', INSTANT_CALL_MESSAGES.NOT_ACCEPTING, 409);
-    case ReachabilityReason.DND:
-      return new ServiceError('professional_unavailable', INSTANT_CALL_MESSAGES.DND, 409);
-    default:
-      return new ServiceError('professional_unavailable', INSTANT_CALL_MESSAGES.OFFLINE, 409);
-  }
+const REASON_MESSAGES: Record<ReachabilityReason, MessageKey> = {
+  [ReachabilityReason.OK]: INSTANT_CALL_MESSAGES.OFFLINE,
+  [ReachabilityReason.OFFLINE]: INSTANT_CALL_MESSAGES.OFFLINE,
+  [ReachabilityReason.UNREACHABLE]: INSTANT_CALL_MESSAGES.OFFLINE,
+  [ReachabilityReason.NOT_ACCEPTING]: INSTANT_CALL_MESSAGES.NOT_ACCEPTING,
+  [ReachabilityReason.DND]: INSTANT_CALL_MESSAGES.DND,
+  [ReachabilityReason.BUSY]: INSTANT_CALL_MESSAGES.BUSY,
 };
+
+const reasonToError = (reason: ReachabilityReason): ServiceError =>
+  new ServiceError('professional_unavailable', REASON_MESSAGES[reason], 409);
 
 // Start an instant call: run the preflight (minutes / online / DnD), then
 // create the ringing call and return the caller's join credentials.
@@ -83,9 +92,9 @@ export const startCall = async (dto: StartCallDto, callerUserId: string) => {
     return new ServiceError('cannot_book_self', INSTANT_CALL_MESSAGES.CANNOT_CALL_SELF, 422);
   }
 
-  // Gate 1: minutes for this pro + call type.
+  // Gate 1: prepaid time with this pro for this call type.
   const balance = await minutesRepo.findBalance(callerUserId, dto.professional_id, dto.call_type);
-  if (!balance || balance.minutes_remaining <= 0) {
+  if (!balance || balance.seconds_remaining <= 0) {
     return new ServiceError('insufficient_balance', INSTANT_CALL_MESSAGES.NO_MINUTES, 409);
   }
 
@@ -108,7 +117,23 @@ export const startCall = async (dto: StartCallDto, callerUserId: string) => {
         calleeUserId: dto.professional_id,
         callType: dto.call_type,
         perMinuteKobo: BigInt(balance.rate_snapshot_kobo),
-        minutesAllotted: balance.minutes_remaining,
+        secondsAllotted: balance.seconds_remaining,
+      });
+      // Both original parties become participant rows in the same transaction
+      // as the call. The two columns on `instant_calls` stay authoritative for
+      // settlement; these rows are what the roster and the one-live-per-user
+      // rule read, and a call without them would be invisible to both.
+      await participantsRepo.create(client, {
+        callId: created.id,
+        userId: callerUserId,
+        role: CallParticipantRole.CALLER,
+        status: CallParticipantStatus.JOINED,
+      });
+      await participantsRepo.create(client, {
+        callId: created.id,
+        userId: dto.professional_id,
+        role: CallParticipantRole.CALLEE,
+        status: CallParticipantStatus.RINGING,
       });
       // Same tx as the insert: the wake-up push only fires iff the ringing
       // row commits. Delivery is the outbox worker's problem (retries).
@@ -154,6 +179,7 @@ export const answerCall = async (callId: string, calleeUserId: string) => {
       return new ServiceError('call_not_joinable', INSTANT_CALL_MESSAGES.NOT_RINGING, 409);
     }
     await repo.markActive(client, callId);
+    await participantsRepo.markJoined(client, callId, calleeUserId);
     // Dismiss the ring on the callee's OTHER devices (answered here).
     await insertEvent(client, {
       aggregateType: OutboxAggregateType.CALL,
@@ -169,24 +195,61 @@ export const answerCall = async (callId: string, calleeUserId: string) => {
   });
 };
 
-// The callee's incoming (ringing) call, if any — foreground poll.
-export const getIncoming = async (calleeUserId: string) => {
-  const row = await repo.findLiveForCallee(calleeUserId);
-  const data =
-    row && row.status === InstantCallStatus.RINGING
-      ? {
-          call_id: row.id,
-          caller_user_id: row.caller_user_id,
-          call_type: row.call_type,
-          agora_channel_name: row.agora_channel_name,
-        }
-      : null;
-  return new ServiceSuccess(data, INSTANT_CALL_MESSAGES.INCOMING_FETCHED);
+/**
+ * Suspends metering when the caller runs out of prepaid time.
+ *
+ * Writing the pause into the call-app's own event log is what makes it real:
+ * settlement derives duration from that log, so time spent staring at a top-up
+ * overlay is excluded from the charge without the settlement path needing to
+ * know the pause happened.
+ *
+ * Either party may pause — the caller when their balance empties, the callee's
+ * client when it observes the same — and repeats are harmless, since the
+ * derivation collapses consecutive pauses.
+ */
+export const pauseCall = async (callId: string, userId: string) =>
+  recordMeterEvent(callId, userId, DurationEvent.PAUSED, INSTANT_CALL_MESSAGES.PAUSED);
+
+/**
+ * Resumes metering after a verified top-up.
+ *
+ * Deliberately does not re-check the balance: the caller's guard is the
+ * intent's `verify`, and duplicating the check here would let a rounding
+ * disagreement between the two strand a call that was legitimately topped up.
+ */
+export const resumeCall = async (callId: string, userId: string) =>
+  recordMeterEvent(callId, userId, DurationEvent.RESUMED, INSTANT_CALL_MESSAGES.RESUMED);
+
+const recordMeterEvent = async (
+  callId: string,
+  userId: string,
+  event: DurationEvent,
+  message: MessageKey,
+) => {
+  const call = await repo.findById(callId);
+  if (!call) return new ServiceError('call_not_found', INSTANT_CALL_MESSAGES.NOT_FOUND, 404);
+  if (call.caller_user_id !== userId && call.callee_user_id !== userId) {
+    return new ServiceError('forbidden', INSTANT_CALL_MESSAGES.NOT_FOUND, 404);
+  }
+  if (call.status !== InstantCallStatus.ACTIVE) {
+    return new ServiceError('call_not_joinable', INSTANT_CALL_MESSAGES.NOT_ACTIVE, 409);
+  }
+
+  await eventsRepo.insertEvent({
+    call_id: callId,
+    call_reference: null,
+    event,
+    payload: { source: 'server', actor_user_id: userId },
+    occurred_at: nowUtc(),
+  });
+
+  return new ServiceSuccess({ call_id: callId, event }, message);
 };
 
-// End a call. `reason` distinguishes a normal hangup (settle for talked time)
-// from an unanswered/cancelled ring (no charge). connectedSeconds is the
-// client-reported talk time, clamped to the minutes cap.
+// End a call. A hangup mid-conversation settles for the time the call-app's
+// event log says was talked; ending while it was still ringing charges nothing.
+// `connectedSeconds` is what the client believes it used — recorded for
+// reconciliation, never trusted as the basis for the charge.
 export const endCall = async (callId: string, userId: string, connectedSeconds: number) => {
   return withTransaction(async (client) => {
     const call = await repo.findByIdForUpdate(client, callId);
@@ -236,48 +299,22 @@ export const endCall = async (callId: string, userId: string, connectedSeconds: 
           payload: { call_id: callId, target_user_id: call.caller_user_id, reason: 'declined' },
         });
       }
+      // An unanswered ring is still part of their conversation — WhatsApp
+      // shows these, and a missed call with no trace is how people miss them
+      // twice.
+      await recordCallEvent(client, {
+        clientUserId: call.caller_user_id,
+        professionalId: call.callee_user_id,
+        callerUserId: call.caller_user_id,
+        callId,
+        callType: call.call_type,
+        outcome: isCaller ? CallEventOutcome.CANCELLED : CallEventOutcome.DECLINED,
+      });
       const updated = (await repo.findByIdForUpdate(client, callId))!;
       return new ServiceSuccess(toView(updated), INSTANT_CALL_MESSAGES.ENDED);
     }
 
-    // Active → meter + settle. Cap talk time at the minutes allotment.
-    const capSeconds = call.minutes_allotted * 60;
-    const talkedSeconds = Math.max(0, Math.min(connectedSeconds, capSeconds));
-
-    // Bill per second, floored to whole minutes for deduction (system-wide floor).
-    const minBillable = platformConfig.wallet().min_billable_seconds;
-    const billedMinutes = talkedSeconds < minBillable ? 0 : Math.floor(talkedSeconds / 60);
-    const perMin = BigInt(call.per_minute_kobo);
-    const amountKobo = perMin * BigInt(billedMinutes);
-
-    let settlementJournalId: string | null = null;
-    if (amountKobo > 0n) {
-      const feeBps = platformConfig.wallet().platform_fee_bps;
-      const settle = await settleMinutes(client, {
-        callId,
-        payeeUserId: call.callee_user_id,
-        amountKobo,
-        feeBps,
-      });
-      settlementJournalId = settle.journalId;
-
-      // Deduct the consumed minutes + escrow from the caller's balance.
-      await minutesRepo.consumeMinutes(client, {
-        userId: call.caller_user_id,
-        professionalId: call.callee_user_id,
-        callType: call.call_type,
-        minutes: billedMinutes,
-        escrowKobo: amountKobo,
-      });
-    }
-
-    await repo.finalize(client, {
-      callId,
-      status: InstantCallStatus.ENDED,
-      connectedSeconds: talkedSeconds,
-      settledKobo: amountKobo,
-      settlementJournalId,
-    });
+    await settleActiveCall(client, call, Math.max(0, connectedSeconds));
     const updated = (await repo.findByIdForUpdate(client, callId))!;
     return new ServiceSuccess(toView(updated), INSTANT_CALL_MESSAGES.ENDED);
   });

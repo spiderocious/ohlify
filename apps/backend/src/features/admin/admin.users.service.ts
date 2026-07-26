@@ -96,92 +96,101 @@ export const getUser = async (userId: string) => {
     return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_USER_FETCHED, 404);
   }
 
-  const [kyc, bank, available, pending, callsAsCaller, callsAsCallee, transactions, flags] =
-    await Promise.all([
-      pool.query<{
-        id: string;
-        identity_type: string;
-        identity_number: string;
-        document_upload_id: string | null;
-        selfie_upload_key: string | null;
-        status: string;
-        reviewed_by: string | null;
-        reviewed_at: Date | null;
-        reject_reason_code: string | null;
-        reject_note: string | null;
-        created_at: Date;
-      }>(
-        `SELECT id, identity_type, identity_number, document_upload_id, selfie_upload_key,
+  const [
+    kyc,
+    bank,
+    available,
+    pending,
+    callsAsCaller,
+    callsAsCallee,
+    transactions,
+    flags,
+    devices,
+  ] = await Promise.all([
+    pool.query<{
+      id: string;
+      identity_type: string;
+      identity_number: string;
+      document_upload_id: string | null;
+      selfie_upload_key: string | null;
+      status: string;
+      reviewed_by: string | null;
+      reviewed_at: Date | null;
+      reject_reason_code: string | null;
+      reject_note: string | null;
+      created_at: Date;
+    }>(
+      `SELECT id, identity_type, identity_number, document_upload_id, selfie_upload_key,
                 status::text AS status,
                 reviewed_by, reviewed_at, reject_reason_code, reject_note, created_at
            FROM kyc_submissions
            WHERE user_id = $1
            ORDER BY created_at DESC
            LIMIT 1`,
-        [userId],
-      ),
-      pool.query<{
-        bank_code: string;
-        bank_name: string;
-        account_number_last4: string;
-        account_name: string;
-        added_at: Date;
-      }>(
-        // Mask the full account number — only return last 4. The ops UI
-        // never needs the raw value; if it ever does, that's a separate,
-        // narrower endpoint with extra audit.
-        `SELECT bank_code, bank_name,
+      [userId],
+    ),
+    pool.query<{
+      bank_code: string;
+      bank_name: string;
+      account_number_last4: string;
+      account_name: string;
+      added_at: Date;
+    }>(
+      // Mask the full account number — only return last 4. The ops UI
+      // never needs the raw value; if it ever does, that's a separate,
+      // narrower endpoint with extra audit.
+      `SELECT bank_code, bank_name,
                 RIGHT(account_number, 4) AS account_number_last4,
                 account_name, added_at
            FROM bank_accounts
            WHERE user_id = $1
            LIMIT 1`,
-        [userId],
-      ),
-      readUserAvailableBalance(userId),
-      readUserPendingBalance(userId),
-      pool.query<{
-        id: string;
-        status: string;
-        callee_user_id: string;
-        start_at: Date;
-        connected_seconds: number;
-        ended_at: Date | null;
-      }>(
-        `SELECT c.id, c.status::text AS status, b.callee_user_id,
+      [userId],
+    ),
+    readUserAvailableBalance(userId),
+    readUserPendingBalance(userId),
+    pool.query<{
+      id: string;
+      status: string;
+      callee_user_id: string;
+      start_at: Date;
+      connected_seconds: number;
+      ended_at: Date | null;
+    }>(
+      `SELECT c.id, c.status::text AS status, b.callee_user_id,
                 b.start_at, c.connected_seconds, c.ended_at
            FROM calls c
            JOIN bookings b ON b.id = c.booking_id
            WHERE b.caller_user_id = $1
            ORDER BY c.created_at DESC
            LIMIT 10`,
-        [userId],
-      ),
-      pool.query<{
-        id: string;
-        status: string;
-        caller_user_id: string;
-        start_at: Date;
-        connected_seconds: number;
-        ended_at: Date | null;
-      }>(
-        `SELECT c.id, c.status::text AS status, b.caller_user_id,
+      [userId],
+    ),
+    pool.query<{
+      id: string;
+      status: string;
+      caller_user_id: string;
+      start_at: Date;
+      connected_seconds: number;
+      ended_at: Date | null;
+    }>(
+      `SELECT c.id, c.status::text AS status, b.caller_user_id,
                 b.start_at, c.connected_seconds, c.ended_at
            FROM calls c
            JOIN bookings b ON b.id = c.booking_id
            WHERE b.callee_user_id = $1
            ORDER BY c.created_at DESC
            LIMIT 10`,
-        [userId],
-      ),
-      pool.query<{
-        journal_id: string;
-        kind: string;
-        signed_amount_kobo: string;
-        memo: string | null;
-        created_at: Date;
-      }>(
-        `SELECT j.id AS journal_id, j.kind::text AS kind,
+      [userId],
+    ),
+    pool.query<{
+      journal_id: string;
+      kind: string;
+      signed_amount_kobo: string;
+      memo: string | null;
+      created_at: Date;
+    }>(
+      `SELECT j.id AS journal_id, j.kind::text AS kind,
                 we.signed_amount_kobo::text, j.memo, j.created_at
            FROM wallet_entries we
            JOIN accounts acct ON acct.id = we.account_id
@@ -189,13 +198,13 @@ export const getUser = async (userId: string) => {
            WHERE acct.kind = 'user' AND acct.owner_user_id = $1
            ORDER BY j.created_at DESC, j.id DESC
            LIMIT 10`,
-        [userId],
-      ),
-      pool.query<{
-        active_reports_against: string;
-        failed_payouts_30d: string;
-      }>(
-        `SELECT
+      [userId],
+    ),
+    pool.query<{
+      active_reports_against: string;
+      failed_payouts_30d: string;
+    }>(
+      `SELECT
            (SELECT COUNT(*)::text FROM reports
               WHERE target_type = 'profile' AND target_id = $1 AND status = 'pending')
              AS active_reports_against,
@@ -203,9 +212,30 @@ export const getUser = async (userId: string) => {
               WHERE user_id = $1 AND status IN ('failed','reversed')
                 AND requested_at > now() - INTERVAL '30 days')
              AS failed_payouts_30d`,
-        [userId],
-      ),
-    ]);
+      [userId],
+    ),
+    // Devices this user has signed in from. Answers "what were they actually
+    // running?" without asking them — and the same columns feed campaign
+    // targeting.
+    pool.query<{
+      platform: string | null;
+      app_version: string | null;
+      device_name: string | null;
+      device_model: string | null;
+      os_version: string | null;
+      ip: string | null;
+      created_at: Date;
+      last_used_at: Date | null;
+    }>(
+      `SELECT platform, app_version, device_name, device_model, os_version,
+                host(ip) AS ip, created_at, last_used_at
+           FROM auth_sessions
+           WHERE user_id = $1 AND revoked_at IS NULL
+           ORDER BY created_at DESC
+           LIMIT 10`,
+      [userId],
+    ),
+  ]);
 
   const kycRow = kyc.rows[0];
   const bankRow = bank.rows[0];
@@ -243,6 +273,16 @@ export const getUser = async (userId: string) => {
         available_kobo: koboToJson(available),
         pending_kobo: koboToJson(pending),
       },
+      recent_devices: devices.rows.map((d) => ({
+        platform: d.platform,
+        app_version: d.app_version,
+        device_name: d.device_name,
+        device_model: d.device_model,
+        os_version: d.os_version,
+        ip: d.ip,
+        first_seen_at: d.created_at.toISOString(),
+        last_used_at: d.last_used_at?.toISOString() ?? null,
+      })),
       recent_calls_as_caller: callsAsCaller.rows.map((r) => ({
         id: r.id,
         status: r.status,

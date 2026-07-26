@@ -5,13 +5,16 @@ import { Env } from '@shared/config/env';
 
 import type { JoinCallResponse } from '@features/calls/types/call-models';
 
-/** Messages the call-app sends to this host. Mirrors mobile/lib/features/call_session/screen/parts/call_app_webview.dart. */
+/** Messages the call-app sends to this host. */
 export type CallAppMessage =
   | { type: 'ready' }
   | { type: 'active' }
   | { type: 'ended'; reason: string; connectedSeconds: number }
   | { type: 'token-expiring' }
-  | { type: 'permission-needed'; permission: string };
+  | { type: 'permission-needed'; permission: string }
+  | { type: 'duration-warning'; remainingSeconds: number }
+  | { type: 'duration-paused'; elapsedSeconds: number }
+  | { type: 'duration-resumed'; elapsedSeconds: number };
 
 export interface CallAppWebViewHandle {
   sendJoin: (params: {
@@ -24,9 +27,19 @@ export interface CallAppWebViewHandle {
     callReference?: string;
     role: string;
     callType: string;
+    /**
+     * Billable ceiling for this call. Drives the call-app's countdown and its
+     * 60s warning; omitting it leaves the call open-ended, which for a prepaid
+     * call would mean talking past the balance with no on-screen notice.
+     */
+    allottedSeconds?: number;
   }) => void;
   sendRenewToken: (params: { agoraToken: string; expiresAt: string }) => void;
   sendHangup: () => void;
+  /** Suspends metering and closes both mics — the caller is out of paid time. */
+  sendPauseDuration: () => void;
+  /** Resumes metering after a verified top-up, restoring the user's own mute choice. */
+  sendResumeDuration: () => void;
 }
 
 export interface CallAppWebViewProps {
@@ -68,7 +81,7 @@ export const CallAppWebView = forwardRef<CallAppWebViewHandle, CallAppWebViewPro
   useImperativeHandle(
     ref,
     () => ({
-      sendJoin: ({ joinData, localName, localAvatarKey, peerName, peerAvatarKey, peerAgoraUid, callReference, role, callType }) => {
+      sendJoin: ({ joinData, localName, localAvatarKey, peerName, peerAvatarKey, peerAgoraUid, callReference, role, callType, allottedSeconds }) => {
         postMessage({
           type: 'ca:join',
           payload: {
@@ -87,6 +100,12 @@ export const CallAppWebView = forwardRef<CallAppWebViewHandle, CallAppWebViewPro
             peer_avatar_key: peerAvatarKey ?? null,
             session_token: null,
             call_reference: callReference ?? null,
+            // The bridge speaks minutes here; the balance is seconds, so round
+            // UP — a floor would cut the call short of time already paid for.
+            duration_minutes:
+              allottedSeconds !== undefined && allottedSeconds > 0
+                ? Math.ceil(allottedSeconds / 60)
+                : null,
             permissions: { microphone: 'granted', camera: 'granted' },
           },
         });
@@ -96,6 +115,12 @@ export const CallAppWebView = forwardRef<CallAppWebViewHandle, CallAppWebViewPro
       },
       sendHangup: () => {
         postMessage({ type: 'ca:hangup' });
+      },
+      sendPauseDuration: () => {
+        postMessage({ type: 'ca:pause-duration' });
+      },
+      sendResumeDuration: () => {
+        postMessage({ type: 'ca:resume-duration' });
       },
     }),
     [postMessage],
@@ -121,6 +146,15 @@ export const CallAppWebView = forwardRef<CallAppWebViewHandle, CallAppWebViewPro
             break;
           case 'ca:permission-needed':
             onMessage({ type: 'permission-needed', permission: (payload.permission as string) ?? 'microphone' });
+            break;
+          case 'ca:duration-warning':
+            onMessage({ type: 'duration-warning', remainingSeconds: (payload.remaining_seconds as number) ?? 0 });
+            break;
+          case 'ca:duration-paused':
+            onMessage({ type: 'duration-paused', elapsedSeconds: (payload.elapsed_seconds as number) ?? 0 });
+            break;
+          case 'ca:duration-resumed':
+            onMessage({ type: 'duration-resumed', elapsedSeconds: (payload.elapsed_seconds as number) ?? 0 });
             break;
           default:
             break;

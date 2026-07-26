@@ -1,4 +1,5 @@
+import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
+
 export const PRESENCE_MESSAGES = {
-  HEARTBEAT_OK: 'presence.heartbeat.ok',
-  PRESENCE_FETCHED: 'presence.fetched',
+  PRESENCE_FETCHED: MESSAGE_KEYS.PRESENCE_FETCHED,
 } as const;

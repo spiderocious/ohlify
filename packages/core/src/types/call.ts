@@ -1,5 +1,10 @@
+export const CallType = {
+  VIDEO: 'video',
+  AUDIO: 'audio',
+} as const;
+
 /** Mobile parity: scheduled_call_item.dart::CallType. */
-export type CallType = 'video' | 'audio';
+export type CallType = (typeof CallType)[keyof typeof CallType];
 
 /** Mobile parity: call_detail.dart::CallStatus. */
 export type CallStatus = 'upcoming' | 'completed' | 'missed';

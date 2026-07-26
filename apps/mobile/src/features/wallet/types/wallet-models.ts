@@ -61,6 +61,8 @@ export interface WalletTransaction {
   icon: string;
   direction: WalletTxDirection;
   reference?: string;
+  /** Set when this row is a withdrawal — the detail screen loads its status and reason. */
+  relatedWithdrawalId?: string;
 }
 
 export function walletTransactionFromJson(json: Record<string, unknown>): WalletTransaction {
@@ -81,6 +83,7 @@ export function walletTransactionFromJson(json: Record<string, unknown>): Wallet
     icon: (json.icon as string | undefined) ?? 'admin_shield',
     direction,
     reference: json.reference as string | undefined,
+    relatedWithdrawalId: json.related_withdrawal_id as string | undefined,
   };
 }
 
@@ -94,16 +97,24 @@ export function walletTransactionIsCredit(t: WalletTransaction): boolean {
 
 export interface FundInitResponse {
   reference: string;
+  /** What Paystack will collect — credit plus the fee when it is passed on. */
   amountKobo: number;
+  /** What lands in the wallet. Equals the amount the user asked for. */
+  creditKobo: number;
+  /** The processor's cut, itemised for the receipt. */
+  feeKobo: number;
   authorizationUrl: string;
   accessCode: string;
   currency: string;
 }
 
 export function fundInitResponseFromJson(json: Record<string, unknown>): FundInitResponse {
+  const amountKobo = typeof json.amount_kobo === 'number' ? json.amount_kobo : 0;
   return {
     reference: json.reference as string,
-    amountKobo: typeof json.amount_kobo === 'number' ? json.amount_kobo : 0,
+    amountKobo,
+    creditKobo: typeof json.credit_kobo === 'number' ? json.credit_kobo : amountKobo,
+    feeKobo: typeof json.fee_kobo === 'number' ? json.fee_kobo : 0,
     authorizationUrl: (json.authorization_url as string) ?? '',
     accessCode: (json.access_code as string) ?? '',
     currency: (json.currency as string) ?? 'NGN',

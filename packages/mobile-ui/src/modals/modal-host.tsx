@@ -43,11 +43,16 @@ export function ModalHost() {
       Animated.spring(progress, { toValue: 1, useNativeDriver: true, ...spring.snappy }).start();
     } else if (!storeTop && displayed && !isExiting) {
       setIsExiting(true);
-      Animated.timing(progress, { toValue: 0, duration: duration.base, useNativeDriver: true }).start(({ finished }) => {
+      Animated.timing(progress, {
+        toValue: 0,
+        duration: duration.base,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
         if (finished) setDisplayed(undefined);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally keyed on `storeTop` alone: re-running on the animated
+    // values would restart the transition mid-flight.
   }, [storeTop]);
 
   if (!displayed) return null;
@@ -88,10 +93,7 @@ export function ModalHost() {
         {isFullscreen ? (
           <Animated.View style={{ flex: 1, opacity: contentOpacity }}>{content}</Animated.View>
         ) : (
-          <Pressable
-            onPress={dismiss}
-            style={{ flex: 1 }}
-          >
+          <Pressable onPress={dismiss} style={{ flex: 1 }}>
             <Animated.View
               pointerEvents="none"
               style={{ ...ABSOLUTE_FILL, backgroundColor: '#000000', opacity: scrimOpacity }}
@@ -109,11 +111,10 @@ export function ModalHost() {
                 paddingVertical: 24,
               }}
             >
-              <Pressable
-                onPress={(e) => e.stopPropagation()}
-                style={{ width: '100%' }}
-              >
-                <Animated.View style={{ opacity: contentOpacity, transform: [{ scale: contentScale }] }}>
+              <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
+                <Animated.View
+                  style={{ opacity: contentOpacity, transform: [{ scale: contentScale }] }}
+                >
                   {content}
                 </Animated.View>
               </Pressable>

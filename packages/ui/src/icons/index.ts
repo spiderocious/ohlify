@@ -46,6 +46,7 @@ export {
   MicOff as IconMicOff,
   PanelsTopLeft as IconComponents,
   Phone as IconPhone,
+  Smartphone as IconSmartphone,
   PhoneCall as IconPhoneCall,
   PhoneIncoming as IconPhoneIncoming,
   PhoneOff as IconPhoneOff,

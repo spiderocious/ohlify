@@ -53,7 +53,12 @@ export interface WalletTransactionView {
 export interface FundingInitView {
   reference: string;
   paystack_reference: string | null;
+  /** What Paystack will collect — credit plus the fee when it is passed on. */
   amount_kobo: JsonKobo;
+  /** What lands in the wallet. Equals the amount the user asked for. */
+  credit_kobo: JsonKobo;
+  /** The processor's cut, itemised so the funding sheet can show it. */
+  fee_kobo: JsonKobo;
   currency: string;
   authorization_url: string;
   access_code: string;

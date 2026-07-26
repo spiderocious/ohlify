@@ -1,5 +1,9 @@
+import { notify } from '@features/notifications/notifications.service.js';
+import { NotificationKind } from '@features/notifications/notifications.types.js';
 import * as walletRepo from '@features/wallet/wallet.repo.js';
+import { cancelReviewTimeout } from '@features/wallet/withdrawal-review.service.js';
 import { pool } from '@lib/db/pool.js';
+import { DeeplinkTarget, encodeDeeplink } from '@lib/deeplink.js';
 import { logger } from '@lib/logger.js';
 import { koboToJson } from '@lib/money.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
@@ -172,6 +176,7 @@ export const approveWithdrawal = async (withdrawalId: string, _dto: AdminApprove
     } finally {
       client.release();
     }
+    await cancelReviewTimeout(wd.id);
     logger.warn(
       { withdrawalId: wd.id, transferCode: transfer.transfer_code },
       'admin approved withdrawal — transfer initiated',
@@ -220,7 +225,23 @@ export const rejectWithdrawal = async (withdrawalId: string, dto: AdminRejectWit
       amountKobo: BigInt(wd.amount_kobo),
     });
     await walletRepo.setWithdrawalFailed(client, wd.id, dto.reason);
+    // Inside the transaction: a rejection that rolls back must not leave the
+    // professional a notice about money that was never returned. The reason is
+    // the whole point — "your withdrawal failed" with no explanation leaves
+    // someone with nothing to act on.
+    await notify(client, {
+      userId: wd.user_id,
+      kind: NotificationKind.WITHDRAWAL_REJECTED,
+      title: 'Withdrawal rejected',
+      body: dto.reason,
+      deeplink: encodeDeeplink({
+        target: DeeplinkTarget.WALLET_TRANSACTION,
+        params: { withdrawal_id: wd.id },
+      }),
+      metadata: { withdrawal_id: wd.id, amount_kobo: wd.amount_kobo },
+    });
     await client.query('COMMIT');
+    await cancelReviewTimeout(wd.id);
     logger.warn(
       { withdrawalId: wd.id, reason: dto.reason },
       'admin rejected withdrawal — reversal posted, marked failed',

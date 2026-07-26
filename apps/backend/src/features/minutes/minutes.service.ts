@@ -18,7 +18,8 @@ import type { MinuteBalanceRow, MinuteBalanceView } from './minutes.types.js';
 const toBalanceView = (row: MinuteBalanceRow): MinuteBalanceView => ({
   professional_id: row.professional_id,
   call_type: row.call_type,
-  minutes_remaining: row.minutes_remaining,
+  seconds_remaining: row.seconds_remaining,
+  minutes_remaining: Math.floor(row.seconds_remaining / 60),
   rate_snapshot_kobo: koboToJson(BigInt(row.rate_snapshot_kobo)),
   escrow_kobo: koboToJson(BigInt(row.escrow_kobo)),
 });
@@ -39,6 +40,7 @@ export const getBalanceForPro = async (
     : {
         professional_id: professionalId,
         call_type: callType,
+        seconds_remaining: 0,
         minutes_remaining: 0,
         rate_snapshot_kobo: 0,
         escrow_kobo: 0,
@@ -64,19 +66,19 @@ export const purchase = async (dto: BuyMinutesDto, userId: string) => {
     return new ServiceError('rate_not_found', MINUTES_MESSAGES.RATE_NOT_FOUND, 422);
   }
 
-  // 3. Minutes bought = floor(amount / per_minute). Platform keeps the sub-minute
-  //    remainder (system-wide floor rounding). Reject if it can't buy a minute.
+  // 3. Seconds bought = floor(amount * 60 / per_minute). Billing is per-second,
+  //    so the whole amount buys time and nothing is stripped as a remainder —
+  //    the escrow is the full charge.
   const amountKobo = BigInt(dto.amount_kobo);
   const perMinKobo = BigInt(perMin);
-  const minutes = Number(amountKobo / perMinKobo); // integer floor division
-  if (minutes <= 0) {
+  const seconds = Number((amountKobo * 60n) / perMinKobo);
+  if (seconds <= 0) {
+    const minKoboForOneSecond = Math.ceil(perMin / 60);
     return new ServiceError('value_out_of_range', MINUTES_MESSAGES.AMOUNT_TOO_LOW, 422, {
-      amount_kobo: [`Minimum to buy a minute is ${perMin} kobo`],
+      amount_kobo: [`Minimum to buy a second is ${minKoboForOneSecond} kobo`],
     });
   }
-  // Only the portion that actually bought whole minutes goes to escrow; the
-  // sub-minute remainder stays in the user's wallet.
-  const escrowKobo = perMinKobo * BigInt(minutes);
+  const escrowKobo = amountKobo;
 
   const purchaseId = makeId('mp');
 
@@ -92,11 +94,11 @@ export const purchase = async (dto: BuyMinutesDto, userId: string) => {
       return new ServiceError('insufficient_balance', MINUTES_MESSAGES.INSUFFICIENT_WALLET, 409);
     }
 
-    await repo.addMinutes(client, {
+    await repo.addSeconds(client, {
       userId,
       professionalId: dto.professional_id,
       callType: dto.call_type,
-      minutes,
+      seconds,
       perMinuteKobo: perMinKobo,
       amountKobo: escrowKobo,
     });
@@ -108,7 +110,7 @@ export const purchase = async (dto: BuyMinutesDto, userId: string) => {
       callType: dto.call_type,
       amountKobo: escrowKobo,
       perMinuteKobo: perMinKobo,
-      minutes,
+      seconds,
       journalId: buy.journalId,
     });
 
@@ -121,7 +123,7 @@ export const purchase = async (dto: BuyMinutesDto, userId: string) => {
           user_id: userId,
           professional_id: dto.professional_id,
           call_type: dto.call_type,
-          minutes,
+          seconds,
           per_minute_kobo: perMin,
           amount_kobo: Number(escrowKobo),
         },
@@ -134,15 +136,18 @@ export const purchase = async (dto: BuyMinutesDto, userId: string) => {
       dto.professional_id,
       dto.call_type,
     );
+    const secondsRemaining = updated?.seconds_remaining ?? seconds;
     return new ServiceSuccess(
       {
         purchase_id: purchaseId,
         professional_id: dto.professional_id,
         call_type: dto.call_type,
-        minutes_purchased: minutes,
+        seconds_purchased: seconds,
+        minutes_purchased: Math.floor(seconds / 60),
         per_minute_kobo: koboToJson(perMinKobo),
         amount_charged_kobo: koboToJson(escrowKobo),
-        minutes_remaining: updated?.minutes_remaining ?? minutes,
+        seconds_remaining: secondsRemaining,
+        minutes_remaining: Math.floor(secondsRemaining / 60),
       },
       MINUTES_MESSAGES.PURCHASED,
     );

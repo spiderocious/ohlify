@@ -5,9 +5,11 @@ import helmet from 'helmet';
 
 import { register as registerAdmin } from '@features/admin/index.js';
 import { register as registerAdminAuth } from '@features/admin-auth/index.js';
+import { register as registerAppVersions } from '@features/app-versions/index.js';
 import { register as registerAuth } from '@features/auth/index.js';
 import { register as registerBanks } from '@features/banks/index.js';
 import { register as registerBanners } from '@features/banners/index.js';
+import { register as registerCampaigns } from '@features/campaigns/index.js';
 import { register as registerBookings } from '@features/bookings/index.js';
 import { register as registerAgoraWebhook } from '@features/calls/agora.webhook.routes.js';
 import { register as registerCalls } from '@features/calls/index.js';
@@ -15,10 +17,13 @@ import { register as registerCategories } from '@features/categories/index.js';
 import { register as registerChat } from '@features/chat/index.js';
 import { register as registerCallSessionEvents } from '@features/call-session-events/index.js';
 import { register as registerDev } from '@features/dev/index.js';
+import { register as registerEvents } from '@features/events/index.js';
 import { register as registerHealth } from '@features/health/index.js';
 import { register as registerInstantCalls } from '@features/instant-calls/index.js';
+import { register as registerIntents } from '@features/intents/index.js';
 import { register as registerLegal } from '@features/legal/index.js';
 import { register as registerMinutes } from '@features/minutes/index.js';
+import { register as registerNotifications } from '@features/notifications/index.js';
 import { register as registerOnboarding } from '@features/onboarding/index.js';
 import { register as registerPayments } from '@features/payments/index.js';
 import { register as registerPlatformConfig } from '@features/platform-config/index.js';
@@ -80,6 +85,7 @@ const features = [
   registerHealth,
   registerAuth,
   registerPlatformConfig,
+  registerAppVersions, // /api/v1/app-version — unauthenticated, never kill-switched (revamp-2 P2)
   registerStrikes, // /api/v1/me/strikes — must precede registerOnboarding + registerProfile
   registerReviews, // /api/v1/me/reviews-given — must precede registerOnboarding + registerProfile
   registerOnboarding,
@@ -87,6 +93,9 @@ const features = [
   registerBanks,
   registerRates,
   registerMinutes, // /api/v1/me/minutes — buy + balances (calls revamp P2)
+  registerNotifications, // /api/v1/me/notifications + /me/badges (revamp-2 P3)
+  registerEvents, // /api/v1/events — SSE stream (revamp-2 P3)
+  registerIntents, // /api/v1/intents — condition-gated purchase flows (revamp-2 P1)
   registerCategories,
   registerProfessionals,
   registerPresence, // /api/v1/me/presence + /professionals/:id/presence (calls revamp P3)
@@ -105,6 +114,7 @@ const features = [
   registerAdmin,
   registerDev, // dev-only; no-op in production. Demo Agora token mint at /api/v1/dev/agora-token.
   registerBanners,
+  registerCampaigns, // /api/v1/admin/campaigns — scheduled sends (revamp-2 P5)
 ];
 
 export const buildApp = (): express.Express => {

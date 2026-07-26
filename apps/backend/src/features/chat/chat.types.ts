@@ -31,6 +31,8 @@ export interface ConversationView {
 export const MessageKind = {
   TEXT: 'text',
   SCHEDULE: 'schedule',
+  /** A call between these two, written by the system rather than either party. */
+  CALL_EVENT: 'call_event',
 } as const;
 
 export type MessageKind = (typeof MessageKind)[keyof typeof MessageKind];
@@ -50,6 +52,26 @@ export const TERMINAL_SCHEDULE_STATUSES: readonly ScheduleStatus[] = [
   ScheduleStatus.CANCELLED,
 ];
 
+/** What a call event says happened. Set only on `kind = 'call_event'` rows. */
+export const CallEventOutcome = {
+  COMPLETED: 'completed',
+  MISSED: 'missed',
+  DECLINED: 'declined',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type CallEventOutcome = (typeof CallEventOutcome)[keyof typeof CallEventOutcome];
+
+export interface CallEventPayload {
+  call_id: string;
+  call_type: string;
+  outcome: CallEventOutcome;
+  /** Talk time, for completed calls. Absent otherwise. */
+  seconds?: number;
+  /** Who placed the call — the thread renders direction from this. */
+  caller_user_id: string;
+}
+
 export interface MessageRow {
   id: string;
   conversation_id: string;
@@ -58,6 +80,7 @@ export interface MessageRow {
   kind: MessageKind;
   scheduled_at: Date | null;
   schedule_status: ScheduleStatus | null;
+  call_event: CallEventPayload | null;
   created_at: Date;
 }
 
@@ -72,6 +95,8 @@ export interface MessageView {
   /** Schedule messages only. ISO 8601 UTC. */
   scheduled_at: string | null;
   schedule_status: ScheduleStatus | null;
+  /** Present only on call_event messages. */
+  call_event: CallEventPayload | null;
   /**
    * Schedule messages only. What the VIEWER may do with this card right now:
    * the invitee (non-sender) can accept/decline a pending one; the sender can

@@ -5,6 +5,7 @@ import { validate } from '@lib/http/validateRequest.js';
 import { rateLimitMiddleware } from '@lib/redis/rateLimit.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
+import { requireFeatureEnabled } from '@middlewares/requireFeatureEnabled.middleware.js';
 
 import * as controller from './chat.controller.js';
 import {
@@ -19,14 +20,22 @@ export const register = (app: Express): void => {
   const router = Router();
   router.use(requireAuth, requireActiveUser);
 
+  // Reads stay open while chat is switched off — existing threads remain
+  // readable, only new traffic stops.
   router.get('/conversations', controller.listConversations);
-  router.post('/conversations', validate(OpenConversationSchema), controller.open);
+  router.post(
+    '/conversations',
+    requireFeatureEnabled('chat'),
+    validate(OpenConversationSchema),
+    controller.open,
+  );
   router.get('/unread-count', controller.unreadCount);
 
   router.get('/conversations/:id/context', controller.context);
   router.get('/conversations/:id/messages', controller.listMessages);
   router.post(
     '/conversations/:id/messages',
+    requireFeatureEnabled('chat'),
     rateLimitMiddleware((req) => `chat-send:${req.userId ?? 'anon'}`, 120, 60),
     validate(SendMessageSchema),
     controller.send,

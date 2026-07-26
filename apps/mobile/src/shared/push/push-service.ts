@@ -7,6 +7,7 @@ import type { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
 
 import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
 import { apiClient } from '@shared/api/api-client';
+import { deviceInfo } from '@shared/services/device-info';
 import { tokenService } from '@shared/services/token-service';
 
 import { emitCallSignal } from './call-signals';
@@ -310,15 +311,16 @@ export const registerDeviceTokenWithBackend = async (): Promise<void> => {
     const messaging = loadMessaging();
     const token = await messaging().getToken();
     if (!token) return;
-    await apiClient.post(
-      'me/device-tokens',
-      { token, platform: Platform.OS },
-      { fromJson: () => undefined },
-    );
+    // Telemetry rides along so support can tell which handset a push landed
+    // on — the push side and the session side then answer the same questions.
+    const { platform, app_version, device_name, device_model, os_version } = deviceInfo();
+    const telemetry = { platform, app_version, device_name, device_model, os_version };
+
+    await apiClient.post('me/device-tokens', { token, ...telemetry }, { fromJson: () => undefined });
     // FCM rotates tokens occasionally — keep the backend current.
     messaging().onTokenRefresh((fresh) => {
       void apiClient
-        .post('me/device-tokens', { token: fresh, platform: Platform.OS }, { fromJson: () => undefined })
+        .post('me/device-tokens', { token: fresh, ...telemetry }, { fromJson: () => undefined })
         .catch(() => undefined);
     });
   } catch {

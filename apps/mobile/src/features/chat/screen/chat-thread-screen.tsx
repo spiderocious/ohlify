@@ -1,5 +1,6 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { formatSecondsAsDuration } from '@ohlify/core';
 import { AppAvatar, AppIcon, AppText, colors, showToast, Skeleton, spring, type AppIconName } from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -23,8 +24,9 @@ import { setFocusedConversation } from '@shared/push/focused-conversation';
 import type { RootStackParamList } from '../../../app.navigation';
 import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
 import { chatApi } from '../api/chat-api';
-import { formatDayLabel } from '../helpers/format-chat-time';
+import { formatBubbleTime, formatDayLabel } from '../helpers/format-chat-time';
 import { CreditsBanner } from './parts/credits-banner';
+import { CallEventBubble } from './parts/call-event-bubble';
 import { MessageBubble } from './parts/message-bubble';
 import { ScheduleCard } from './parts/schedule-card';
 import { ThreadEmptyState } from './parts/thread-empty-state';
@@ -55,7 +57,7 @@ const PAGE_SIZE = 30;
 export function ChatThreadScreen() {
   const navigation = useNavigation<RootNavigation>();
   const route = useRoute<RouteType>();
-  const { conversationId, peerName: initialPeerName, peerAvatarUrl: initialPeerAvatar } = route.params;
+  const { conversationId, peerName: initialPeerName, peerAvatarUrl: initialPeerAvatar, draft: initialDraft } = route.params;
 
   const [messages, setMessages] = useState<OptimisticChatMessage[]>([]);
   const [context, setContext] = useState<ConversationContext | undefined>(undefined);
@@ -68,7 +70,7 @@ export function ChatThreadScreen() {
   }, [conversationId]);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(initialDraft ?? '');
   // Cursor into history — null once the very first message has been loaded.
   const olderCursor = useRef<string | null>(null);
   const olderCursorReady = useRef(false);
@@ -204,6 +206,8 @@ export function ChatThreadScreen() {
           uid: join.agoraUid,
           agoraToken: join.agoraToken,
           expiresAt: join.expiresAt,
+          secondsAllotted: join.secondsAllotted,
+          professionalId: peer,
         },
       });
     } catch (e) {
@@ -287,7 +291,7 @@ export function ChatThreadScreen() {
           {loading ? (
             <ThreadSkeleton />
           ) : messages.length === 0 ? (
-            <ThreadEmptyState name={peerName} />
+            <ThreadEmptyState name={peerName} onQuickReply={setDraft} />
           ) : (
             <FlatList
               data={rows}
@@ -298,6 +302,12 @@ export function ChatThreadScreen() {
               renderItem={({ item: row }) =>
                 row.type === 'day' ? (
                   <DaySeparator label={row.label} />
+                ) : row.message.callEvent ? (
+                  <CallEventBubble
+                    event={row.message.callEvent}
+                    timeLabel={formatBubbleTime(row.message.createdAt)}
+                    mine={row.message.mine}
+                  />
                 ) : chatMessageIsSchedule(row.message) ? (
                   <ScheduleCard
                     message={row.message}
@@ -368,17 +378,17 @@ function ThreadHeader({
   onCall?: () => void;
 }) {
   // Live, real data under the name: the paying client sees their remaining
-  // minutes with this pro; everyone else gets the action hint.
+  // time with this pro; everyone else gets the action hint.
   let subtitle = 'Chat · Schedule · Call';
   let dotColor: string = colors.success;
   if (context?.viewerIsClient) {
-    const minutes = context.minutesRemaining;
-    if (minutes <= 0) {
+    const seconds = context.secondsRemaining;
+    if (seconds <= 0) {
       subtitle = 'Out of minutes';
       dotColor = colors.error;
     } else {
-      subtitle = `${minutes} min remaining`;
-      dotColor = minutes <= context.lowMinutesThreshold ? colors.warning : colors.success;
+      subtitle = `${formatSecondsAsDuration(seconds)} remaining`;
+      dotColor = seconds <= context.lowSecondsThreshold ? colors.warning : colors.success;
     }
   }
 

@@ -47,7 +47,12 @@ export interface TransactionsPage {
 export interface FundInitResponse {
   reference: string;
   paystack_reference: string;
+  /** What the processor will collect — credit plus the fee when it is passed on. */
   amount_kobo: number;
+  /** What lands in the wallet. Equals the amount the user asked for. */
+  credit_kobo: number;
+  /** The processor's cut, itemised so checkout can show it. */
+  fee_kobo: number;
   currency: string;
   authorization_url: string;
   access_code: string;

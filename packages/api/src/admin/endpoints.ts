@@ -97,6 +97,13 @@ export const ADMIN_EP = {
   // Foundations
   AUDIT_LOG: `${ADMIN}/audit-log`,
   CONFIG: `${ADMIN}/config`,
+  // App releases — one row per platform, upserted via PUT.
+  APP_VERSIONS: `${ADMIN}/app-versions`,
+  // Campaigns — authored, then scheduled with a cancellable delay.
+  CAMPAIGNS: `${ADMIN}/campaigns`,
+  CAMPAIGN_SCHEDULE: (id: string) => `${ADMIN}/campaigns/${id}/schedule`,
+  CAMPAIGN_CANCEL: (id: string) => `${ADMIN}/campaigns/${id}/cancel`,
+  BANNER_AUDIENCE_PREVIEW: `${ADMIN}/banners/audience-preview`,
 
   // Reviews moderation — mounted on reviews feature.
   REVIEWS: `${BASE}/admin/reviews`,

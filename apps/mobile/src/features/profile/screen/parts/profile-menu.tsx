@@ -7,6 +7,7 @@ export interface ProfileMenuProps {
   onBankAccount: () => void;
   onBookingBlocks: () => void;
   onChangePassword: () => void;
+  onAppLock: () => void;
   onNotifications: () => void;
   onHelpDesk: () => void;
   onPrivacyPolicy: () => void;
@@ -40,6 +41,7 @@ export function ProfileMenu(props: ProfileMenuProps) {
   ];
   const otherRows: MenuRow[] = [
     { icon: 'settings', label: 'Change password', onTap: props.onChangePassword, showChevron: true },
+    { icon: 'lock', label: 'App lock', onTap: props.onAppLock, showChevron: true },
     { icon: 'notification', label: 'Notifications', onTap: props.onNotifications, showChevron: true },
   ];
   const appRows: MenuRow[] = [

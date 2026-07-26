@@ -11,6 +11,7 @@ import { KycRejectedScreen } from '@features/kyc-rejected/screen/kyc-rejected-sc
 import { RoleSelectionScreen } from '@features/role-selection/screen/role-selection-screen';
 import { CallDetailsScreen } from '@features/call-details/screen/call-details-screen';
 import { ChatThreadScreen } from '@features/chat/screen/chat-thread-screen';
+import { TransactionDetailScreen } from '@features/wallet/screen/transaction-detail-screen';
 import { IncomingCallScreen } from '@features/instant-calls/screen/incoming-call-screen';
 import { navigationRef } from '@shared/navigation/navigation-ref';
 import { flushPushIntent } from '@shared/push/push-intents';
@@ -75,6 +76,10 @@ export type RootStackParamList = {
       uid: number;
       agoraToken: string;
       expiresAt: string;
+      /** Billable ceiling. Drives the countdown, the 60s warning, and the pause at zero. */
+      secondsAllotted: number;
+      /** Needed to re-open the buy flow when the balance runs out mid-call. */
+      professionalId: string;
     };
   };
   // Full-screen ring UI for an incoming instant call (reached from the
@@ -100,7 +105,13 @@ export type RootStackParamList = {
   // through when the caller already knows them (from a conversation tile or
   // a professional profile) so the header shows the right person instantly,
   // before the context request resolves.
-  ChatThread: { conversationId: string; peerName?: string; peerAvatarUrl?: string };
+  ChatThread: { conversationId: string; peerName?: string; peerAvatarUrl?: string; draft?: string };
+  TransactionDetail: {
+    title: string;
+    amountKobo: number;
+    createdAt: string;
+    withdrawalId?: string;
+  };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -149,6 +160,11 @@ export function AppNavigation() {
         <RootStack.Screen name="ScheduleCall">{() => <RouteNotBuiltYet name="ScheduleCall" />}</RootStack.Screen>
         <RootStack.Screen name="Notifications" component={NotificationsScreen} />
         <RootStack.Screen name="ChatThread" component={ChatThreadScreen} />
+        <RootStack.Screen
+          name="TransactionDetail"
+          component={TransactionDetailScreen}
+          options={{ title: 'Transaction' }}
+        />
       </RootStack.Navigator>
     </NavigationContainer>
   );

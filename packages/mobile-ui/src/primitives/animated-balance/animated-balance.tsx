@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated } from 'react-native';
 
+import { MASKED_AMOUNT, useAmountsHidden } from '../../money/amount-visibility';
 import { AppText, type AppTextProps } from '../app-text/app-text';
 
 /**
@@ -19,7 +20,21 @@ export interface AnimatedBalanceProps extends Omit<AppTextProps, 'children'> {
   durationMs?: number;
 }
 
-export function AnimatedBalance({ value, format, durationMs = 600, ...textProps }: AnimatedBalanceProps) {
+/**
+ * Counts a money value up or down on change — and masks it when amounts are
+ * hidden app-wide.
+ *
+ * Masking lives here rather than at every call site because this is the one
+ * component money is rendered through; a screen that formatted its own string
+ * would silently leak the number the switch exists to hide.
+ */
+export function AnimatedBalance({
+  value,
+  format,
+  durationMs = 600,
+  ...textProps
+}: AnimatedBalanceProps) {
+  const hidden = useAmountsHidden();
   const anim = useRef(new Animated.Value(value)).current;
   const previousValue = useRef(value);
   const [displayValue, setDisplayValue] = useState(value);
@@ -28,14 +43,18 @@ export function AnimatedBalance({ value, format, durationMs = 600, ...textProps 
     if (previousValue.current === value) return;
     anim.setValue(previousValue.current);
     const listenerId = anim.addListener(({ value: v }) => setDisplayValue(v));
-    Animated.timing(anim, { toValue: value, duration: durationMs, useNativeDriver: false }).start(() => {
-      anim.removeListener(listenerId);
-      setDisplayValue(value);
-    });
+    Animated.timing(anim, { toValue: value, duration: durationMs, useNativeDriver: false }).start(
+      () => {
+        anim.removeListener(listenerId);
+        setDisplayValue(value);
+      },
+    );
     previousValue.current = value;
     return () => anim.removeListener(listenerId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally keyed on the target value and duration only: the animated
+    // ref is stable, and depending on it would retrigger the count-up.
   }, [value, durationMs]);
 
+  if (hidden) return <AppText {...textProps}>{MASKED_AMOUNT}</AppText>;
   return <AppText {...textProps}>{format(Math.round(displayValue))}</AppText>;
 }

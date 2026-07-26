@@ -1,3 +1,4 @@
+import type { JsonKobo } from '@features/wallet/wallet.types.js';
 import type { CategoryView } from '@features/categories/categories.types.js';
 import type { CallType, RateView } from '@features/rates/rates.types.js';
 
@@ -82,7 +83,20 @@ export interface ActiveMeetingView {
   call_type: CallType;
 }
 
+/** A professional the caller still holds prepaid time with. */
+export interface ContinueWithView {
+  professional_id: string;
+  name: string | null;
+  avatar_key: string | null;
+  occupation: string | null;
+  seconds_remaining: number;
+  call_type: string;
+  per_minute_kobo: JsonKobo;
+}
+
 export interface HomeResponse {
+  /** Leads the client home — a returning client's job is "get back to my pro". */
+  continue_with: ContinueWithView[];
   upcoming_calls: UpcomingCallView[];
   popular_professionals: ProfessionalListItem[];
   categories: CategoryView[];

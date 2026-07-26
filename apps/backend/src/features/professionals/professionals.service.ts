@@ -2,11 +2,13 @@ import crypto from 'node:crypto';
 
 import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as categoriesService from '@features/categories/categories.service.js';
+import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import * as bookingBlocksRepo from '@features/profile/booking-blocks.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
 import { perMinuteKobo } from '@features/rates/rates.types.js';
 import { getOrCompute } from '@lib/cache/responseCache.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
+import { koboToJson } from '@lib/money.js';
 import { buildCursorPage, decodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
@@ -29,6 +31,7 @@ import type {
 } from './professionals.types.js';
 
 const SHARE_SLUG_SUFFIX_LEN = 6;
+const CONTINUE_LIMIT = 6;
 const POPULAR_LIMIT = 8;
 const HOME_CACHE_TTL = 300;
 const LIST_CACHE_TTL = 120;
@@ -306,11 +309,24 @@ export const availability = async (professionalId: string, dto: AvailabilityQuer
 export const home = async (userId: string) => {
   const cacheKey = cacheKeys.home(userId);
   const result = await getOrCompute<HomeResponse>(cacheKey, HOME_CACHE_TTL, async () => {
-    const [popularRows, categories] = await Promise.all([
+    const [popularRows, categories, activeBalances] = await Promise.all([
       repo.popular(POPULAR_LIMIT),
       categoriesService.listAllRaw(),
+      minutesRepo.listActiveBalancesWithPro(userId, CONTINUE_LIMIT),
     ]);
     return {
+      // Professionals this user still holds time with. A returning client's
+      // job is "get back to my pro", so this leads the screen — discovery is
+      // for people who have not chosen yet.
+      continue_with: activeBalances.map((b) => ({
+        professional_id: b.professional_id,
+        name: b.full_name,
+        avatar_key: b.avatar_url,
+        occupation: b.occupation,
+        seconds_remaining: b.seconds_remaining,
+        call_type: b.call_type,
+        per_minute_kobo: koboToJson(BigInt(b.rate_snapshot_kobo)),
+      })),
       // Bookings feature ships these later. For now return empty/null so the
       // mobile home screen renders correctly without missing the bootstrap.
       upcoming_calls: [],

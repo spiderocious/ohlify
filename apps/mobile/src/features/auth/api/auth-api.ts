@@ -1,4 +1,5 @@
 import { apiClient } from '@shared/api/api-client';
+import { deviceInfo } from '@shared/services/device-info';
 
 import {
   authSessionFromJson,
@@ -19,7 +20,7 @@ import {
  */
 export const authApi = {
   login(params: { email: string; password: string }): Promise<AuthSession> {
-    return apiClient.post('auth/login', params, {
+    return apiClient.post('auth/login', { ...params, device: deviceInfo() }, {
       fromJson: (data) => authSessionFromJson(data as Record<string, unknown>),
     });
   },
@@ -55,7 +56,7 @@ export const authApi = {
   registerVerify(params: { registrationToken: string; otp: string }): Promise<AuthSession> {
     return apiClient.post(
       'auth/register/verify',
-      { registration_token: params.registrationToken, otp: params.otp },
+      { registration_token: params.registrationToken, otp: params.otp, device: deviceInfo() },
       { fromJson: (data) => authSessionFromJson(data as Record<string, unknown>) },
     );
   },

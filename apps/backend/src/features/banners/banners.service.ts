@@ -2,6 +2,8 @@ import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
+import { countSegmentAudience, markBannerSeen, resolveBannerForUser } from './banner-resolver.js';
+import type { SegmentPredicate } from './banner-segments.js';
 import * as repo from './banners.repo.js';
 import type {
   CreateBannerDto,
@@ -104,7 +106,8 @@ const buildUpdatePayload = (
 export const createBanner = async (dto: CreateBannerDto, adminId: string) => {
   const createdBy = adminId === 'adm_stub' ? null : adminId;
   const startsAt = dto.starts_at ? new Date(dto.starts_at) : null;
-  const endsAt = dto.ends_at ? new Date(dto.ends_at) : null;
+  // Schema requires it, so this is always present.
+  const endsAt = new Date(dto.ends_at);
   const windowErr = validateWindow(startsAt, endsAt);
   if (windowErr) {
     return new ServiceError('validation_error', MESSAGE_KEYS.ADMIN_BANNER_CREATED, 422, windowErr);
@@ -124,9 +127,32 @@ export const createBanner = async (dto: CreateBannerDto, adminId: string) => {
     isActive: dto.is_active ?? false,
     startsAt,
     endsAt,
+    viewOnce: dto.view_once ?? false,
     createdBy,
   });
+  await persistTarget(row.id, dto.target);
   return new ServiceSuccess(toView(row), MESSAGE_KEYS.ADMIN_BANNER_CREATED);
+};
+
+/**
+ * Writes a banner's one target row.
+ *
+ * Every banner needs one — a banner nobody is targeted by would simply never
+ * resolve — so an omitted target defaults to everyone rather than to nothing.
+ */
+const persistTarget = async (
+  bannerId: string,
+  target: CreateBannerDto['target'],
+): Promise<void> => {
+  if (!target || target.kind === 'all') {
+    await repo.replaceTarget(bannerId, 'all', {});
+    return;
+  }
+  if (target.kind === 'user') {
+    await repo.replaceTarget(bannerId, 'user', { user_ids: target.user_ids });
+    return;
+  }
+  await repo.replaceTarget(bannerId, 'segment', target.segment);
 };
 
 export const updateBanner = async (bannerId: string, dto: UpdateBannerDto) => {
@@ -143,6 +169,9 @@ export const updateBanner = async (bannerId: string, dto: UpdateBannerDto) => {
     return new ServiceError('validation_error', MESSAGE_KEYS.ADMIN_BANNER_UPDATED, 422, windowErr);
   }
   const row = await repo.update(bannerId, buildUpdatePayload(dto, nextStarts, nextEnds));
+  // Only touched when the caller actually sent one — a PATCH that omits
+  // targeting should leave the audience alone, not silently widen it to all.
+  if (dto.target) await persistTarget(bannerId, dto.target);
   return new ServiceSuccess(toView(row!), MESSAGE_KEYS.ADMIN_BANNER_UPDATED);
 };
 
@@ -225,6 +254,39 @@ export const getAdmin = async (bannerId: string) => {
     return new ServiceError('not_found', MESSAGE_KEYS.BANNER_FETCHED, 404);
   }
   return new ServiceSuccess(toView(row), MESSAGE_KEYS.BANNER_FETCHED);
+};
+
+/**
+ * The one banner to show this user on this screen, or null.
+ *
+ * One per screen by design — no stacking, so no layout ambiguity. Resolution
+ * runs live on every read, so a banner whose window closed or whose segment the
+ * user has aged out of simply stops appearing; nothing has to expire it.
+ */
+export const resolveForUser = async (userId: string, placement: string) => {
+  const row = await resolveBannerForUser(userId, placement);
+  return new ServiceSuccess(
+    { banner: row ? toPublicView(row) : null },
+    MESSAGE_KEYS.BANNERS_FETCHED,
+  );
+};
+
+/**
+ * Records that a view-once banner had its showing.
+ *
+ * Called by the client when the banner actually renders rather than when it is
+ * fetched — a banner returned to a screen the user never scrolled to has not
+ * been seen, and burning its one showing would be wrong.
+ */
+export const markSeen = async (userId: string, bannerId: string) => {
+  await markBannerSeen(userId, bannerId);
+  return new ServiceSuccess({ banner_id: bannerId, seen: true }, MESSAGE_KEYS.BANNERS_FETCHED);
+};
+
+/** Live audience size for a segment — the admin's preview before sending. */
+export const previewAudience = async (predicate: SegmentPredicate) => {
+  const count = await countSegmentAudience(predicate);
+  return new ServiceSuccess({ audience_size: count }, MESSAGE_KEYS.ADMIN_BANNERS_LIST_FETCHED);
 };
 
 export const listPublic = async (dto: ListBannersPublicQueryDto) => {

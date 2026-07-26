@@ -25,7 +25,10 @@ import {
   postWithdrawalRequestedJournal,
   postWithdrawalReversedJournal,
 } from '@lib/wallet/flows/withdrawal.js';
+
+import { scheduleReviewTimeout } from './withdrawal-review.service.js';
 import { accountFor, readUserAvailableBalance, readUserPendingBalance } from '@lib/wallet/index.js';
+import { computeFundingCharge, fundingCreditKobo } from '@lib/wallet/processor-fees.js';
 
 import { WALLET_MESSAGES } from './wallet.messages.js';
 import * as repo from './wallet.repo.js';
@@ -220,11 +223,16 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
   // own reference is stored in paystack_reference once the webhook arrives.
   const reference = `ohf_ref_${newRawId()}`;
 
+  // `amount_kobo` is what the user wants in their wallet. Under pass-on the
+  // card is charged that plus the processor fee, so the requested amount is
+  // what actually lands.
+  const charge = computeFundingCharge(dto.amount_kobo);
+
   let paystackResult;
   try {
     paystackResult = await initializeTransaction({
       email: user.email,
-      amountKobo: dto.amount_kobo,
+      amountKobo: charge.chargeKobo,
       reference,
       ...(dto.callback_url !== undefined ? { callbackUrl: dto.callback_url } : {}),
       metadata: {
@@ -245,10 +253,12 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
     throw err;
   }
 
+  // The payment row tracks what Paystack will collect — reconciliation
+  // compares it against the settlement, which is the charged figure.
   await paymentsRepo.createPending({
     userId,
     purpose: PaymentPurpose.WALLET_FUNDING,
-    amountKobo: dto.amount_kobo,
+    amountKobo: charge.chargeKobo,
     reference,
     authorizationUrl: paystackResult.authorization_url,
     accessCode: paystackResult.access_code,
@@ -257,7 +267,9 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
   const view: FundingInitView = {
     reference,
     paystack_reference: paystackResult.reference,
-    amount_kobo: koboToJson(BigInt(dto.amount_kobo)),
+    amount_kobo: koboToJson(BigInt(charge.chargeKobo)),
+    credit_kobo: koboToJson(BigInt(charge.creditKobo)),
+    fee_kobo: koboToJson(BigInt(charge.feeKobo)),
     currency: 'NGN',
     authorization_url: paystackResult.authorization_url,
     access_code: paystackResult.access_code,
@@ -311,17 +323,13 @@ const applyVerifyResult = async (
         feesKobo: verified.feesKobo,
         rawPayload: paystackResult.raw,
       });
-      // Credit what we actually received from Paystack (verified gross −
-      // verified fees). In pass-on fee mode this equals the authorized amount;
-      // in default mode it's slightly less. The journal lines balance because
-      // applyFunding derives the fee bucket from `gross − net`.
       await applyFunding(client, {
         userId,
         paymentId: fresh.id,
         reference: fresh.reference,
         grossKobo: verified.amountKobo,
         feeKobo: verified.feesKobo,
-        netCreditKobo: verified.amountKobo - verified.feesKobo,
+        netCreditKobo: fundingCreditKobo(verified.amountKobo, verified.feesKobo),
       });
     } else if (fresh.status === PaymentStatus.PENDING && paystackResult.status !== 'success') {
       await paymentsRepo.markFailed(client, fresh.id, paystackResult.status, paystackResult.raw);
@@ -761,6 +769,7 @@ export const requestWithdrawal = async (
   });
 
   if (cfg.payout_mode === 'manual_review') {
+    await scheduleReviewTimeout(withdrawalRow.id);
     logger.info(
       { withdrawalId: withdrawalRow.id, mode: cfg.payout_mode },
       'withdrawal awaiting manual review',

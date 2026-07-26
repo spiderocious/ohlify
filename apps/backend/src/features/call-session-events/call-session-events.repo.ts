@@ -54,6 +54,19 @@ export const listByCallId = async (
   return rows.rows;
 };
 
+// Every event for a call, oldest first — the input to deriveBillableSeconds.
+// Unbounded on purpose: settlement must see the whole stream, and a truncated
+// read would silently under-bill a long call.
+export const listAllByCallId = async (callId: string): Promise<CallSessionEventRow[]> => {
+  const rows = await pool.query<CallSessionEventRow>(
+    `SELECT * FROM call_session_events
+     WHERE call_id = $1
+     ORDER BY occurred_at ASC`,
+    [callId],
+  );
+  return rows.rows;
+};
+
 export const listByReference = async (
   callReference: string,
   limit = 200,

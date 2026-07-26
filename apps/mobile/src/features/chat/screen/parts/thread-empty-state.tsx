@@ -1,11 +1,24 @@
 import { AppIcon, AppText, colors } from '@ohlify/mobile-ui';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Animated, Easing, Pressable, View } from 'react-native';
 
 /** Shown inside an open thread that has no messages yet — a warm nudge to
  * send the first message, rather than a blank white void. Mirrors
  * mobile/lib/features/chat/screen/parts/thread_empty_state.dart. */
-export function ThreadEmptyState({ name }: { name: string }) {
+/**
+ * Openers offered on an empty thread.
+ *
+ * A blank composer is the point most first messages die at — the user has to
+ * invent an opening line to a stranger they are about to pay. These fill the
+ * composer rather than sending, so the message stays theirs to edit.
+ */
+const QUICK_REPLIES = [
+  'Hi 👋 are you available today?',
+  'What do you charge for a quick call?',
+  'I have a question about your work.',
+] as const;
+
+export function ThreadEmptyState({ name, onQuickReply }: { name: string; onQuickReply?: (text: string) => void }) {
   const enter = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -45,6 +58,31 @@ export function ThreadEmptyState({ name }: { name: string }) {
         <AppText variant="body" color={colors.textMuted} align="center">
           This is the start of your conversation. Send a message or schedule a call to get going.
         </AppText>
+        {onQuickReply ? (
+          <>
+            <View style={{ height: 22 }} />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              {QUICK_REPLIES.map((text) => (
+                <Pressable key={text} onPress={() => onQuickReply(text)}>
+                  <View
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 9,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    }}
+                  >
+                    <AppText variant="bodySmall" weight="600" color={colors.textSlate}>
+                      {text}
+                    </AppText>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
       </Animated.View>
     </View>
   );

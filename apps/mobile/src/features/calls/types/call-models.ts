@@ -22,6 +22,8 @@ export interface CallHistoryItem {
   endAt?: string;
   connectedSeconds?: number;
   priceKobo?: number;
+  /** What the professional nets after the platform fee — not what the client paid. */
+  payeeAmountKobo?: number;
 }
 
 const TERMINAL_CALL_STATUSES = new Set([
@@ -69,6 +71,7 @@ export function callHistoryItemFromJson(json: Record<string, unknown>): CallHist
     endAt: (json.ended_at ?? json.end_at) as string | undefined,
     connectedSeconds: typeof durSec === 'number' ? durSec : undefined,
     priceKobo: typeof priceRaw === 'number' ? priceRaw : undefined,
+    payeeAmountKobo: typeof json.payee_amount_kobo === 'number' ? json.payee_amount_kobo : undefined,
   };
 }
 

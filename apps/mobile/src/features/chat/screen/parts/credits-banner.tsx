@@ -1,3 +1,4 @@
+import { formatSecondsAsDuration } from '@ohlify/core';
 import { AppButton, AppIcon, AppText, colors } from '@ohlify/mobile-ui';
 import { View } from 'react-native';
 
@@ -17,15 +18,15 @@ export interface CreditsBannerProps {
 export function CreditsBanner({ context, onBuyMinutes }: CreditsBannerProps) {
   if (!context.viewerIsClient) return null;
 
-  const minutes = context.minutesRemaining;
-  const isOut = minutes <= 0;
-  const isLow = !isOut && minutes <= context.lowMinutesThreshold;
+  const seconds = context.secondsRemaining;
+  const isOut = seconds <= 0;
+  const isLow = !isOut && seconds <= context.lowSecondsThreshold;
   if (!isOut && !isLow) return null;
 
   const color = isOut ? colors.error : colors.warning;
   const message = isOut
     ? "You're out of minutes with this professional. Buy minutes to keep chatting."
-    : `Only ${minutes} minute${minutes === 1 ? '' : 's'} left — top up to keep chatting and calling.`;
+    : `Only ${formatSecondsAsDuration(seconds)} left — top up to keep chatting and calling.`;
 
   return (
     <View

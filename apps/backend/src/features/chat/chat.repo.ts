@@ -4,6 +4,7 @@ import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
 
 import type {
+  CallEventPayload,
   ConversationListRow,
   ConversationRow,
   MessageRow,
@@ -134,6 +135,38 @@ export const insertScheduleMessage = async (
      VALUES ($1, $2, $3, $4, 'schedule', $5, 'pending')
      RETURNING *`,
     [makeId('msg'), conversationId, senderUserId, body, scheduledAt],
+  );
+  return res.rows[0]!;
+};
+
+/**
+ * Writes a call into the thread.
+ *
+ * The sender is the CALLER, so the bubble sits on the right side for whoever
+ * placed it — matching how every messenger renders this, and how the two
+ * parties actually remember the call.
+ */
+export const insertCallEventMessage = async (
+  runner: QueryRunner,
+  input: {
+    conversationId: string;
+    callerUserId: string;
+    body: string;
+    callEvent: CallEventPayload;
+  },
+): Promise<MessageRow> => {
+  const res = await runner.query<MessageRow>(
+    `INSERT INTO messages
+       (id, conversation_id, sender_user_id, body, kind, call_event)
+     VALUES ($1, $2, $3, $4, 'call_event', $5)
+     RETURNING *`,
+    [
+      makeId('msg'),
+      input.conversationId,
+      input.callerUserId,
+      input.body,
+      JSON.stringify(input.callEvent),
+    ],
   );
   return res.rows[0]!;
 };

@@ -1,6 +1,6 @@
 import { AppIcon, AppText, colors, type AppIconName, AppIconNames } from '@ohlify/mobile-ui';
 import { Fragment } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   formatKobo,
@@ -11,6 +11,7 @@ import {
 
 export interface TransactionHistoryListProps {
   transactions: WalletTransaction[];
+  onTap: (tx: WalletTransaction) => void;
 }
 
 const STATUS_LABEL: Record<'completed' | 'pending' | 'failed', string> = {
@@ -56,7 +57,7 @@ function statusColor(status: 'completed' | 'pending' | 'failed'): string {
   }
 }
 
-export function TransactionHistoryList({ transactions }: TransactionHistoryListProps) {
+export function TransactionHistoryList({ transactions, onTap }: TransactionHistoryListProps) {
   return (
     <View>
       <AppText variant="body" color={colors.textMuted} align="left">
@@ -66,17 +67,20 @@ export function TransactionHistoryList({ transactions }: TransactionHistoryListP
       {transactions.map((tx, i) => (
         <Fragment key={tx.id}>
           {i > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
-          <TransactionRow tx={tx} />
+          <TransactionRow tx={tx} onPress={() => onTap(tx)} />
         </Fragment>
       ))}
     </View>
   );
 }
 
-function TransactionRow({ tx }: { tx: WalletTransaction }) {
+function TransactionRow({ tx, onPress }: { tx: WalletTransaction; onPress: () => void }) {
   const status = statusFor(tx);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
+    <Pressable
+      onPress={onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}
+    >
       <IconBubble icon={iconFor(tx)} />
       <View style={{ width: 12 }} />
       <View style={{ flex: 1 }}>
@@ -97,7 +101,7 @@ function TransactionRow({ tx }: { tx: WalletTransaction }) {
           {STATUS_LABEL[status]}
         </AppText>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

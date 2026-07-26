@@ -6,6 +6,7 @@ export const SystemAccountCode = {
   PAYSTACK_CLEARING: 'paystack_clearing',
   PAYSTACK_FEES: 'paystack_fees',
   PAYSTACK_PAYOUTS: 'paystack_payouts',
+  PAYSTACK_TRANSFER_FEES: 'paystack_transfer_fees',
   PLATFORM_REVENUE: 'platform_revenue',
   PLATFORM_PROMO: 'platform_promo',
   SUSPENSE: 'suspense',

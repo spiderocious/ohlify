@@ -27,6 +27,7 @@ type Prefix =
   | 'rfd' // refund request
   | 'bk' // booking
   | 'ce' // call event
+  | 'cp' // call participant
   | 'str' // strike (formerly professional_strike — now unified)
   | 'asn' // admin session
   | 'al' // admin audit log
@@ -38,6 +39,9 @@ type Prefix =
   | 'ic' // instant call
   | 'conv' // chat conversation
   | 'msg' // chat message
+  | 'pi' // purchase intent
+  | 'cmp' // admin campaign
+  | 'bt' // banner target
   | 'faq'; // faq
 
 export const id = (prefix: Prefix): string => `${prefix}_${ulid().toLowerCase()}`;

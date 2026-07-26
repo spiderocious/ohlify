@@ -5,7 +5,12 @@ import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
 import { resolveCall } from '@features/calls/calls.resolver.js';
 import { CallStatus } from '@features/calls/calls.types.js';
+import { expireStaleInvites } from '@features/instant-calls/call-invites.service.js';
 import * as instantCallsRepo from '@features/instant-calls/instant-calls.repo.js';
+import { settleActiveCall } from '@features/instant-calls/instant-calls.settlement.js';
+import { recordCallEvent } from '@features/chat/chat.service.js';
+import { CallEventOutcome } from '@features/chat/chat.types.js';
+import { expireStaleIntents } from '@features/intents/index.js';
 import {
   INSTANT_CALL_RING_SECONDS,
   InstantCallStatus,
@@ -35,6 +40,14 @@ import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/i
 //    "missed call" push. Guarantees no ring dangles forever even when
 //    every push was lost and neither client ever called /end.
 //
+// 5. STALE-ACTIVE RESOLVER — every minute, find instant calls stuck `active`
+//    past their allotment + grace. Settle for the time the event log shows
+//    was talked. Without this the callee stays pinned behind the
+//    one-live-call-per-callee index and can never be called again.
+//
+// 6. INTENT EXPIRY — every 5 min, retire purchase intents past their window.
+//    Bookkeeping only: verify already refuses a lapsed intent.
+//
 // Each worker uses SELECT ... FOR UPDATE SKIP LOCKED so multiple instances
 // can run in parallel without claiming the same row twice.
 
@@ -42,6 +55,8 @@ const STARTER_INTERVAL_MS = 30_000;
 const NO_SHOW_INTERVAL_MS = 30_000;
 const STUCK_CALL_INTERVAL_MS = 60_000;
 const RING_RESOLVER_INTERVAL_MS = 10_000;
+const STALE_ACTIVE_INTERVAL_MS = 60_000;
+const INTENT_EXPIRY_INTERVAL_MS = 300_000;
 // Resolve in_progress calls that are past their scheduled end + 5 min buffer.
 // The 5-min buffer absorbs Agora webhook delivery jitter.
 const STUCK_BUFFER_SECONDS = 300;
@@ -228,6 +243,14 @@ const tickRingResolver = async (): Promise<void> => {
             payload: { call_id: row.id, target_user_id: targetUserId, reason: 'timeout' },
           });
         }
+        await recordCallEvent(client, {
+          clientUserId: row.caller_user_id,
+          professionalId: row.callee_user_id,
+          callerUserId: row.caller_user_id,
+          callId: row.id,
+          callType: row.call_type,
+          outcome: CallEventOutcome.MISSED,
+        });
         // Visible "you missed a call from X" for the callee.
         await insertEvent(client, {
           aggregateType: OutboxAggregateType.CALL,
@@ -251,6 +274,58 @@ const tickRingResolver = async (): Promise<void> => {
     logger.warn({ err }, 'ring-timeout resolver tick failed');
   } finally {
     client.release();
+  }
+};
+
+// Active instant calls nobody ever ended. Both apps dying mid-call leaves the
+// row `active` forever, and the one-live-call-per-callee index then rejects
+// every future call to that professional — so this settles them for whatever
+// the event log says was talked, on the same terms as a normal hangup.
+const tickStaleActiveResolver = async (): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const graceSeconds = platformConfig.bookings().stale_active_grace_seconds;
+    const rows = await instantCallsRepo.findStaleActive(client, graceSeconds, BATCH_SIZE);
+    for (const row of rows) {
+      await runWithSavepoint(client, row.id, 'stale-active-resolver', async () => {
+        const outcome = await settleActiveCall(client, row, row.connected_seconds);
+        for (const targetUserId of [row.caller_user_id, row.callee_user_id]) {
+          await insertEvent(client, {
+            aggregateType: OutboxAggregateType.CALL,
+            aggregateId: row.id,
+            eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+            payload: { call_id: row.id, target_user_id: targetUserId, reason: 'timeout' },
+          });
+        }
+        logger.info(
+          {
+            callId: row.id,
+            billedSeconds: outcome.billedSeconds,
+            source: outcome.source,
+          },
+          'stale active instant call settled',
+        );
+      });
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.warn({ err }, 'stale-active resolver tick failed');
+  } finally {
+    client.release();
+  }
+};
+
+// Purchase intents whose window closed. Retiring them is bookkeeping rather
+// than enforcement — verify already refuses a lapsed intent — but it keeps the
+// pending index small and stops stale refs reading as actionable.
+const tickIntentExpiry = async (): Promise<void> => {
+  try {
+    const expired = await expireStaleIntents(BATCH_SIZE);
+    if (expired > 0) logger.info({ expired }, 'purchase intents expired');
+  } catch (err) {
+    logger.warn({ err }, 'intent expiry tick failed');
   }
 };
 
@@ -294,25 +369,39 @@ interface CallsWorkersHandle {
   stop: () => Promise<void>;
 }
 
+// Invites resolve on a 10s cadence: a 30s deadline needs a tick fine enough
+// that the overlay does not linger noticeably past it.
+const INVITE_EXPIRY_INTERVAL_MS = 10_000;
+
+const tickInviteExpiry = async (): Promise<void> => {
+  await expireStaleInvites();
+};
+
 export interface CallsWorkersFlags {
   starter?: boolean;
   noShowResolver?: boolean;
   stuckCallResolver?: boolean;
   ringResolver?: boolean;
+  staleActiveResolver?: boolean;
+  intentExpiry?: boolean;
+  inviteExpiry?: boolean;
 }
 
 // Each cron is independently toggleable. Skipped crons return a no-op handle
 // so the caller's stop() stays uniform. Default for each flag is `true` —
-// callers that pass nothing get all three running.
+// callers that pass nothing get every cron running.
 export const startCallWorkers = (flags: CallsWorkersFlags = {}): CallsWorkersHandle => {
   const starterEnabled = flags.starter ?? true;
   const noShowEnabled = flags.noShowResolver ?? true;
   const stuckEnabled = flags.stuckCallResolver ?? true;
   const ringEnabled = flags.ringResolver ?? true;
+  const staleActiveEnabled = flags.staleActiveResolver ?? true;
+  const intentExpiryEnabled = flags.intentExpiry ?? true;
+  const inviteExpiryEnabled = flags.inviteExpiry ?? true;
 
   const noop = { stop: (): Promise<void> => Promise.resolve() };
 
-  // Stagger startup so all three don't pile-up at boot.
+  // Stagger startup so they don't pile up at boot.
   const starter = starterEnabled
     ? startInterval('call-starter', STARTER_INTERVAL_MS, tickStarter, 5_000)
     : (logger.info({ worker: 'call-starter' }, 'worker disabled via env'), noop);
@@ -325,10 +414,33 @@ export const startCallWorkers = (flags: CallsWorkersFlags = {}): CallsWorkersHan
   const ring = ringEnabled
     ? startInterval('ring-timeout-resolver', RING_RESOLVER_INTERVAL_MS, tickRingResolver, 20_000)
     : (logger.info({ worker: 'ring-timeout-resolver' }, 'worker disabled via env'), noop);
+  const staleActive = staleActiveEnabled
+    ? startInterval(
+        'stale-active-resolver',
+        STALE_ACTIVE_INTERVAL_MS,
+        tickStaleActiveResolver,
+        25_000,
+      )
+    : (logger.info({ worker: 'stale-active-resolver' }, 'worker disabled via env'), noop);
+  const intentExpiry = intentExpiryEnabled
+    ? startInterval('intent-expiry', INTENT_EXPIRY_INTERVAL_MS, tickIntentExpiry, 30_000)
+    : (logger.info({ worker: 'intent-expiry' }, 'worker disabled via env'), noop);
+
+  const inviteExpiry = inviteExpiryEnabled
+    ? startInterval('invite-expiry', INVITE_EXPIRY_INTERVAL_MS, tickInviteExpiry, 35_000)
+    : (logger.info({ worker: 'invite-expiry' }, 'worker disabled via env'), noop);
 
   return {
     stop: async () => {
-      await Promise.all([starter.stop(), noShow.stop(), stuck.stop(), ring.stop()]);
+      await Promise.all([
+        starter.stop(),
+        noShow.stop(),
+        stuck.stop(),
+        ring.stop(),
+        staleActive.stop(),
+        intentExpiry.stop(),
+        inviteExpiry.stop(),
+      ]);
     },
   };
 };

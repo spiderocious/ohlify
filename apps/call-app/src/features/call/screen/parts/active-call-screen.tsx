@@ -1,4 +1,4 @@
-import { CALL_PHASE, type CallPhase } from '@shared/bridge/bridge.types.js';
+import { CALL_PHASE, CALL_ROLE, type CallPhase, type CallRole } from '@shared/bridge/bridge.types.js';
 import { DurationCountdown } from './duration-countdown.js';
 
 interface Props {
@@ -13,6 +13,8 @@ interface Props {
   durationMinutes: number | null;
   accumulatedPausedMs: number;
   durationPaused: boolean;
+  /** Wording differs by side: the caller is topping up, the callee is waiting on them. */
+  role: CallRole;
   onMute: () => void;
   onHangup: () => void;
 }
@@ -112,6 +114,7 @@ export function ActiveCallScreen({
   durationMinutes,
   accumulatedPausedMs,
   durationPaused,
+  role,
   onMute,
   onHangup,
 }: Props) {
@@ -151,6 +154,21 @@ export function ActiveCallScreen({
         </div>
       )}
 
+      {/* Out-of-minutes banner. Both mics are closed while this shows, so it has
+          to explain why nobody can be heard — silence alone reads as a fault. */}
+      {durationPaused && !reconnecting && (
+        <div className="absolute top-0 inset-x-0 z-20 flex justify-center pt-3">
+          <div className="flex items-center gap-2 bg-amber-500/90 backdrop-blur-sm rounded-full px-4 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span className="text-white text-xs font-semibold">
+              {role === CALL_ROLE.CALLER
+                ? 'Minutes ran out — top up to keep talking'
+                : "Client's minutes ran out — waiting for top-up"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Peer name + status — top center */}
       <div className="relative pt-14 pb-4 flex flex-col items-center gap-1">
         <p className="text-white text-lg font-semibold tracking-wide">{peerName}</p>
@@ -184,12 +202,19 @@ export function ActiveCallScreen({
       {/* Bottom controls pill */}
       <div className="relative flex justify-center pb-12 pt-4">
         <div className="flex items-center gap-4 bg-zinc-800/80 backdrop-blur-md rounded-full px-6 py-3">
+          {/* Locked shut while paused — the mic is closed because the time is
+              unpaid, so letting either side reopen it would defeat the pause. */}
           <button
             aria-label={muted ? 'Unmute' : 'Mute'}
             onClick={onMute}
+            disabled={durationPaused}
             className={[
               'flex h-14 w-14 items-center justify-center rounded-full text-white transition-colors',
-              muted ? 'bg-white/20' : 'bg-transparent hover:bg-white/10',
+              durationPaused
+                ? 'bg-white/20 opacity-40 cursor-not-allowed'
+                : muted
+                  ? 'bg-white/20'
+                  : 'bg-transparent hover:bg-white/10',
             ].join(' ')}
           >
             <MicIcon muted={muted} />

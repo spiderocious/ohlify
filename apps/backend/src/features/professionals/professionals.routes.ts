@@ -58,6 +58,13 @@ export const register = (app: Express): void => {
 
   app.use('/api/v1/professionals', proRouter);
 
+  // A professional's own dashboard. Under /me because it is about the caller,
+  // not about browsing professionals.
+  const meRouter = Router();
+  meRouter.use(requireAuth, requireActiveUser);
+  meRouter.get('/dashboard', controller.proDashboard);
+  app.use('/api/v1/me', meRouter);
+
   // /home is a sibling endpoint that orchestrates pros + categories.
   const homeRouter = Router();
   homeRouter.use(requireAuth, requireActiveUser);

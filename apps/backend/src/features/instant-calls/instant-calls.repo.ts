@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
 
+import type { DurationSource } from '@features/call-session-events/duration.js';
 import type { CallType } from '@features/bookings/bookings.types.js';
 
 import {
@@ -22,7 +23,7 @@ export const create = async (
     calleeUserId: string;
     callType: CallType;
     perMinuteKobo: bigint;
-    minutesAllotted: number;
+    secondsAllotted: number;
   },
 ): Promise<InstantCallRow> => {
   const callId = makeId('ic');
@@ -30,7 +31,7 @@ export const create = async (
   const res = await runner.query<InstantCallRow>(
     `INSERT INTO instant_calls
        (id, caller_user_id, callee_user_id, call_type, agora_channel_name,
-        per_minute_kobo, minutes_allotted, caller_joined_at)
+        per_minute_kobo, seconds_allotted, caller_joined_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, now())
      RETURNING *`,
     [
@@ -40,7 +41,7 @@ export const create = async (
       input.callType,
       channel,
       input.perMinuteKobo.toString(),
-      input.minutesAllotted,
+      input.secondsAllotted,
     ],
   );
   return res.rows[0]!;
@@ -97,6 +98,30 @@ export const findExpiredRinging = async (
   return res.rows;
 };
 
+// Active calls that outlived their allotment plus grace — nobody sent the
+// `end` that should have closed them (both apps killed, network gone). Left
+// alone they pin the one-live-call-per-callee index open and the professional
+// can never be called again, so the resolver settles them for the time the
+// event log says was actually talked.
+export const findStaleActive = async (
+  runner: QueryRunner,
+  graceSeconds: number,
+  limit: number,
+): Promise<InstantCallRow[]> => {
+  const res = await runner.query<InstantCallRow>(
+    `SELECT * FROM instant_calls
+      WHERE status = '${InstantCallStatus.ACTIVE}'
+        AND connected_at IS NOT NULL
+        AND connected_at < now()
+          - ((seconds_allotted + $1) * INTERVAL '1 second')
+      ORDER BY connected_at ASC
+      LIMIT $2
+      FOR UPDATE SKIP LOCKED`,
+    [graceSeconds, limit],
+  );
+  return res.rows;
+};
+
 export const markActive = async (runner: QueryRunner, callId: string): Promise<void> => {
   await runner.query(
     `UPDATE instant_calls
@@ -117,6 +142,8 @@ export const finalize = async (
     connectedSeconds: number;
     settledKobo: bigint;
     settlementJournalId: string | null;
+    clientReportedSeconds?: number;
+    durationSource?: DurationSource;
   },
 ): Promise<void> => {
   await runner.query(
@@ -125,6 +152,8 @@ export const finalize = async (
             connected_seconds = $3,
             settled_kobo = $4::bigint,
             settlement_journal_id = $5,
+            client_reported_seconds = COALESCE($6, client_reported_seconds),
+            duration_source = COALESCE($7, duration_source),
             ended_at = now(),
             updated_at = now()
       WHERE id = $1`,
@@ -134,6 +163,19 @@ export const finalize = async (
       input.connectedSeconds,
       input.settledKobo.toString(),
       input.settlementJournalId,
+      input.clientReportedSeconds ?? null,
+      input.durationSource ?? null,
     ],
+  );
+
+  // Every seat is released here because `finalize` is the one place every
+  // ending path converges — hangup, timeout, stale-resolver. A participant left
+  // occupying a seat would be treated as busy and could never take another call.
+  await runner.query(
+    `UPDATE call_participants
+        SET status = 'left', left_at = COALESCE(left_at, now()), updated_at = now()
+      WHERE call_id = $1
+        AND status IN ('pending_approval', 'ringing', 'joined')`,
+    [input.callId],
   );
 };

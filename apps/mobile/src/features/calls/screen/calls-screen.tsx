@@ -1,11 +1,16 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { formatSecondsAsDuration } from '@ohlify/core';
 import { AppText, AppTabView, colors, showConfirmationModal, showToast } from '@ohlify/mobile-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
+import { queryKeys } from '@shared/api/query-keys';
+import { RefreshStatusLine } from '@shared/parts/refresh-status-line';
+import { BannerPlacement } from '@features/banners/api/use-banner';
+import { BannerSlot } from '@features/banners/screen/banner-slot';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import { useAuthSession } from '@features/auth/providers/auth-session-provider';
@@ -16,6 +21,11 @@ import { ScheduledCallsList } from '@features/calls/screen/parts/scheduled-calls
 import { callHistoryQueryKey } from '@features/calls/api/use-call-history';
 import { callStateLabel, callTabOf, type CallHistoryItem } from '@features/calls/types/call-models';
 import type { CompletedCallGroup, CompletedCallItem, ScheduledCallItem } from '@features/calls/types/call-card-models';
+import {
+  CallFilterBar,
+  CallRangeFilter,
+  CallStatusFilter,
+} from '@features/calls/screen/parts/call-filter-bar';
 
 type RootNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -36,9 +46,11 @@ function formatTime(iso: string): string {
 }
 
 function formatDuration(c: CallHistoryItem): string {
-  if (c.durationMinutes > 0) return `${c.durationMinutes} mins`;
-  if (c.connectedSeconds === undefined) return '—';
-  return `${Math.round(c.connectedSeconds / 60)} mins`;
+  // Connected seconds first: billing is per-second, so rounding a 40s call to
+  // "0 mins" would misreport a call the client was genuinely charged for.
+  if (c.connectedSeconds !== undefined) return formatSecondsAsDuration(c.connectedSeconds);
+  if (c.durationMinutes > 0) return formatSecondsAsDuration(c.durationMinutes * 60);
+  return '—';
 }
 
 function toScheduled(c: CallHistoryItem): ScheduledCallItem {
@@ -56,28 +68,71 @@ function toScheduled(c: CallHistoryItem): ScheduledCallItem {
   };
 }
 
-function toCompleted(c: CallHistoryItem): CompletedCallItem {
+function toCompleted(c: CallHistoryItem, isProfessional: boolean): CompletedCallItem {
+  // A professional's gross price is not their money — the platform fee comes
+  // out of it. Showing total_paid_kobo to them would overstate every call.
+  const amountKobo = isProfessional ? c.payeeAmountKobo : c.priceKobo;
   return {
     id: c.id,
     name: c.peerName ?? 'Unknown',
     callType: c.callType,
     time: `${formatDate(c.startAt)} · ${formatTime(c.startAt)}`,
     duration: formatDuration(c),
-    amount: c.priceKobo === undefined ? '—' : `₦${Math.round(c.priceKobo / 100)}`,
+    amount: amountKobo === undefined ? '—' : `₦${Math.round(amountKobo / 100)}`,
     stateLabel: callStateLabel(c),
     avatarKey: c.peerAvatarKey,
   };
 }
 
-function groupCompleted(items: CallHistoryItem[]): CompletedCallGroup[] {
+function groupCompleted(items: CallHistoryItem[], isProfessional: boolean): CompletedCallGroup[] {
   const by = new Map<string, CompletedCallItem[]>();
   for (const c of items) {
     const key = formatDate(c.startAt);
     const list = by.get(key) ?? [];
-    list.push(toCompleted(c));
+    list.push(toCompleted(c, isProfessional));
     by.set(key, list);
   }
   return Array.from(by.entries()).map(([date, calls]) => ({ date, calls }));
+}
+
+const RANGE_WINDOW_MS: Record<Exclude<CallRangeFilter, 'all'>, number> = {
+  [CallRangeFilter.TODAY]: 86_400_000,
+  [CallRangeFilter.WEEK]: 7 * 86_400_000,
+  [CallRangeFilter.MONTH]: 30 * 86_400_000,
+};
+
+function hasActiveFilters(
+  peerQuery: string,
+  status: CallStatusFilter,
+  range: CallRangeFilter,
+): boolean {
+  return (
+    peerQuery.trim() !== '' || status !== CallStatusFilter.ALL || range !== CallRangeFilter.ALL
+  );
+}
+
+/** Client-side because history is already paged into memory; the server filters nothing yet. */
+function matchesFilters(
+  call: CallHistoryItem,
+  peerQuery: string,
+  status: CallStatusFilter,
+  range: CallRangeFilter,
+): boolean {
+  const needle = peerQuery.trim().toLowerCase();
+  if (needle !== '' && !(call.peerName ?? '').toLowerCase().includes(needle)) return false;
+
+  if (status !== CallStatusFilter.ALL) {
+    const label = callStateLabel(call);
+    if (status === CallStatusFilter.COMPLETED && label !== 'Completed') return false;
+    if (status === CallStatusFilter.MISSED && label !== 'Missed') return false;
+    if (status === CallStatusFilter.CANCELLED && label !== 'Cancelled') return false;
+  }
+
+  if (range !== CallRangeFilter.ALL) {
+    const age = Date.now() - new Date(call.startAt).getTime();
+    if (age > RANGE_WINDOW_MS[range]) return false;
+  }
+  return true;
 }
 
 /**
@@ -92,10 +147,16 @@ export function CallsScreen() {
   const query = useCallHistory();
   const { user, isProfessional } = useAuthSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [peerQuery, setPeerQuery] = useState('');
+  const [status, setStatus] = useState<CallStatusFilter>(CallStatusFilter.ALL);
+  const [range, setRange] = useState<CallRangeFilter>(CallRangeFilter.ALL);
 
   const allItems = useMemo(() => query.data?.pages.flatMap((p) => p.items) ?? [], [query.data]);
   const scheduled = useMemo(() => allItems.filter((c) => callTabOf(c) === 'scheduled'), [allItems]);
-  const completed = useMemo(() => allItems.filter((c) => callTabOf(c) === 'completed'), [allItems]);
+  const completed = useMemo(() => {
+    const done = allItems.filter((c) => callTabOf(c) === 'completed');
+    return isProfessional ? done.filter((c) => matchesFilters(c, peerQuery, status, range)) : done;
+  }, [allItems, isProfessional, peerQuery, status, range]);
 
   async function refresh() {
     setIsRefreshing(true);
@@ -174,7 +235,7 @@ export function CallsScreen() {
 
   function historyList(items: CallHistoryItem[], emptyMessage: string) {
     if (items.length === 0) return emptyState(emptyMessage);
-    return <CompletedCallsList groups={groupCompleted(items)} onTap={(item) => navigation.navigate('Call', { callId: item.id })} />;
+    return <CompletedCallsList groups={groupCompleted(items, isProfessional)} onTap={(item) => navigation.navigate('Call', { callId: item.id })} />;
   }
 
   const isLoadingInitial = query.isLoading;
@@ -200,11 +261,34 @@ export function CallsScreen() {
           <AppText variant="title" color={colors.textJet} align="left" weight="800">
             Calls
           </AppText>
+          <RefreshStatusLine queryKey={queryKeys.calls()} />
+          <BannerSlot placement={BannerPlacement.CALLS} />
           <View style={{ height: 16 }} />
+          {isProfessional ? (
+            <>
+              <CallFilterBar
+                peerQuery={peerQuery}
+                status={status}
+                range={range}
+                onPeerQuery={setPeerQuery}
+                onStatus={setStatus}
+                onRange={setRange}
+              />
+              <View style={{ height: 16 }} />
+            </>
+          ) : null}
           <AppTabView
             tabs={[
               { label: 'Scheduled', child: scheduledList(scheduled) },
-              { label: 'Completed', child: historyList(completed, 'No completed calls yet.') },
+              {
+                label: 'Completed',
+                child: historyList(
+                  completed,
+                  isProfessional && hasActiveFilters(peerQuery, status, range)
+                    ? 'No calls match these filters.'
+                    : 'No completed calls yet.',
+                ),
+              },
             ]}
           />
           {query.hasNextPage ? (

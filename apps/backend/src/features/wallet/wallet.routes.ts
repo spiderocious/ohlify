@@ -5,6 +5,7 @@ import { validate } from '@lib/http/validateRequest.js';
 import { rateLimitMiddleware } from '@lib/redis/rateLimit.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
+import { requireFeatureEnabled } from '@middlewares/requireFeatureEnabled.middleware.js';
 
 import * as controller from './wallet.controller.js';
 import {
@@ -31,8 +32,12 @@ export const register = (app: Express): void => {
   // Funding — initialize and verify. The verify endpoint is a polling
   // fallback; webhook is the source of truth. Tighter rate limit on
   // initialize (each call hits Paystack and creates a payment row).
+  // Only initialize is gated. `/fund/verify` stays open so a payment already
+  // taken at Paystack can still be reconciled into the wallet — blocking it
+  // would leave the user charged with nothing credited.
   router.post(
     '/fund/initialize',
+    requireFeatureEnabled('wallet_funding'),
     rateLimitMiddleware((req) => `wallet-fund-init:${req.userId ?? 'anon'}`, 10, 3600),
     validate(InitializeFundingSchema),
     controller.initializeFunding,
@@ -54,9 +59,11 @@ export const register = (app: Express): void => {
     controller.pay,
   );
 
-  // Withdrawals.
+  // Withdrawals. Only the request is gated — the list and detail reads stay
+  // open so a professional can still see the status of money already in flight.
   router.post(
     '/withdraw',
+    requireFeatureEnabled('withdrawals'),
     rateLimitMiddleware((req) => `wallet-withdraw:${req.userId ?? 'anon'}`, 5, 600),
     validate(RequestWithdrawalSchema),
     controller.requestWithdrawal,

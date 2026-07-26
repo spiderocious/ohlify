@@ -7,6 +7,8 @@ import { ScrollView, View } from 'react-native';
 
 import { useAuthSession } from '@features/auth/providers/auth-session-provider';
 import { fileService } from '@shared/services/file-service';
+import { BannerPlacement } from '@features/banners/api/use-banner';
+import { BannerSlot } from '@features/banners/screen/banner-slot';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import { useMe } from '@features/profile/api/use-me';
@@ -78,13 +80,16 @@ export function ProfileScreen() {
           <View style={{ height: 20 }} />
           <ProfileLinkCard profileUrl={shareUrl} onCopy={copyLink} />
         </ProfessionalView>
-        <View style={{ height: 28 }} />
+        <View style={{ height: 20 }} />
+        <BannerSlot placement={BannerPlacement.SETTINGS} />
+        <View style={{ height: 8 }} />
         <ProfileMenu
           onPersonalInfo={() => navigation.navigate('ProfilePersonalInfo')}
           onRates={() => navigation.navigate('ProfileRates')}
           onBankAccount={() => navigation.navigate('ProfileBankAccount')}
           onBookingBlocks={() => navigation.navigate('ProfileBookingBlocks')}
           onChangePassword={() => navigation.navigate('ProfileChangePassword')}
+          onAppLock={() => navigation.navigate('ProfileAppLock')}
           onNotifications={() => navigation.navigate('ProfileNotifications')}
           onHelpDesk={() => navigation.navigate('ProfileHelpDesk')}
           onPrivacyPolicy={() => navigation.navigate('ProfilePrivacyPolicy')}

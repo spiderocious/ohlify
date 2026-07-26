@@ -27,6 +27,7 @@ export const OutboxEventType = {
   // Data-only, high priority — the mobile client renders the full-screen
   // incoming-call UI itself (notifee); no system-rendered notification.
   PUSH_INCOMING_CALL: 'push.incoming_call',
+  PUSH_CALL_INVITE: 'push.call_invite',
   // Push: a ringing instant call stopped ringing (caller hung up, ring
   // window expired, or another device answered). Data-only — its sole job
   // is to dismiss the incoming-call UI on `target_user_id`'s devices.

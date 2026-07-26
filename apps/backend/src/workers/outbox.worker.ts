@@ -4,6 +4,7 @@ import * as authRepo from '@features/auth/auth.repo.js';
 import * as deviceTokensRepo from '@features/profile/device-tokens.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+import { publish, RealtimeEvent, type RealtimeMessage } from '@lib/realtime/index.js';
 import { notificationService } from '@lib/notifications/notification.service.js';
 import { OutboxEventType } from '@lib/outbox/events.js';
 import { getPushProvider, type PushNotification } from '@lib/push/index.js';
@@ -157,6 +158,23 @@ const buildPushNotification = (row: OutboxRow): PushNotification | null => {
           ring_expires_at: asString(payload['ring_expires_at']) ?? '',
         },
       };
+    // An approved invitee is being rung into an existing call. Same shape as
+    // an incoming call because the invitee's UI is the same full-screen ring —
+    // what differs is that they are joining a room already in progress.
+    case OutboxEventType.PUSH_CALL_INVITE:
+      return {
+        category: 'call.incoming',
+        data: {
+          type: 'call.invite',
+          call_id: asString(payload['call_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+          caller_user_id: asString(payload['inviter_user_id']) ?? '',
+          caller_full_name: asString(payload['inviter_full_name']) ?? 'Someone',
+          caller_avatar_url: asString(payload['inviter_avatar_url']) ?? '',
+          call_type: asString(payload['call_type']) ?? 'audio',
+          ring_expires_at: asString(payload['ring_expires_at']) ?? '',
+        },
+      };
     // Stop-ringing signal — data-only; clients dismiss the ring UI for
     // this call_id (caller hung up / answered elsewhere / timed out).
     case OutboxEventType.PUSH_CALL_CANCELLED:
@@ -246,9 +264,81 @@ const dispatchToPush = async (row: OutboxRow): Promise<void> => {
   );
 };
 
+/**
+ * Maps an outbox event to the realtime hint its owner should receive.
+ *
+ * Hints only — the client responds by invalidating a query key and refetching,
+ * so a lost signal costs a delayed refresh rather than a wrong balance. That is
+ * why nothing here carries an amount or a message body.
+ *
+ * Returns null for events nobody needs to be told about live.
+ */
+const realtimeHintFor = (row: OutboxRow): { userId: string; message: RealtimeMessage } | null => {
+  const payload = row.payload;
+  const target = asString(payload['target_user_id']);
+  const owner = asString(payload['user_id']);
+
+  const hint = (
+    userId: string | null,
+    type: RealtimeEvent,
+    data?: Record<string, string>,
+  ): { userId: string; message: RealtimeMessage } | null =>
+    userId ? { userId, message: data ? { type, data } : { type } } : null;
+
+  switch (row.event_type) {
+    case OutboxEventType.WALLET_FUNDING_SUCCEEDED:
+    case OutboxEventType.WALLET_FUNDING_FAILED:
+    case OutboxEventType.WITHDRAWAL_REQUESTED:
+    case OutboxEventType.WITHDRAWAL_COMPLETED:
+    case OutboxEventType.WITHDRAWAL_REVERSED:
+    case OutboxEventType.CALL_PAYMENT_RESERVED:
+    case OutboxEventType.CALL_REFUNDED:
+      return hint(owner, RealtimeEvent.WALLET_CHANGED);
+    case OutboxEventType.MINUTES_PURCHASED:
+      return hint(owner, RealtimeEvent.MINUTES_CHANGED);
+    case OutboxEventType.CALL_SETTLED:
+      return hint(owner, RealtimeEvent.CALL_ENDED);
+    // An invite rings the invitee exactly like an incoming call does — same
+    // hint, same client behaviour; only the push payload differs.
+    case OutboxEventType.PUSH_INCOMING_CALL:
+    case OutboxEventType.PUSH_CALL_INVITE: {
+      const callId = asString(payload['call_id']);
+      return hint(target, RealtimeEvent.CALL_INCOMING, callId ? { call_id: callId } : undefined);
+    }
+    case OutboxEventType.PUSH_CALL_CANCELLED: {
+      const callId = asString(payload['call_id']);
+      return hint(target, RealtimeEvent.CALL_CANCELLED, callId ? { call_id: callId } : undefined);
+    }
+    case OutboxEventType.PUSH_CHAT_MESSAGE: {
+      const conversationId = asString(payload['conversation_id']);
+      return hint(
+        target,
+        RealtimeEvent.CHAT_MESSAGE,
+        conversationId ? { conversation_id: conversationId } : undefined,
+      );
+    }
+    case OutboxEventType.PUSH_CALL_MISSED:
+      return hint(target, RealtimeEvent.BADGES_CHANGED);
+    default:
+      return null;
+  }
+};
+
+const dispatchToRealtime = (row: OutboxRow): void => {
+  const hint = realtimeHintFor(row);
+  if (!hint) return;
+  publish(hint.userId, hint.message);
+  // Anything worth a live hint also moves a badge; the client coalesces both
+  // into one refetch, so the extra signal is cheap and keeps the tab bar honest.
+  if (hint.message.type !== RealtimeEvent.BADGES_CHANGED) {
+    publish(hint.userId, { type: RealtimeEvent.BADGES_CHANGED });
+  }
+};
+
 const publishOne = async (row: OutboxRow): Promise<void> => {
   await dispatchToEmail(row);
   await dispatchToPush(row);
+  dispatchToRealtime(row);
   logger.info(
     {
       outboxId: row.id,

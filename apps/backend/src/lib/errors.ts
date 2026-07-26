@@ -6,6 +6,15 @@ export class AppError extends Error {
   public readonly retryAfter?: number;
   /** Optional i18n key the error handler resolves into the user-facing `errorMessage`. */
   public readonly messageKey?: MessageKey;
+  /**
+   * Verbatim user-facing text, bypassing the message registry.
+   *
+   * Reserved for copy an OPERATOR authored at runtime — a maintenance notice,
+   * for instance — which by definition has no compile-time key. Everything
+   * else must go through `messageKey`, so response copy stays reviewable in one
+   * place rather than scattered across callsites as inline strings.
+   */
+  public readonly publicMessage?: string;
 
   constructor(
     /** Stable string identity (an ErrorCode value) emitted as `reason`. */
@@ -21,6 +30,24 @@ export class AppError extends Error {
     if (retryAfter !== undefined) this.retryAfter = retryAfter;
     if (messageKey !== undefined) this.messageKey = messageKey;
     Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+/**
+ * A capability switched off platform-wide.
+ *
+ * Carries the operator's own notice verbatim: they wrote it at runtime to
+ * explain this particular pause, so there is no key to resolve it from, and a
+ * generic fallback would waste the one chance to tell the user what is
+ * actually happening.
+ */
+export class FeatureDisabledError extends AppError {
+  public override readonly publicMessage: string;
+
+  constructor(operatorMessage: string) {
+    super('feature_disabled', operatorMessage, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    this.name = 'FeatureDisabledError';
+    this.publicMessage = operatorMessage;
   }
 }
 

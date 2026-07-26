@@ -74,11 +74,17 @@
 //    Journal: withdrawal_completed   idempotency_key: wd:<id>:completed
 //      paystack_payouts:          -amount_kobo
 //      paystack_clearing:         +amount_kobo
+//      paystack_transfer_fees:    +fee_kobo      (when fee > 0)
+//      platform_revenue:          -fee_kobo      (when fee > 0)
 //
 //    paystack_clearing is a contra-asset (negative on funding inflows). An
 //    outflow walks it back toward zero, which is positive in our signed
 //    convention. Net across requested+completed: user_wallet -amount,
 //    paystack_clearing +amount, paystack_payouts net 0.
+//
+//    The fee pair recognises Paystack's per-transfer charge as a cost against
+//    margin. `platform_profit` (migration 0078) nets it — and the funding fee
+//    account — out of gross revenue.
 //
 // 8. Withdrawal reversed (Paystack reports transfer failed)
 //

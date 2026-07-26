@@ -5,6 +5,7 @@ import { validate } from '@lib/http/validateRequest.js';
 import { ipRateLimit } from '@lib/redis/rateLimit.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
+import { requireFeatureEnabled } from '@middlewares/requireFeatureEnabled.middleware.js';
 
 import * as controller from './auth.controller.js';
 import {
@@ -27,8 +28,12 @@ export const register = (app: Express): void => {
   const meRouter = Router();
 
   // ── Registration ───────────────────────────────────────────────────────────
+  // Only the entry step is gated. Switching registration off mid-flow should
+  // stop new signups, not strand someone who already has a half-created
+  // account and no way to finish it.
   authRouter.post(
     '/register/initiate',
+    requireFeatureEnabled('registration'),
     ipRateLimit(10, 15 * 60),
     validate(RegisterInitiateSchema),
     controller.registerInitiate,
@@ -56,7 +61,15 @@ export const register = (app: Express): void => {
   );
 
   // ── Login / session ────────────────────────────────────────────────────────
-  authRouter.post('/login', validate(LoginSchema), controller.login);
+  // `/refresh` is deliberately NOT gated: revoking it would log out every
+  // already-signed-in user the moment their access token lapsed, turning a
+  // login pause into a full eviction.
+  authRouter.post(
+    '/login',
+    requireFeatureEnabled('login'),
+    validate(LoginSchema),
+    controller.login,
+  );
 
   authRouter.post('/refresh', validate(RefreshSchema), controller.refresh);
 

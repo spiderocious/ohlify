@@ -16,10 +16,12 @@ export function CallScreen() {
 
   const rtcLeave = useRef<() => void>(() => {});
   const rtcSendStream = useRef<ReturnType<typeof useAgoraRtc>['sendStream']>(() => {});
+  const rtcMute = useRef<ReturnType<typeof useAgoraRtc>['mute']>(() => {});
   const machine = useCallMachine(
     bridge.emit,
     useCallback(() => rtcLeave.current(), []),
     useCallback((msg) => rtcSendStream.current(msg), []),
+    useCallback((muted: boolean) => rtcMute.current(muted), []),
   );
 
   const handleAgoraEvent = useCallback(
@@ -34,6 +36,7 @@ export function CallScreen() {
   const rtc = useAgoraRtc(agoraOptions);
   rtcLeave.current = rtc.leave;
   rtcSendStream.current = rtc.sendStream;
+  rtcMute.current = rtc.mute;
 
   bridge.onCommand(machine.handleBridgeCommand);
 
@@ -114,7 +117,12 @@ export function CallScreen() {
     return (
       <div className="flex flex-col h-full w-full bg-zinc-950 text-white select-none">
         <div className="flex-1 relative">
-          <CallVideoLayout localVideoRef={rtc.localVideoRef} remoteVideoRef={rtc.remoteVideoRef} />
+          <CallVideoLayout
+            localVideoRef={rtc.localVideoRef}
+            remoteVideoRef={rtc.remoteVideoRef}
+            secondRemoteVideoRef={rtc.secondRemoteVideoRef}
+            hasSecondRemote={rtc.remoteUids.length > 1}
+          />
         </div>
         <div className="flex items-center justify-center gap-6 px-6 pb-8 pt-4">
           {state.connectedAt !== null && (
@@ -160,6 +168,7 @@ export function CallScreen() {
       durationMinutes={jp.duration_minutes}
       accumulatedPausedMs={state.accumulatedPausedMs}
       durationPaused={state.durationPaused}
+      role={jp.role}
       onMute={() => rtc.mute(!state.muted)}
       onHangup={hangup}
     />

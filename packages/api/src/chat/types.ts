@@ -44,9 +44,14 @@ export interface ConversationContext {
   peer_name: string | null;
   peer_avatar_url: string | null;
   viewer_is_client: boolean;
+  /** Authoritative balance — billing is per-second. */
+  seconds_remaining: number;
+  /** Floored whole minutes, for builds that predate per-second billing. */
   minutes_remaining: number;
   low_minutes_threshold: number;
-  /** False when the client is out of minutes (the pro can always reply). */
+  /** Below this many seconds the composer warns; at zero the client cannot send. */
+  low_seconds_threshold: number;
+  /** False when the client is out of time (the pro can always reply). */
   can_send: boolean;
   active_schedule: ChatMessage | null;
 }

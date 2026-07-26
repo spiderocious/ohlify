@@ -65,7 +65,10 @@ export function usePaystackInline() {
           popup.newTransaction({
             key: PAYSTACK_PUBLIC_KEY,
             email: me.email,
-            amount: amountKobo,
+            // The server decides what to collect: under pass-on that is the
+            // requested credit plus the processing fee, so charging the raw
+            // request here would under-collect and short the wallet.
+            amount: init.amount_kobo,
             reference,
             currency: init.currency,
             onLoad: () => {

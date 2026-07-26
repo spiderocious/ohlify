@@ -1,4 +1,11 @@
-import { AnimatedBalance, AppIcon, AppText, ProfessionalView, colors } from '@ohlify/mobile-ui';
+import {
+  AmountVisibilityToggle,
+  AnimatedBalance,
+  AppIcon,
+  AppText,
+  ProfessionalView,
+  colors,
+} from '@ohlify/mobile-ui';
 import { Pressable, View } from 'react-native';
 
 import { formatKobo } from '@features/wallet/types/wallet-models';
@@ -6,6 +13,8 @@ import { formatKobo } from '@features/wallet/types/wallet-models';
 export interface WalletBalanceCardProps {
   balanceKobo: number;
   currency?: string;
+  /** "Last refreshed 3 minutes ago". Empty until the first successful fetch. */
+  lastRefreshedLabel?: string;
   onWithdraw: () => void;
 }
 
@@ -16,13 +25,22 @@ export interface WalletBalanceCardProps {
  * refresh) rather than snapping — money screens are where users pay the
  * most attention, so this is the highest-payoff single animation in the app.
  */
-export function WalletBalanceCard({ balanceKobo, currency = 'NGN', onWithdraw }: WalletBalanceCardProps) {
+export function WalletBalanceCard({
+  balanceKobo,
+  currency = 'NGN',
+  lastRefreshedLabel,
+  onWithdraw,
+}: WalletBalanceCardProps) {
   return (
     <View style={{ padding: 24, backgroundColor: colors.primary, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
       <View style={{ flex: 1 }}>
-        <AppText variant="body" color={colors.textWhite} align="left">
-          Wallet balance
-        </AppText>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <AppText variant="body" color={colors.textWhite} align="left">
+            Wallet balance
+          </AppText>
+          <View style={{ width: 4 }} />
+          <AmountVisibilityToggle size={18} />
+        </View>
         <View style={{ height: 6 }} />
         <AnimatedBalance
           value={balanceKobo}
@@ -32,6 +50,16 @@ export function WalletBalanceCard({ balanceKobo, currency = 'NGN', onWithdraw }:
           align="left"
           weight="700"
         />
+        {/* A balance is money. Restating when it was last read keeps a cached
+            number from reading as live — the whole point of showing it offline. */}
+        {lastRefreshedLabel ? (
+          <>
+            <View style={{ height: 4 }} />
+            <AppText variant="bodySmall" color={colors.textWhite} align="left" style={{ opacity: 0.7 }}>
+              {lastRefreshedLabel}
+            </AppText>
+          </>
+        ) : null}
         <ProfessionalView>
           <View style={{ height: 20 }} />
           <WithdrawButton onPress={onWithdraw} />

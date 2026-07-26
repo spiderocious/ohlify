@@ -1,3 +1,4 @@
+import type { DurationSource } from '@features/call-session-events/duration.js';
 import type { CallType } from '@features/bookings/bookings.types.js';
 import type { JsonKobo } from '@features/wallet/wallet.types.js';
 
@@ -29,8 +30,10 @@ export interface InstantCallRow {
   status: InstantCallStatus;
   agora_channel_name: string;
   per_minute_kobo: string;
-  minutes_allotted: number;
+  seconds_allotted: number;
   connected_seconds: number;
+  client_reported_seconds: number;
+  duration_source: DurationSource | null;
   settled_kobo: string;
   settlement_journal_id: string | null;
   caller_joined_at: Date | null;
@@ -54,9 +57,12 @@ export interface InstantCallJoinView {
   call_type: CallType;
   remote_user_id: string;
   per_minute_kobo: JsonKobo;
-  minutes_allotted: number;
-  // Seconds cap for this call = minutes_allotted * 60. The client counts down.
+  /** Hard cap on billable talk time. The client counts down against it. */
+  seconds_allotted: number;
+  /** Retained alias of `seconds_allotted` for app versions that predate it. */
   max_seconds: number;
+  /** Floored whole minutes, for builds that predate per-second billing. */
+  minutes_allotted: number;
 }
 
 export interface InstantCallView {
@@ -66,7 +72,7 @@ export interface InstantCallView {
   call_type: CallType;
   status: InstantCallStatus;
   per_minute_kobo: JsonKobo;
-  minutes_allotted: number;
+  seconds_allotted: number;
   connected_seconds: number;
   settled_kobo: JsonKobo;
   connected_at: string | null;

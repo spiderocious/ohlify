@@ -4,6 +4,7 @@ import { RequireProfessional } from '@shared/guards/require-professional';
 
 import { BankAccountScreen } from './screen/bank-account-screen';
 import { BookingBlocksScreen } from './screen/booking-blocks-screen';
+import { AppLockSettingsScreen } from '@features/app-lock/screen/app-lock-settings-screen';
 import { ChangePasswordScreen } from './screen/change-password-screen';
 import { EulaScreen } from './screen/eula-screen';
 import { HelpDeskScreen } from './screen/help-desk-screen';
@@ -22,6 +23,7 @@ export type ProfileStackParamList = {
   ProfileBankAccount: undefined;
   ProfileBookingBlocks: undefined;
   ProfileChangePassword: undefined;
+  ProfileAppLock: undefined;
   ProfileNotifications: undefined;
   ProfileHelpDesk: undefined;
   ProfilePrivacyPolicy: undefined;
@@ -40,6 +42,7 @@ export function ProfileStackNavigator() {
       <ProfileStack.Screen name="ProfileBankAccount">{() => <RequireProfessional><BankAccountScreen /></RequireProfessional>}</ProfileStack.Screen>
       <ProfileStack.Screen name="ProfileBookingBlocks">{() => <RequireProfessional><BookingBlocksScreen /></RequireProfessional>}</ProfileStack.Screen>
       <ProfileStack.Screen name="ProfileChangePassword" component={ChangePasswordScreen} />
+      <ProfileStack.Screen name="ProfileAppLock" component={AppLockSettingsScreen} />
       <ProfileStack.Screen name="ProfileNotifications" component={NotificationPreferencesScreen} />
       <ProfileStack.Screen name="ProfileHelpDesk" component={HelpDeskScreen} />
       <ProfileStack.Screen name="ProfilePrivacyPolicy" component={PrivacyPolicyScreen} />

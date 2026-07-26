@@ -6,11 +6,18 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
+import { queryKeys } from '@shared/api/query-keys';
+import { RefreshStatusLine } from '@shared/parts/refresh-status-line';
+import { BannerPlacement } from '@features/banners/api/use-banner';
+import { BannerSlot } from '@features/banners/screen/banner-slot';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import type { MainTabParamList } from '../../../main-tabs.navigation';
 import { useHome } from '@features/home/api/use-home';
+import { useAuthSession } from '@features/auth/providers/auth-session-provider';
 import { CategoryFilter } from './parts/category-filter';
+import { ContinueWithList } from './parts/continue-with-list';
+import { ProfessionalHomeScreen } from './professional-home-screen';
 import { PopularProfessionalsList } from './parts/popular-professionals-list';
 import type { CategoryItem, ProfessionalListItem } from '../types/home-models';
 
@@ -18,7 +25,19 @@ type TabNavigation = BottomTabNavigationProp<MainTabParamList>;
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 
 /** Mirrors mobile/lib/features/home/screen/home_screen.dart. */
+/**
+ * Routes to whichever home the caller actually needs.
+ *
+ * A professional has no use for a search bar full of people like themselves,
+ * and a client has no earnings to see — so these are two screens, not one
+ * screen with branches sprinkled through it.
+ */
 export function HomeScreen() {
+  const { isProfessional } = useAuthSession();
+  return isProfessional ? <ProfessionalHomeScreen /> : <ClientHomeScreen />;
+}
+
+function ClientHomeScreen() {
   const navigation = useNavigation<TabNavigation>();
   const home = useHome();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,7 +84,14 @@ export function HomeScreen() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />}
         >
-          <View style={{ height: 20 }} />
+          <RefreshStatusLine queryKey={queryKeys.home()} />
+          <BannerSlot placement={BannerPlacement.HOME} />
+          <View style={{ height: 12 }} />
+          <ContinueWithList
+            items={home.data?.continueWith ?? []}
+            onPress={(item) => root?.navigate('Professional', { professionalId: item.professionalId })}
+          />
+          {(home.data?.continueWith.length ?? 0) > 0 ? <View style={{ height: 22 }} /> : null}
           <AppSearchBar readOnly onPress={() => gotoSearch({ focus: true })} />
           <View style={{ height: 24 }} />
           <CategoryFilter categories={categories} onChange={(c: CategoryItem) => gotoSearch({ category: c.value })} />

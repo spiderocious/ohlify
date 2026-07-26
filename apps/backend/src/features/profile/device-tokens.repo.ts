@@ -20,17 +20,34 @@ export const upsert = async (input: {
   userId: string;
   platform: 'ios' | 'android' | 'web';
   appVersion?: string;
+  deviceName?: string;
+  deviceModel?: string;
+  osVersion?: string;
 }): Promise<DeviceTokenRow> => {
+  // Telemetry columns COALESCE so a re-registration that omits them keeps what
+  // an earlier one recorded, rather than blanking a known device.
   const res = await pool.query<DeviceTokenRow>(
-    `INSERT INTO device_tokens (token, user_id, platform, app_version)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO device_tokens
+       (token, user_id, platform, app_version, device_name, device_model, os_version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (token) DO UPDATE
-       SET user_id     = EXCLUDED.user_id,
-           platform    = EXCLUDED.platform,
-           app_version = COALESCE(EXCLUDED.app_version, device_tokens.app_version),
+       SET user_id      = EXCLUDED.user_id,
+           platform     = EXCLUDED.platform,
+           app_version  = COALESCE(EXCLUDED.app_version, device_tokens.app_version),
+           device_name  = COALESCE(EXCLUDED.device_name, device_tokens.device_name),
+           device_model = COALESCE(EXCLUDED.device_model, device_tokens.device_model),
+           os_version   = COALESCE(EXCLUDED.os_version, device_tokens.os_version),
            last_seen_at = now()
      RETURNING *`,
-    [input.token, input.userId, input.platform, input.appVersion ?? null],
+    [
+      input.token,
+      input.userId,
+      input.platform,
+      input.appVersion ?? null,
+      input.deviceName ?? null,
+      input.deviceModel ?? null,
+      input.osVersion ?? null,
+    ],
   );
   return res.rows[0]!;
 };

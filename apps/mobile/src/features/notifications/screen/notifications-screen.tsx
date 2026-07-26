@@ -1,10 +1,13 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppIcon, AppText, colors } from '@ohlify/mobile-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { Fragment, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { RootStackParamList } from '../../../app.navigation';
+import { badgesQueryKey } from '@shared/api/use-badges';
+import { resolveDeeplink } from '@shared/navigation/resolve-deeplink';
 import { useNotifications } from '../providers/use-notifications';
 import { NotificationsEmptyState } from './parts/notifications-empty-state';
 import { NotificationsTabs } from './parts/notifications-tabs';
@@ -17,19 +20,18 @@ type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 export function NotificationsScreen() {
   const navigation = useNavigation<RootNavigation>();
   const notifications = useNotifications();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState(0);
 
   const items = tab === 0 ? notifications.all : notifications.unread;
   const canMarkAll = notifications.unreadCount > 0;
 
   function onTapNotification(n: AppNotification) {
-    notifications.markAsRead(n.id);
-    // Backend deep-link routing isn't fully specified yet — best-effort:
-    // send the user Home, where they can navigate from context. Marking
-    // read is the durable side effect either way.
-    if (n.route) {
-      navigation.navigate('Home');
-    }
+    void notifications.markAsRead(n.id);
+    void queryClient.invalidateQueries({ queryKey: badgesQueryKey() });
+    // The panel is a router into the app, so every tap goes somewhere —
+    // resolveDeeplink falls back rather than failing on an unknown target.
+    resolveDeeplink(navigation, n.route);
   }
 
   return (

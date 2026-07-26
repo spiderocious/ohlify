@@ -64,6 +64,9 @@ const REASON_MESSAGE_KEY: Record<ErrorCode, MessageKey> = {
   [ERROR_CODES.RATE_LIMITED]: MESSAGE_KEYS.RATE_LIMITED_KEY,
   [ERROR_CODES.INTERNAL]: MESSAGE_KEYS.INTERNAL_ERROR,
   [ERROR_CODES.UPSTREAM_UNAVAILABLE]: MESSAGE_KEYS.BANKS_UPSTREAM_ERROR,
+  // Overridden per-request by the operator's own `enablement.message`, which
+  // the middleware passes as the AppError message.
+  [ERROR_CODES.FEATURE_DISABLED]: MESSAGE_KEYS.FEATURE_DISABLED,
   [ERROR_CODES.CONFLICT]: MESSAGE_KEYS.CONFLICT_KEY,
   [ERROR_CODES.IDEMPOTENCY_MISMATCH]: MESSAGE_KEYS.CONFLICT_KEY,
   // Admin bootstrap
@@ -129,6 +132,15 @@ const MESSAGE_TEXT: Partial<Record<MessageKey, string>> = {
   [MESSAGE_KEYS.INSTANT_CALL_NOT_RINGING]: 'This call can’t be answered anymore.',
   [MESSAGE_KEYS.INSTANT_CALL_CANNOT_CALL_SELF]: 'You can’t call yourself.',
   [MESSAGE_KEYS.CHAT_NEEDS_MINUTES]: 'Buy minutes with this professional to start chatting.',
+  [MESSAGE_KEYS.INSTANT_CALL_NOT_ACTIVE]: 'This call is no longer in progress.',
+  [MESSAGE_KEYS.FEATURE_DISABLED]:
+    'This is temporarily unavailable while we carry out maintenance. Please try again shortly.',
+  [MESSAGE_KEYS.CAMPAIGN_NOT_FOUND]: 'That campaign no longer exists.',
+  [MESSAGE_KEYS.CAMPAIGN_NOT_ACTIONABLE]: 'This campaign has already been sent or cancelled.',
+  [MESSAGE_KEYS.INTENT_NOT_FOUND]: 'That request has expired. Start again.',
+  [MESSAGE_KEYS.INTENT_NOT_ACTIONABLE]:
+    'This request was already completed or cancelled. Start again.',
+  [MESSAGE_KEYS.INTENT_PRO_NOT_FOUND]: 'This professional isn’t available.',
   [MESSAGE_KEYS.CHAT_NOT_FOUND]: 'That conversation no longer exists.',
   [MESSAGE_KEYS.CHAT_PRO_NOT_FOUND]: 'This professional isn’t available.',
   [MESSAGE_KEYS.CHAT_CANNOT_CHAT_SELF]: 'You can’t chat with yourself.',

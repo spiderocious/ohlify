@@ -1,5 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { formatSecondsAsDuration } from '@ohlify/core';
 import { AppButton, AppText, colors, showCustomModal, showFeedbackModal, showToast } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
@@ -57,7 +58,7 @@ function perMinuteKobo(rate: ProfessionalRate): number {
 
 function MinuteRow({ professionalId, callType, rate }: { professionalId: string; callType: 'audio' | 'video'; rate: ProfessionalRate }) {
   const navigation = useNavigation<RootNavigation>();
-  const [minutes, setMinutes] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
     minutesApi
       .balanceForPro(professionalId, callType)
       .then((b) => {
-        if (!cancelled) setMinutes(b.minutesRemaining);
+        if (!cancelled) setSecondsRemaining(b.secondsRemaining);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -98,8 +99,8 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
   async function buy(amountKobo: number): Promise<string | null> {
     try {
       const res = await minutesApi.buyMinutes({ professionalId, callType, amountKobo });
-      setMinutes(res.minutesRemaining);
-      showToast(`Added ${res.minutesPurchased} minutes.`, { type: 'success' });
+      setSecondsRemaining(res.secondsRemaining);
+      showToast(`Added ${formatSecondsAsDuration(res.secondsPurchased)}.`, { type: 'success' });
       await goToChat();
       return null;
     } catch (e) {
@@ -129,7 +130,7 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       <View style={{ flex: 1 }}>
         <AppText variant="body" weight="600" color={colors.textJet} align="left">
-          {loading ? `${label} · …` : `${label} · ${minutes} min`}
+          {loading ? `${label} · …` : `${label} · ${formatSecondsAsDuration(secondsRemaining)}`}
         </AppText>
         {rate.pricePerMinute ? (
           <AppText variant="bodySmall" color={colors.textMuted} align="left">

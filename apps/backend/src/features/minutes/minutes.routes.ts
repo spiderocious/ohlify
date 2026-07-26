@@ -5,6 +5,7 @@ import { validate } from '@lib/http/validateRequest.js';
 import { rateLimitMiddleware } from '@lib/redis/rateLimit.js';
 import { requireAuth } from '@middlewares/auth.middleware.js';
 import { requireActiveUser } from '@middlewares/requireActiveUser.middleware.js';
+import { requireFeatureEnabled } from '@middlewares/requireFeatureEnabled.middleware.js';
 
 import * as controller from './minutes.controller.js';
 import { BalanceQuerySchema, BuyMinutesSchema } from './minutes.schema.js';
@@ -20,9 +21,11 @@ export const register = (app: Express): void => {
   // Balance for a specific pro + call_type.
   router.get('/balance', validate(BalanceQuerySchema, 'query'), controller.getForPro);
 
-  // Buy minutes against a pro (wallet-funded).
+  // Buy minutes against a pro (wallet-funded). Balance reads stay open so a
+  // caller can still see what they hold while purchasing is paused.
   router.post(
     '/',
+    requireFeatureEnabled('minutes_purchase'),
     rateLimitMiddleware((req) => `minutes-buy:${req.userId ?? 'anon'}`, 30, 3600),
     validate(BuyMinutesSchema),
     controller.buy,

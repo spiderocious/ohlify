@@ -49,6 +49,8 @@ export const ERROR_CODES = {
   RATE_LIMITED: 'rate_limited',
   INTERNAL: 'internal',
   UPSTREAM_UNAVAILABLE: 'upstream_unavailable',
+  /** The capability is switched off platform-wide (maintenance or incident). */
+  FEATURE_DISABLED: 'feature_disabled',
   CONFLICT: 'conflict',
   IDEMPOTENCY_MISMATCH: 'idempotency_mismatch',
   // Admin bootstrap (one-shot first-admin creation)
@@ -184,8 +186,9 @@ export const ERROR_SEVERITY: Record<ErrorCode, SeverityBand> = {
   unresolvable_account: SEVERITY_BANDS.BUSINESS_RULE,
   // 1007 — rate limited
   rate_limited: SEVERITY_BANDS.RATE_LIMITED,
-  // 1008 — upstream
+  // 1008 — upstream / unavailable
   upstream_unavailable: SEVERITY_BANDS.UPSTREAM,
+  feature_disabled: SEVERITY_BANDS.UPSTREAM,
   // 1009 — server
   internal: SEVERITY_BANDS.SERVER,
 };

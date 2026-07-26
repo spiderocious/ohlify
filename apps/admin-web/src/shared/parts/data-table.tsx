@@ -32,6 +32,14 @@ interface DataTableProps<T> {
   footer?: ReactNode;
   /** Sticky-header table inside a scroll container. */
   className?: string;
+  /**
+   * Bulk selection. Supplying `selectable` adds a leading checkbox column;
+   * rows it returns false for cannot be selected, so a caller can restrict
+   * selection to the states an action is actually valid for.
+   */
+  selectable?: (row: T) => boolean;
+  selectedKeys?: ReadonlySet<string>;
+  onSelectionChange?: (keys: Set<string>) => void;
 }
 
 const ALIGN: Record<NonNullable<ColumnDef<unknown>['align']>, string> = {
@@ -56,13 +64,45 @@ export function DataTable<T>({
   onRowClick,
   footer,
   className,
+  selectable,
+  selectedKeys,
+  onSelectionChange,
 }: DataTableProps<T>) {
+  const selectableRows = selectable ? (rows ?? []).filter(selectable) : [];
+  const selected = selectedKeys ?? new Set<string>();
+  const allSelected =
+    selectableRows.length > 0 && selectableRows.every((r) => selected.has(rowKey(r)));
+
+  const toggleAll = () => {
+    onSelectionChange?.(allSelected ? new Set() : new Set(selectableRows.map(rowKey)));
+  };
+
+  const toggleOne = (key: string) => {
+    const next = new Set(selected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onSelectionChange?.(next);
+  };
+
+  const columnCount = columns.length + (selectable ? 1 : 0);
+
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[800px] border-collapse text-sm sm:table-fixed">
           <thead className="sticky top-0 z-10 bg-surface-light">
             <tr className="border-b border-border">
+              {selectable && (
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={allSelected}
+                    disabled={selectableRows.length === 0}
+                    onChange={toggleAll}
+                  />
+                </th>
+              )}
               {columns.map((c) => (
                 <th
                   key={c.key}
@@ -82,7 +122,7 @@ export function DataTable<T>({
           <tbody>
             {isLoading && (!rows || rows.length === 0) && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-16">
+                <td colSpan={columnCount} className="px-4 py-16">
                   <AppLoader />
                 </td>
               </tr>
@@ -90,7 +130,7 @@ export function DataTable<T>({
 
             {!isLoading && error && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-16">
+                <td colSpan={columnCount} className="px-4 py-16">
                   <div className="flex flex-col items-center gap-2 text-center">
                     <IconAlertCircle size={32} color="var(--ohl-error)" />
                     <AppText variant="bodyTitle" className="text-text-primary">
@@ -106,7 +146,7 @@ export function DataTable<T>({
 
             {!isLoading && !error && rows && rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-16">
+                <td colSpan={columnCount} className="px-4 py-16">
                   <div className="flex flex-col items-center gap-2 text-center">
                     <IconInfo size={32} color="var(--ohl-text-muted)" />
                     <AppText variant="bodyTitle" className="text-text-primary">
@@ -129,8 +169,22 @@ export function DataTable<T>({
                 className={cn(
                   'border-b border-border/60 transition',
                   onRowClick && 'cursor-pointer hover:bg-surface-light/60',
+                  selected.has(rowKey(row)) && 'bg-primary/5',
                 )}
               >
+                {selectable && (
+                  // Stops the click bubbling into onRowClick — ticking a box to
+                  // build a bulk action must not also open the drawer.
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select row"
+                      checked={selected.has(rowKey(row))}
+                      disabled={!selectable(row)}
+                      onChange={() => toggleOne(rowKey(row))}
+                    />
+                  </td>
+                )}
                 {columns.map((c) => (
                   <td
                     key={c.key}

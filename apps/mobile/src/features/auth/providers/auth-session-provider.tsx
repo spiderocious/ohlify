@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { roleStore } from '@ohlify/mobile-ui';
@@ -9,6 +11,9 @@ import { setPushSessionReady } from '@shared/push/push-intents';
 import { registerDeviceTokenWithBackend, unregisterDeviceToken } from '@shared/push/push-service';
 import { tokenService } from '@shared/services/token-service';
 import { ApiError } from '@shared/types/api-error';
+
+import { appLockService } from '@features/app-lock/services/app-lock-service';
+import { clearFirstRun, PERSISTED_CACHE_KEY } from '@shared/api/cache-keys';
 
 import { authApi } from '../api/auth-api';
 import type { AuthSession, AuthUser, OnboardingStep } from '../types/auth-models';
@@ -59,6 +64,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [onboardingStep, setOnboardingStepState] = useState<OnboardingStep>('profile');
   const [isRestoring, setIsRestoring] = useState(true);
+  const queryClient = useQueryClient();
 
   const forceLogout = useCallback(() => {
     setUser(null);
@@ -165,9 +171,19 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
       }
     }
     await tokenService.clear();
+    // The query cache is persisted to disk and keyed globally, so leaving it
+    // behind would show this user's balances and chats to whoever signs in
+    // next on the same phone. Both the live cache and its stored copy go.
+    queryClient.clear();
+    await AsyncStorage.removeItem(PERSISTED_CACHE_KEY);
+    // The lock guards this device's data; a new account should not inherit
+    // the previous owner's PIN.
+    await appLockService.clear();
+    // The next account on this device is a first run of its own.
+    await clearFirstRun();
     setUser(null);
     setOnboardingStepState('profile');
-  }, []);
+  }, [queryClient]);
 
   const value: AuthSessionContextValue = {
     user,

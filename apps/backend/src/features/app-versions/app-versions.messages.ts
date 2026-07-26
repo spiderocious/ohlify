@@ -1,0 +1,7 @@
+import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
+
+export const APP_VERSION_MESSAGES = {
+  CHECKED: MESSAGE_KEYS.APP_VERSION_CHECKED,
+  LISTED: MESSAGE_KEYS.APP_VERSION_LISTED,
+  SAVED: MESSAGE_KEYS.APP_VERSION_SAVED,
+} as const;

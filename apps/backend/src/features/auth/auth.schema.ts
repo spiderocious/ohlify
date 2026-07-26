@@ -1,5 +1,22 @@
 import { z } from 'zod';
 
+/**
+ * Optional client telemetry recorded against the session.
+ *
+ * Declared on the schema because `validate` strips unknown keys, so an
+ * undeclared block would never reach `requestMeta`. Everything is optional and
+ * loosely typed on purpose — telemetry must never be why a login is rejected.
+ */
+export const DeviceInfoSchema = z
+  .object({
+    platform: z.string().max(16).optional(),
+    app_version: z.string().max(32).optional(),
+    device_name: z.string().max(128).optional(),
+    device_model: z.string().max(128).optional(),
+    os_version: z.string().max(32).optional(),
+  })
+  .optional();
+
 const passwordPolicy = z
   .string()
   .min(8, 'Password must be at least 8 characters')
@@ -32,6 +49,7 @@ export const RegisterVerifySchema = z.object({
     // (BUG-auth-register-02.)
     .length(6, 'OTP must be 6 digits')
     .regex(/^\d{6}$/, 'OTP must be 6 digits'),
+  device: DeviceInfoSchema,
 });
 
 export const ResendOtpSchema = z.object({
@@ -41,6 +59,7 @@ export const ResendOtpSchema = z.object({
 export const LoginSchema = z.object({
   email: z.string().email('Invalid email address').max(254, 'Email address too long'),
   password: z.string().min(1),
+  device: DeviceInfoSchema,
 });
 
 export const RefreshSchema = z.object({

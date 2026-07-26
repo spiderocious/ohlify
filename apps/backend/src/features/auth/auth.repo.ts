@@ -125,12 +125,25 @@ export interface CreateSessionInput {
   userAgent?: string | undefined;
   ip?: string | undefined;
   deviceId?: string | undefined;
+  /** Structured client telemetry. Every field optional — a client that sends none still signs in. */
+  device?: DeviceInfoInput | undefined;
+}
+
+export interface DeviceInfoInput {
+  platform?: string | undefined;
+  appVersion?: string | undefined;
+  deviceName?: string | undefined;
+  deviceModel?: string | undefined;
+  osVersion?: string | undefined;
 }
 
 export const createAuthSession = async (input: CreateSessionInput): Promise<void> => {
+  const device = input.device ?? {};
   await pool.query(
-    `INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, user_agent, ip, device_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO auth_sessions
+       (id, user_id, refresh_token_hash, expires_at, user_agent, ip, device_id,
+        platform, app_version, device_name, device_model, os_version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
       id('rt'),
       input.userId,
@@ -139,6 +152,11 @@ export const createAuthSession = async (input: CreateSessionInput): Promise<void
       input.userAgent ?? null,
       input.ip ?? null,
       input.deviceId ?? null,
+      device.platform ?? null,
+      device.appVersion ?? null,
+      device.deviceName ?? null,
+      device.deviceModel ?? null,
+      device.osVersion ?? null,
     ],
   );
 };

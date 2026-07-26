@@ -6,7 +6,10 @@ import { logger } from '@lib/logger.js';
 import { PaystackUpstreamError } from '@lib/paystack/client.js';
 import { verifyAndCheckCharge, type VerifiedCharge } from '@lib/paystack/verify-charge.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
+import { notify, NotificationKind } from '@features/notifications/index.js';
+import { DeeplinkTarget, encodeDeeplink } from '@lib/deeplink.js';
 import { applyFunding } from '@lib/wallet/flows/funding.js';
+import { fundingCreditKobo } from '@lib/wallet/processor-fees.js';
 import {
   postWithdrawalCompletedJournal,
   postWithdrawalReversedJournal,
@@ -146,15 +149,13 @@ const handleChargeSuccess = async (
   });
 
   if (payment.purpose === PaymentPurpose.WALLET_FUNDING) {
-    // Credit what we actually received (gross − fees). In pass-on mode this
-    // equals the authorized amount; in default mode it's slightly less.
     await applyFunding(runner, {
       userId: payment.user_id,
       paymentId: payment.id,
       reference: payment.reference,
       grossKobo: verified.amountKobo,
       feeKobo: verified.feesKobo,
-      netCreditKobo: verified.amountKobo - verified.feesKobo,
+      netCreditKobo: fundingCreditKobo(verified.amountKobo, verified.feesKobo),
     });
   } else if (payment.purpose === PaymentPurpose.CALL_PAYMENT) {
     logger.info(
@@ -246,6 +247,16 @@ const handleTransferFailed = async (runner: PoolClient, data: TransferEventData)
     amountKobo: BigInt(wd.amount_kobo),
   });
   await walletRepo.setWithdrawalFailed(runner, wd.id, reason);
+  // The ledger shows the reversal; only this carries WHY. Written in the same
+  // transaction so a rolled-back reversal cannot leave a notice about one.
+  await notify(runner, {
+    userId: wd.user_id,
+    kind: NotificationKind.WITHDRAWAL_FAILED,
+    title: 'Withdrawal failed',
+    body: `${reason}. The money is back in your wallet.`,
+    deeplink: encodeDeeplink({ target: DeeplinkTarget.WITHDRAWALS }),
+    metadata: { withdrawal_id: wd.id, reason },
+  });
 };
 
 const handleTransferReversed = async (
@@ -268,6 +279,14 @@ const handleTransferReversed = async (
     amountKobo: BigInt(wd.amount_kobo),
   });
   await walletRepo.setWithdrawalReversed(runner, wd.id, reason);
+  await notify(runner, {
+    userId: wd.user_id,
+    kind: NotificationKind.WITHDRAWAL_FAILED,
+    title: 'Withdrawal reversed',
+    body: `${reason}. The money is back in your wallet.`,
+    deeplink: encodeDeeplink({ target: DeeplinkTarget.WITHDRAWALS }),
+    metadata: { withdrawal_id: wd.id, reason },
+  });
 };
 
 // Dispatcher — exported so admin replay can reuse without re-inserting the

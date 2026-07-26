@@ -2,9 +2,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppHeader, AppSvg, colors } from '@ohlify/mobile-ui';
+import { AppBadge, AppHeader, AppSvg, colors } from '@ohlify/mobile-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,6 +16,8 @@ import { HomeScreen } from '@features/home/screen/home-screen';
 import { ProfileStackNavigator } from '@features/profile/profile-stack.navigation';
 import { WalletScreen } from '@features/wallet/screen/wallet-screen';
 import { KycReviewBanner } from '@shared/parts/kyc-review-banner';
+import { useAuthSession } from '@features/auth/providers/auth-session-provider';
+import { badgesQueryKey, markSurfaceSeen, useBadges, type Badges } from '@shared/api/use-badges';
 
 /**
  * Main tab shell. Mirrors mobile/lib/app_router.dart's
@@ -68,7 +71,36 @@ const RIPPLE_MAX_DIAMETER = Math.hypot(TAB_WIDTH, TAB_HEIGHT) * 2.2;
  * shooting up to fill the available space. The icon and label sit on top,
  * unscaled, and just swap color as the fill reaches them.
  */
-function TabIcon({ route, focused }: { route: keyof MainTabParamList; focused: boolean }) {
+/**
+ * Per-tab unread rule.
+ *
+ * Numbers where the count is actionable and the data supports it — Chats has
+ * per-conversation read state. Dots where "something happened since you last
+ * looked" is the whole signal; a number on Wallet would imply an unread-
+ * transaction concept the product does not have. Home never badges.
+ */
+function badgeFor(route: keyof MainTabParamList, badges: Badges): ReactNode {
+  switch (route) {
+    case 'ChatsTab':
+      return <AppBadge count={badges.chatsUnread} />;
+    case 'CallsTab':
+      return badges.callsUnseen ? <AppBadge /> : null;
+    case 'WalletTab':
+      return badges.walletUnseen ? <AppBadge /> : null;
+    default:
+      return null;
+  }
+}
+
+function TabIcon({
+  route,
+  focused,
+  badge,
+}: {
+  route: keyof MainTabParamList;
+  focused: boolean;
+  badge: ReactNode;
+}) {
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -108,6 +140,7 @@ function TabIcon({ route, focused }: { route: keyof MainTabParamList; focused: b
         }}
       />
       <AppSvg name={TAB_SVGS[route]} size={22} color={focused ? colors.textWhite : colors.textSlate} />
+      {badge ? <View style={{ position: 'absolute', top: 2, right: 12 }}>{badge}</View> : null}
       <Animated.Text
         style={{
           fontFamily: 'MonaSans-SemiBold',
@@ -128,9 +161,15 @@ type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 /** Home tab only: AppHeader (logo, copy-link, notification bell) + the sticky KYC review banner. Mirrors AppShell.showHeader in mobile/lib/ui/widgets/app_shell/app_shell.dart. */
 function HomeTabHeader() {
   const navigation = useNavigation<RootNavigation>();
+  const { isAuthenticated } = useAuthSession();
+  const badges = useBadges(isAuthenticated);
   return (
     <SafeAreaView style={{ backgroundColor: colors.surface }} edges={['top']}>
-      <AppHeader notificationCount={1} onCopyLink={() => undefined} onNotification={() => navigation.navigate('Notifications')} />
+      <AppHeader
+        notificationCount={badges.notificationsUnread}
+        onCopyLink={() => undefined}
+        onNotification={() => navigation.navigate('Notifications')}
+      />
       <KycReviewBanner />
     </SafeAreaView>
   );
@@ -191,6 +230,23 @@ const AnimatedProfileStackNavigator = withTabTransition(ProfileStackNavigator);
  * with a real, live `focused` value from navigation state.
  */
 function MainTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { isAuthenticated } = useAuthSession();
+  const queryClient = useQueryClient();
+  const badges = useBadges(isAuthenticated);
+
+  /**
+   * Opening a dot surface clears it. Fired on press rather than on focus so a
+   * tab restored from background does not silently mark things seen the user
+   * never actually looked at.
+   */
+  function clearDot(route: keyof MainTabParamList): void {
+    const surface = route === 'CallsTab' ? 'calls' : route === 'WalletTab' ? 'wallet' : null;
+    if (!surface) return;
+    void markSurfaceSeen(surface)
+      .then(() => queryClient.invalidateQueries({ queryKey: badgesQueryKey() }))
+      .catch(() => undefined);
+  }
+
   return (
     <View style={{ flexDirection: 'row', backgroundColor: colors.navBackground, height: 68, paddingTop: 10, paddingBottom: 10 }}>
       {state.routes.map((route, index) => {
@@ -199,6 +255,7 @@ function MainTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
         function onPress() {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          clearDot(route.name as keyof MainTabParamList);
           if (!focused && !event.defaultPrevented) {
             navigation.navigate(route.name);
           }
@@ -213,7 +270,11 @@ function MainTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             accessibilityLabel={options?.tabBarAccessibilityLabel}
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
           >
-            <TabIcon route={route.name as keyof MainTabParamList} focused={focused} />
+            <TabIcon
+              route={route.name as keyof MainTabParamList}
+              focused={focused}
+              badge={badgeFor(route.name as keyof MainTabParamList, badges)}
+            />
           </Pressable>
         );
       })}

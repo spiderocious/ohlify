@@ -54,9 +54,10 @@ export interface ConfigGroup {
 }
 
 export const CONFIG_GROUPS: ReadonlyArray<ConfigGroup> = [
+  { id: 'enablement', label: 'Kill switches', order: 5 },
   { id: 'wallet', label: 'Wallet & payouts', order: 10 },
   { id: 'bookings', label: 'Bookings & calls', order: 20 },
-  { id: 'presence', label: 'Presence & heartbeat', order: 25 },
+  { id: 'presence', label: 'Presence & calling', order: 25 },
   { id: 'rates', label: 'Rates', order: 30 },
   { id: 'professional', label: 'Pro strikes', order: 40 },
   { id: 'caller', label: 'Caller strikes', order: 50 },
@@ -171,33 +172,88 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     min: 60,
     max: 86400,
   },
+  {
+    key: 'bookings.polite_decline_window_seconds',
+    kind: 'duration_seconds',
+    label: 'Polite decline window',
+    help: 'How long after a call becomes joinable the professional may decline without a strike. The caller is refunded in full either way.',
+    min: 0,
+    max: 600,
+  },
+  {
+    key: 'bookings.stale_active_grace_seconds',
+    kind: 'duration_seconds',
+    label: 'Stale active-call grace',
+    help: 'Slack past an instant call’s allotted seconds before the resolver settles it on the parties’ behalf. Guards against a call stuck active forever, which would block every future call to that professional.',
+    min: 0,
+    max: 3600,
+  },
+
+  // ── enablement (kill switches) ──────────────────────────────────────────
+  // Each switch blocks only the ENTRY point of its capability. Work already in
+  // flight — verifying a payment, finishing a call, reading old messages — is
+  // deliberately left reachable so a pause never strands someone mid-action.
+  {
+    key: 'enablement.login',
+    kind: 'boolean',
+    label: 'Login',
+    help: 'OFF blocks new sign-ins. Already-signed-in users stay in — token refresh is never gated.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.registration',
+    kind: 'boolean',
+    label: 'Registration',
+    help: 'OFF blocks new signups at the first step. Anyone mid-signup can still finish.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.wallet_funding',
+    kind: 'boolean',
+    label: 'Wallet funding',
+    help: 'OFF blocks new top-ups. Verification stays open so a payment already taken at Paystack still lands.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.withdrawals',
+    kind: 'boolean',
+    label: 'Withdrawals',
+    help: 'OFF blocks new payout requests. Professionals can still see money already in flight.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.calls',
+    kind: 'boolean',
+    label: 'Calls',
+    help: 'OFF blocks new calls. Calls in progress can still be answered, paused, and settled.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.chat',
+    kind: 'boolean',
+    label: 'Chat',
+    help: 'OFF blocks new messages and new threads. Existing threads stay readable.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.minutes_purchase',
+    kind: 'boolean',
+    label: 'Buying minutes',
+    help: 'OFF blocks purchases. Balance reads stay open.',
+    group: 'enablement',
+  },
+  {
+    key: 'enablement.message',
+    kind: 'string',
+    label: 'Unavailable message',
+    help: 'Shown to users in place of whatever they tried to do. Applies to every switch above — write it so it reads sensibly for any of them.',
+    group: 'enablement',
+  },
 
   // ── presence ────────────────────────────────────────────────────────────
-  {
-    key: 'presence.heartbeat_enabled',
-    kind: 'boolean',
-    label: 'Heartbeat enabled',
-    help: 'Dead switch. When OFF, neither mobile app (React Native or Flutter) ever calls the presence heartbeat endpoint — instant-call reachability then always resolves to offline for every professional. Public.',
-    group: 'presence',
-  },
-  {
-    key: 'presence.heartbeat_interval_seconds',
-    kind: 'duration_seconds',
-    label: 'Heartbeat interval',
-    help: 'How often an online professional’s app pings the heartbeat endpoint. Public — both mobile apps read this to schedule their timer.',
-    min: 5,
-    max: 600,
-    group: 'presence',
-  },
-  {
-    key: 'presence.online_window_seconds',
-    kind: 'duration_seconds',
-    label: 'Online window',
-    help: 'How stale a professional’s last heartbeat can be before they’re considered offline for instant-call reachability. Server-only — not exposed to clients. Keep comfortably above the heartbeat interval to tolerate a missed ping or two.',
-    min: 10,
-    max: 3600,
-    group: 'presence',
-  },
+  // Heartbeat keys were dropped in revamp-2 Phase 2: reachability rests on a
+  // live push token plus the professional's availability switch, so a liveness
+  // ping no longer decides anything.
   {
     key: 'presence.ring_timeout_seconds',
     kind: 'duration_seconds',
@@ -206,6 +262,20 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     min: 5,
     max: 120,
     group: 'presence',
+  },
+  {
+    key: 'presence.invite_approval_timeout_seconds',
+    kind: 'number',
+    label: 'Invite approval timeout',
+    help: 'Seconds a professional has to approve someone being added to a live call. Past this it auto-declines — a silent professional has not consented.',
+    min: 5,
+  },
+  {
+    key: 'presence.invite_ring_timeout_seconds',
+    kind: 'number',
+    label: 'Invite ring timeout',
+    help: 'Seconds an approved invitee’s devices ring before the invite expires. The call continues with the original two.',
+    min: 5,
   },
 
   // ── rates ────────────────────────────────────────────────────────────────
@@ -266,6 +336,23 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     ],
   },
   {
+    key: 'wallet.auto_resolve_after_hours',
+    kind: 'number',
+    label: 'Auto-resolve review queue after',
+    help: 'Hours a manual-review withdrawal may sit before it resolves itself. 0 disables auto-resolution and leaves it queued indefinitely.',
+    min: 0,
+  },
+  {
+    key: 'wallet.on_timeout',
+    kind: 'enum',
+    label: 'On review timeout',
+    help: 'What happens when the deadline above passes. Approve is the default — the funds are already debited, and rejecting for admin inattention penalises the professional.',
+    enumOptions: [
+      { value: 'approve', label: 'Approve' },
+      { value: 'reject', label: 'Reject' },
+    ],
+  },
+  {
     key: 'wallet.platform_fee_bps',
     kind: 'percent_bps',
     label: 'Platform fee',
@@ -306,6 +393,55 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     help: 'Percentage of the booking paid to the pro when the caller no-shows. (refund + payee should usually sum to 100%.)',
     min: 0,
     max: 10000,
+  },
+  {
+    key: 'wallet.funding_fee_mode',
+    kind: 'enum',
+    label: 'Funding fee mode',
+    help: 'pass_on = the user is charged the processor fee on top, so the amount they typed is the amount that lands. absorb = the platform pays it out of margin and the user is credited less than they were charged.',
+    enumOptions: [
+      { value: 'pass_on', label: 'Pass on to user' },
+      { value: 'absorb', label: 'Absorb (platform pays)' },
+    ],
+  },
+  {
+    key: 'wallet.funding_fee_bps',
+    kind: 'percent_bps',
+    label: 'Funding fee %',
+    help: "Percentage component of Paystack's charge for taking money in. Currently 1.5%.",
+    min: 0,
+    max: 10000,
+  },
+  {
+    key: 'wallet.funding_fee_flat_kobo',
+    kind: 'money_kobo',
+    label: 'Funding fee flat component',
+    help: 'Added on top of the percentage. Paystack waives this below a threshold — set to 0 if your account does.',
+    min: 0,
+  },
+  {
+    key: 'wallet.funding_fee_cap_kobo',
+    kind: 'money_kobo',
+    label: 'Funding fee cap',
+    help: 'Maximum funding fee regardless of amount. Paystack caps NGN card fees at ₦2,000.',
+    min: 0,
+  },
+  {
+    key: 'wallet.withdrawal_fee_mode',
+    kind: 'enum',
+    label: 'Withdrawal fee mode',
+    help: 'absorb = the platform pays the per-transfer fee and the pro receives exactly what they requested. Passing it on is a pricing change — confirm before switching.',
+    enumOptions: [
+      { value: 'absorb', label: 'Absorb (platform pays)' },
+      { value: 'pass_on', label: 'Pass on to professional' },
+    ],
+  },
+  {
+    key: 'wallet.withdrawal_fee_flat_kobo',
+    kind: 'money_kobo',
+    label: 'Withdrawal transfer fee',
+    help: "Paystack's flat charge per payout. Posted to paystack_transfer_fees so platform_profit reflects true margin.",
+    min: 0,
   },
   {
     key: 'wallet.withdrawal_cooldown_seconds',

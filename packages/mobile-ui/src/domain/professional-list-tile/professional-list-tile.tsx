@@ -66,7 +66,10 @@ export function ProfessionalListTile({
         </View>
         <View style={{ width: 12 }} />
         <AppButton
-          label="Schedule call"
+          // "View" rather than "Schedule call": the list is for choosing who
+          // to talk to, and committing to a call before seeing rates or reviews
+          // asks for a decision the user has not got the information to make.
+          label="View"
           onPress={onSchedule}
           radius={100}
           width={100}

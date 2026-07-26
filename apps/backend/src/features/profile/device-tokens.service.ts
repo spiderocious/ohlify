@@ -10,6 +10,9 @@ export const register = async (dto: RegisterDeviceTokenDto, userId: string) => {
     userId,
     platform: dto.platform,
     ...(dto.app_version !== undefined ? { appVersion: dto.app_version } : {}),
+    ...(dto.device_name !== undefined ? { deviceName: dto.device_name } : {}),
+    ...(dto.device_model !== undefined ? { deviceModel: dto.device_model } : {}),
+    ...(dto.os_version !== undefined ? { osVersion: dto.os_version } : {}),
   });
   return new ServiceSuccess({ registered: true }, MESSAGE_KEYS.DEVICE_TOKEN_REGISTERED);
 };

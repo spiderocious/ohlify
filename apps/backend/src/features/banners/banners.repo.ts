@@ -16,7 +16,10 @@ export interface BannerRow {
   priority: number;
   is_active: boolean;
   starts_at: Date | null;
-  ends_at: Date | null;
+  /** Mandatory since revamp-2: an immortal banner is nearly always a mistake. */
+  ends_at: Date;
+  /** When true, the banner shows once per user then falls through to the next tier. */
+  view_once: boolean;
   created_by: string | null;
   created_at: Date;
   updated_at: Date;
@@ -36,7 +39,9 @@ export interface CreateBannerInput {
   priority: number;
   isActive: boolean;
   startsAt: Date | null;
-  endsAt: Date | null;
+  /** Required — the column is NOT NULL since revamp-2. */
+  endsAt: Date;
+  viewOnce: boolean;
   createdBy: string | null;
 }
 
@@ -45,9 +50,9 @@ export const create = async (input: CreateBannerInput): Promise<BannerRow> => {
   const res = await pool.query<BannerRow>(
     `INSERT INTO banners
        (id, title, subtitle, body, body_blocks, image_url, cta_label, cta_url, deeplink,
-        audience, placement, priority, is_active, starts_at, ends_at, created_by)
+        audience, placement, priority, is_active, starts_at, ends_at, view_once, created_by)
      VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
-             $10::banner_audience, $11::banner_placement, $12, $13, $14, $15, $16)
+             $10::banner_audience, $11::banner_placement, $12, $13, $14, $15, $16, $17)
      RETURNING *`,
     [
       bannerId,
@@ -65,6 +70,7 @@ export const create = async (input: CreateBannerInput): Promise<BannerRow> => {
       input.isActive,
       input.startsAt,
       input.endsAt,
+      input.viewOnce,
       input.createdBy,
     ],
   );
@@ -225,4 +231,23 @@ export const listPublic = async (q: ListPublicQuery): Promise<BannerRow[]> => {
     params,
   );
   return res.rows;
+};
+
+/**
+ * Replaces a banner's targeting.
+ *
+ * Delete-then-insert rather than a diff: a banner has exactly one target row,
+ * and treating it as a whole makes "who sees this" unambiguous at every point.
+ */
+export const replaceTarget = async (
+  bannerId: string,
+  kind: 'user' | 'segment' | 'all',
+  payload: Record<string, unknown>,
+): Promise<void> => {
+  await pool.query(`DELETE FROM banner_targets WHERE banner_id = $1`, [bannerId]);
+  await pool.query(
+    `INSERT INTO banner_targets (id, banner_id, kind, payload)
+     VALUES ($1, $2, $3::banner_target_kind, $4)`,
+    [newId('bt'), bannerId, kind, JSON.stringify(payload)],
+  );
 };

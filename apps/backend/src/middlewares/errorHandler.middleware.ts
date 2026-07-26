@@ -26,7 +26,10 @@ export const errorHandler = (
     }
     ResponseUtil.error(res, err.status, {
       errorCode: severityFor(err.code),
-      errorMessage: resolveErrorMessage(err.code, err.messageKey),
+      // publicMessage is operator-authored at runtime and so has no registry
+      // key; everything else resolves from one, keeping response copy in a
+      // single reviewable place.
+      errorMessage: err.publicMessage ?? resolveErrorMessage(err.code, err.messageKey),
       reason: err.code,
       ...(err.fieldErrors !== undefined ? { fieldErrors: err.fieldErrors } : {}),
     });

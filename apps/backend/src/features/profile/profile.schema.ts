@@ -111,6 +111,10 @@ export const RegisterDeviceTokenSchema = z
     token: z.string().min(8).max(4096),
     platform: z.enum(['ios', 'android', 'web']),
     app_version: z.string().max(40).optional(),
+    // Best-effort telemetry — a client that omits these still registers.
+    device_name: z.string().max(128).optional(),
+    device_model: z.string().max(128).optional(),
+    os_version: z.string().max(32).optional(),
   })
   .strict();
 

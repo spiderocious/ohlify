@@ -64,4 +64,10 @@ export const walletApi = {
       { idempotencyKey: params.idempotencyKey, fromJson: (data) => withdrawalResponseFromJson(data as Record<string, unknown>) },
     ) as Promise<WithdrawalResponse>;
   },
+
+  async getWithdrawal(withdrawalId: string): Promise<WithdrawalResponse> {
+    return apiClient.get(`wallet/withdrawals/${withdrawalId}`, {
+      fromJson: (data) => withdrawalResponseFromJson(data as Record<string, unknown>),
+    }) as Promise<WithdrawalResponse>;
+  },
 };

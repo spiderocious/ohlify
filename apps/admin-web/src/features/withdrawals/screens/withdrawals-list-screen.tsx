@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { AppButton, AppText } from '@ohlify/ui';
-import { AdminWithdrawalStatus, type AdminWithdrawal } from '@ohlify/api';
+import { ADMIN_EP, AdminWithdrawalStatus, type AdminWithdrawal } from '@ohlify/api';
 
 import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
 import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
@@ -17,6 +17,7 @@ import { formatDateTime, formatRelative } from '../../../shared/format/datetime.
 import { formatKobo } from '../../../shared/format/kobo.js';
 import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
 import {
+  useBulkWithdrawalAction,
   useApproveWithdrawal,
   useForceFailWithdrawal,
   useRejectWithdrawal,
@@ -40,8 +41,39 @@ const STATUS_TABS: FilterTabOption[] = [
 export function WithdrawalsListScreen() {
   const [status, setStatus] = useState<string>('');
   const [open, setOpen] = useState<AdminWithdrawal | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const list = useWithdrawals({ status });
   const sync = useSyncPayouts();
+  const bulkApprove = useBulkWithdrawalAction(ADMIN_EP.WITHDRAWAL_APPROVE);
+
+  // Only `pending` rows can be approved — offering a checkbox on a row whose
+  // action would 409 is a promise the queue cannot keep.
+  const isSelectable = (w: AdminWithdrawal) => w.status === AdminWithdrawalStatus.PENDING;
+
+  const reportBulk = (result: { succeeded: string[]; failed: { message: string }[] }) => {
+    if (result.succeeded.length > 0) {
+      toastSuccess(`${result.succeeded.length} withdrawal(s) approved`);
+    }
+    if (result.failed.length > 0) {
+      toastError(
+        `${result.failed.length} failed — ${result.failed[0]?.message ?? 'unknown error'}`,
+      );
+    }
+    setSelected(new Set());
+  };
+
+  const onBulkApprove = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (
+      !(await confirm({
+        title: `Approve ${ids.length} withdrawal(s)?`,
+        message: 'Each one initiates a Paystack transfer. This cannot be undone.',
+      }))
+    )
+      return;
+    bulkApprove.mutate(ids, { onSuccess: reportBulk });
+  };
 
   const onSync = async () => {
     if (
@@ -82,9 +114,7 @@ export function WithdrawalsListScreen() {
         <div className="flex flex-col">
           <span>{w.bank_snapshot?.bank_name ?? '—'}</span>
           <span className="text-text-muted text-xs">
-            {w.bank_snapshot?.account_number_last4 ??
-              w.bank_snapshot?.account_number ??
-              '—'}
+            {w.bank_snapshot?.account_number_last4 ?? w.bank_snapshot?.account_number ?? '—'}
           </span>
         </div>
       ),
@@ -122,8 +152,34 @@ export function WithdrawalsListScreen() {
       />
 
       <FilterBar>
-        <FilterTabs options={STATUS_TABS} value={status} onChange={setStatus} label="Withdrawal status" />
+        <FilterTabs
+          options={STATUS_TABS}
+          value={status}
+          onChange={setStatus}
+          label="Withdrawal status"
+        />
       </FilterBar>
+
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 border-b border-border bg-primary/5 px-4 py-3">
+          <AppText variant="bodySmall" className="text-text-primary">
+            {selected.size} selected
+          </AppText>
+          <div className="flex-1" />
+          <AppButton
+            label="Clear"
+            variant="outline"
+            height={32}
+            onPressed={() => setSelected(new Set())}
+          />
+          <AppButton
+            label="Approve selected"
+            height={32}
+            isLoading={bulkApprove.isPending}
+            onPressed={onBulkApprove}
+          />
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -133,6 +189,9 @@ export function WithdrawalsListScreen() {
         error={list.error}
         emptyTitle="No withdrawals"
         onRowClick={(w) => setOpen(w)}
+        selectable={isSelectable}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
         footer={
           <CursorPagination
             hasPrev={list.hasPrev}
@@ -264,7 +323,10 @@ function WithdrawalDrawer({
             </DetailRow>
             <DetailRow label="Currency">{item.currency ?? '—'}</DetailRow>
             <DetailRow label="Status">
-              <StatusPill label={humanizeStatus(item.status)} tone={TONE[item.status] ?? 'neutral'} />
+              <StatusPill
+                label={humanizeStatus(item.status)}
+                tone={TONE[item.status] ?? 'neutral'}
+              />
             </DetailRow>
             <DetailRow label="User">
               <UserLink userId={item.user_id} idLen={18} />

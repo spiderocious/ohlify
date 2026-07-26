@@ -16,9 +16,16 @@ export interface InstantCallJoin {
   call_type: 'audio' | 'video';
   remote_user_id: string;
   per_minute_kobo: number;
-  minutes_allotted: number;
-  /** Hard cap for this call in seconds = minutes_allotted * 60. */
+  /** Hard cap on billable talk time. The client counts down against it. */
+  seconds_allotted: number;
+  /** Retained alias of `seconds_allotted` for builds that predate it. */
   max_seconds: number;
+  /**
+   * Floored whole minutes. Superseded by `seconds_allotted` — billing is
+   * per-second, so this under-reports any part-minute and should not gate a
+   * countdown. Kept only so existing consumers keep compiling.
+   */
+  minutes_allotted: number;
 }
 
 export interface IncomingInstantCall {

@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { logger } from '@lib/logger.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 
+import { computeWithdrawalFeeKobo } from '../processor-fees.js';
 import { accountFor } from '../accounts.js';
 import { postJournal } from '../journal.js';
 
@@ -87,14 +88,26 @@ export const postWithdrawalRequestedJournal = async (
 //   paystack_clearing:  +amount  (the platform's claim on Paystack drops)
 //   paystack_payouts:   net 0    (transit account)
 // — i.e. the user's money truly left the platform.
+//
+// Paystack also charges us a flat fee per transfer. While the platform absorbs
+// it, it is a real cost paid out of margin, so it posts here as its own pair:
+//
+//   paystack_transfer_fees: +fee   (cost recognised)
+//   platform_revenue:       -fee   (margin consumed)
+//
+// Without these lines platform_revenue reports gross margin while reading as
+// profit — every payout quietly overstated earnings by the fee.
 export const postWithdrawalCompletedJournal = async (
   runner: QueryRunner,
   input: PostRequestedJournalInput,
 ): Promise<{ journalId: string; alreadyPosted: boolean }> => {
-  const [paystackPayouts, paystackClearing] = await Promise.all([
+  const [paystackPayouts, paystackClearing, transferFees, platformRevenue] = await Promise.all([
     accountFor.system('paystack_payouts'),
     accountFor.system('paystack_clearing'),
+    accountFor.system('paystack_transfer_fees'),
+    accountFor.system('platform_revenue'),
   ]);
+  const feeKobo = computeWithdrawalFeeKobo();
   const result = await postJournal(
     {
       kind: 'withdrawal_completed',
@@ -102,10 +115,16 @@ export const postWithdrawalCompletedJournal = async (
       lines: [
         { accountId: paystackPayouts.id, signedAmountKobo: -Number(input.amountKobo) },
         { accountId: paystackClearing.id, signedAmountKobo: Number(input.amountKobo) },
+        ...(feeKobo > 0
+          ? [
+              { accountId: transferFees.id, signedAmountKobo: feeKobo },
+              { accountId: platformRevenue.id, signedAmountKobo: -feeKobo },
+            ]
+          : []),
       ],
       relatedWithdrawalId: input.withdrawalId,
       relatedUserId: input.userId,
-      memo: `Withdrawal completed ${input.withdrawalId}`,
+      memo: `Withdrawal completed ${input.withdrawalId} (transfer fee ${feeKobo})`,
     },
     runner,
   );

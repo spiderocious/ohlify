@@ -10,6 +10,7 @@ import { fileService } from '@shared/services/file-service';
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
 import type { RootStackParamList } from '../../../app.navigation';
+import { useAppLock } from '@features/app-lock/providers/app-lock-provider';
 import { instantCallsApi } from '../api/instant-calls-api';
 
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
@@ -29,6 +30,16 @@ export function IncomingCallScreen() {
 
   const [answering, setAnswering] = useState(false);
   const doneRef = useRef(false);
+  const { suspendLock, resumeLock } = useAppLock();
+
+  // A ringing call punches through the app lock. Demanding a PIN before someone
+  // can answer costs answered calls, and the caller is paying for every second
+  // spent typing it. Everything BEHIND this screen stays locked — the lock
+  // resumes the moment the ring is resolved.
+  useEffect(() => {
+    suspendLock();
+    return () => resumeLock();
+  }, [suspendLock, resumeLock]);
 
   const leave = useCallback(
     (message?: string) => {
@@ -64,6 +75,10 @@ export function IncomingCallScreen() {
           uid: join.agoraUid,
           agoraToken: join.agoraToken,
           expiresAt: join.expiresAt,
+          secondsAllotted: join.secondsAllotted,
+          // The answering side is the professional being paid — they never top
+          // up, so there is no pro to buy time from. The caller owns that flow.
+          professionalId: '',
         },
       });
     } catch (e) {

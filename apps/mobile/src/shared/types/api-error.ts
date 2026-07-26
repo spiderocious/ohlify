@@ -131,9 +131,21 @@ const REASON_MESSAGES: Record<string, string> = {
   unauthorized: 'Please log in to continue.',
   not_found: 'We couldn’t find what you were looking for.',
   network_error: 'Network error. Check your connection and try again.',
+  // Fallback only — the server's own notice wins when it sends one.
+  feature_disabled: 'This is temporarily unavailable. Please try again shortly.',
 };
 
+/**
+ * Reasons whose message the SERVER owns.
+ *
+ * A maintenance notice is written by an operator for one specific pause, so
+ * overriding it with generic local copy would throw away the only explanation
+ * the user was going to get.
+ */
+const SERVER_AUTHORED_REASONS = new Set(['feature_disabled']);
+
 export function apiErrorMessageForReason(reason: string, fallback?: string): string {
+  if (SERVER_AUTHORED_REASONS.has(reason) && fallback) return fallback;
   return REASON_MESSAGES[reason] ?? fallback ?? 'Something went wrong. Please try again.';
 }
 

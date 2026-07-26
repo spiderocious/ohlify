@@ -35,6 +35,12 @@ export interface CallMachineState {
   durationPaused: boolean;
   pausedAt: number | null;
   accumulatedPausedMs: number;
+  /**
+   * The user's own mute choice, stashed while a pause force-mutes them. Resume
+   * restores this rather than unmuting unconditionally — someone who was muted
+   * before their balance ran out should not be pushed live by the top-up.
+   */
+  mutedBeforePause: boolean | null;
   // Remote peer state (driven by Agora native events + stream messages)
   remoteMuted: boolean;
   remoteSpeaking: boolean;
@@ -79,6 +85,7 @@ const initial: CallMachineState = {
   durationPaused: false,
   pausedAt: null,
   accumulatedPausedMs: 0,
+  mutedBeforePause: null,
   remoteMuted: false,
   remoteSpeaking: false,
   reconnecting: false,
@@ -128,9 +135,17 @@ function reducer(state: CallMachineState, action: MachineAction): CallMachineSta
       return { ...state, reconnecting: true };
     case 'RECONNECTED':
       return { ...state, reconnecting: false };
+    // A pause means the caller has run out of paid time, so the mic closes —
+    // nobody should keep talking on time that is no longer being billed.
     case 'PAUSE_DURATION':
       if (state.durationPaused || state.phase !== CALL_PHASE.ACTIVE) return state;
-      return { ...state, durationPaused: true, pausedAt: Date.now() };
+      return {
+        ...state,
+        durationPaused: true,
+        pausedAt: Date.now(),
+        mutedBeforePause: state.muted,
+        muted: true,
+      };
     case 'RESUME_DURATION': {
       if (!state.durationPaused || state.pausedAt === null) return state;
       const additionalPausedMs = Date.now() - state.pausedAt;
@@ -139,6 +154,8 @@ function reducer(state: CallMachineState, action: MachineAction): CallMachineSta
         durationPaused: false,
         pausedAt: null,
         accumulatedPausedMs: state.accumulatedPausedMs + additionalPausedMs,
+        muted: state.mutedBeforePause ?? false,
+        mutedBeforePause: null,
       };
     }
     case 'HANGUP':
@@ -176,6 +193,8 @@ export function useCallMachine(
   emitToParent: (msg: CallAppToParent) => void,
   rtcLeave: () => void,
   sendStream: (msg: StreamMessage) => void,
+  /** Applies a mute to the real mic track. Pause closes it; resume restores the user's own choice. */
+  rtcMute: (muted: boolean) => void,
 ): CallMachineHandle {
   const [state, dispatch] = useReducer(reducer, initial);
   const stateRef = useRef(state);
@@ -284,6 +303,50 @@ export function useCallMachine(
     emitToParent,
   ]);
 
+  // Allotment exhausted → pause rather than hang up. The parent decides what
+  // happens next (top up, or end); ending here would deny the caller the
+  // chance to buy more, and letting the call run on would bill time the
+  // caller has not paid for.
+  useEffect(() => {
+    if (state.durationPaused) return;
+    if (state.phase !== CALL_PHASE.ACTIVE || !state.connectedAt || !state.joinParams) return;
+    if (state.joinParams.duration_minutes === null) return;
+
+    const totalMs = state.joinParams.duration_minutes * 60 * 1000;
+    const effectiveElapsed = Date.now() - state.connectedAt - state.accumulatedPausedMs;
+    const remaining = totalMs - effectiveElapsed;
+
+    const fire = (): void => {
+      const s = stateRef.current;
+      if (s.durationPaused || s.phase !== CALL_PHASE.ACTIVE) return;
+      dispatch({ type: 'PAUSE_DURATION' });
+      rtcMute(true);
+      const elapsedSeconds =
+        s.connectedAt !== null
+          ? Math.floor((Date.now() - s.connectedAt - s.accumulatedPausedMs) / 1000)
+          : 0;
+      emitToParent({
+        type: CA_EVENTS.DURATION_PAUSED,
+        payload: { elapsed_seconds: elapsedSeconds },
+      });
+    };
+
+    if (remaining <= 0) {
+      fire();
+      return;
+    }
+    const timer = setTimeout(fire, remaining);
+    return () => clearTimeout(timer);
+  }, [
+    state.phase,
+    state.connectedAt,
+    state.joinParams,
+    state.durationPaused,
+    state.accumulatedPausedMs,
+    emitToParent,
+    rtcMute,
+  ]);
+
   // Token expiry safety net: if TOKEN_EXPIRING fires and the parent hasn't sent
   // ca:renew-token within TOKEN_RENEWAL_GRACE_MS, end the call cleanly rather
   // than letting Agora drop it mid-conversation.
@@ -371,6 +434,9 @@ export function useCallMachine(
           const s = stateRef.current;
           if (s.durationPaused || s.phase !== CALL_PHASE.ACTIVE) break;
           dispatch({ type: 'PAUSE_DURATION' });
+          // Close the mic on the way in: the caller has run out of paid time,
+          // and unmetered talk is exactly what the pause exists to prevent.
+          rtcMute(true);
           const elapsedSeconds =
             s.connectedAt !== null
               ? Math.floor((Date.now() - s.connectedAt - s.accumulatedPausedMs) / 1000)
@@ -387,6 +453,7 @@ export function useCallMachine(
           const additionalPausedMs = Date.now() - s.pausedAt;
           const totalPausedMs = s.accumulatedPausedMs + additionalPausedMs;
           dispatch({ type: 'RESUME_DURATION' });
+          rtcMute(s.mutedBeforePause ?? false);
           const elapsedSeconds =
             s.connectedAt !== null
               ? Math.floor((Date.now() - s.connectedAt - totalPausedMs) / 1000)
@@ -411,7 +478,7 @@ export function useCallMachine(
           break;
       }
     },
-    [emitToParent, sendStream],
+    [emitToParent, sendStream, rtcMute],
   );
 
   const handleAgoraEvent = useCallback(

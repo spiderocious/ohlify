@@ -1,15 +1,8 @@
 export type { Role } from './role.js';
 export { roleLabel } from './role.js';
 
-export type {
-  CallType,
-  CallStatus,
-  CallRole,
-  CallEndReason,
-  CallPhase,
-  CallSessionConfig,
-} from './call.js';
-export { isVideo } from './call.js';
+export type { CallStatus, CallRole, CallEndReason, CallPhase, CallSessionConfig } from './call.js';
+export { CallType, isVideo } from './call.js';
 
 export type {
   Professional,

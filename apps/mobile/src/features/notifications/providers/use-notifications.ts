@@ -19,15 +19,23 @@ function timeAgo(iso: string): string {
 }
 
 function adapt(n: NotificationItem): AppNotification {
-  return { id: n.id, kind: 'system', title: n.title, message: n.body, timeLabel: timeAgo(n.createdAt), read: n.isRead, route: n.deepLink };
+  return {
+    id: n.id,
+    kind: 'system',
+    title: n.title,
+    message: n.body,
+    timeLabel: timeAgo(n.createdAt),
+    read: n.isRead,
+    route: n.deeplink,
+  };
 }
 
 /**
- * Backed by GET /notifications (cursor-paginated). Mirrors
- * mobile/lib/features/notifications/providers/notifications_notifier.dart.
- * Adapts the backend NotificationItem (no `kind` enum) onto the UI's
- * AppNotification — everything defaults to 'system' until the backend
- * ships kind metadata.
+ * Backed by GET /me/notifications, cursor-paginated.
+ *
+ * `route` carries the encoded deeplink verbatim; the screen resolves it. The UI's
+ * own `kind` is a visual grouping and stays 'system' — the backend's kind is a
+ * routing/analytics concern and mapping the two would couple them for no gain.
  */
 export function useNotifications() {
   const [items, setItems] = useState<AppNotification[]>([]);

@@ -51,7 +51,11 @@ const sha256 = (value: string): string => crypto.createHash('sha256').update(val
  */
 export const mintTokens = async (
   user: UserRow,
-  meta: { userAgent?: string | undefined; ip?: string | undefined },
+  meta: {
+    userAgent?: string | undefined;
+    ip?: string | undefined;
+    device?: repo.DeviceInfoInput | undefined;
+  },
 ): Promise<TokenPair> => {
   const accessToken = signAccessToken({ sub: user.id, role: user.role });
   const refreshToken = generateRefreshToken();
@@ -63,6 +67,7 @@ export const mintTokens = async (
     expiresAt,
     ...(meta.userAgent !== undefined ? { userAgent: meta.userAgent } : {}),
     ...(meta.ip !== undefined ? { ip: meta.ip } : {}),
+    ...(meta.device !== undefined ? { device: meta.device } : {}),
   });
 
   return { access_token: accessToken, refresh_token: refreshToken, expires_in: 15 * 60 };

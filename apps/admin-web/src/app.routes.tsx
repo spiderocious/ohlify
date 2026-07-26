@@ -18,15 +18,21 @@ const LoginScreen = lazy(() =>
   import('./features/auth/screens/login-screen.js').then((m) => ({ default: m.LoginScreen })),
 );
 const TotpSetupScreen = lazy(() =>
-  import('./features/auth/screens/totp-setup-screen.js').then((m) => ({ default: m.TotpSetupScreen })),
+  import('./features/auth/screens/totp-setup-screen.js').then((m) => ({
+    default: m.TotpSetupScreen,
+  })),
 );
 
 // Module screens
 const DashboardScreen = lazy(() =>
-  import('./features/dashboard/screens/dashboard-screen.js').then((m) => ({ default: m.DashboardScreen })),
+  import('./features/dashboard/screens/dashboard-screen.js').then((m) => ({
+    default: m.DashboardScreen,
+  })),
 );
 const UsersListScreen = lazy(() =>
-  import('./features/users/screens/users-list-screen.js').then((m) => ({ default: m.UsersListScreen })),
+  import('./features/users/screens/users-list-screen.js').then((m) => ({
+    default: m.UsersListScreen,
+  })),
 );
 const UserDetailScreen = lazy(() =>
   import('./features/users/screens/user-detail-screen.js').then((m) => ({
@@ -42,10 +48,14 @@ const KycDetailScreen = lazy(() =>
   })),
 );
 const CallsListScreen = lazy(() =>
-  import('./features/calls/screens/calls-list-screen.js').then((m) => ({ default: m.CallsListScreen })),
+  import('./features/calls/screens/calls-list-screen.js').then((m) => ({
+    default: m.CallsListScreen,
+  })),
 );
 const BookingsListScreen = lazy(() =>
-  import('./features/calls/screens/bookings-list-screen.js').then((m) => ({ default: m.BookingsListScreen })),
+  import('./features/calls/screens/bookings-list-screen.js').then((m) => ({
+    default: m.BookingsListScreen,
+  })),
 );
 const WithdrawalsListScreen = lazy(() =>
   import('./features/withdrawals/screens/withdrawals-list-screen.js').then((m) => ({
@@ -53,7 +63,9 @@ const WithdrawalsListScreen = lazy(() =>
   })),
 );
 const RefundsListScreen = lazy(() =>
-  import('./features/refunds/screens/refunds-list-screen.js').then((m) => ({ default: m.RefundsListScreen })),
+  import('./features/refunds/screens/refunds-list-screen.js').then((m) => ({
+    default: m.RefundsListScreen,
+  })),
 );
 const TransactionsListScreen = lazy(() =>
   import('./features/transactions/screens/transactions-list-screen.js').then((m) => ({
@@ -86,7 +98,9 @@ const ManualJournalScreen = lazy(() =>
   })),
 );
 const UserWalletScreen = lazy(() =>
-  import('./features/wallet/screens/user-wallet-screen.js').then((m) => ({ default: m.UserWalletScreen })),
+  import('./features/wallet/screens/user-wallet-screen.js').then((m) => ({
+    default: m.UserWalletScreen,
+  })),
 );
 const WebhooksListScreen = lazy(() =>
   import('./features/webhooks/screens/webhooks-list-screen.js').then((m) => ({
@@ -94,10 +108,14 @@ const WebhooksListScreen = lazy(() =>
   })),
 );
 const ReportsListScreen = lazy(() =>
-  import('./features/reports/screens/reports-list-screen.js').then((m) => ({ default: m.ReportsListScreen })),
+  import('./features/reports/screens/reports-list-screen.js').then((m) => ({
+    default: m.ReportsListScreen,
+  })),
 );
 const BannersScreen = lazy(() =>
-  import('./features/content/screens/banners-screen.js').then((m) => ({ default: m.BannersScreen })),
+  import('./features/content/screens/banners-screen.js').then((m) => ({
+    default: m.BannersScreen,
+  })),
 );
 const LegalScreen = lazy(() =>
   import('./features/content/screens/legal-screen.js').then((m) => ({ default: m.LegalScreen })),
@@ -105,11 +123,23 @@ const LegalScreen = lazy(() =>
 const FaqsScreen = lazy(() =>
   import('./features/content/screens/faqs-screen.js').then((m) => ({ default: m.FaqsScreen })),
 );
+const CampaignsScreen = lazy(() =>
+  import('./features/campaigns/screens/campaigns-screen.js').then((m) => ({
+    default: m.CampaignsScreen,
+  })),
+);
+const AppReleasesScreen = lazy(() =>
+  import('./features/app-releases/screens/app-releases-screen.js').then((m) => ({
+    default: m.AppReleasesScreen,
+  })),
+);
 const ConfigScreen = lazy(() =>
   import('./features/config/screens/config-screen.js').then((m) => ({ default: m.ConfigScreen })),
 );
 const AuditLogScreen = lazy(() =>
-  import('./features/audit-log/screens/audit-log-screen.js').then((m) => ({ default: m.AuditLogScreen })),
+  import('./features/audit-log/screens/audit-log-screen.js').then((m) => ({
+    default: m.AuditLogScreen,
+  })),
 );
 const ReviewsListScreen = lazy(() =>
   import('./features/reviews/screens/reviews-list-screen.js').then((m) => ({
@@ -146,13 +176,19 @@ const routes: RouteObject[] = [
             children: [
               { index: true, element: <Navigate to={ADMIN_ROUTES.DASHBOARD.absPath} replace /> },
 
-              { path: ADMIN_ROUTES.DASHBOARD.relativePath, element: lazyRoute(<DashboardScreen />) },
+              {
+                path: ADMIN_ROUTES.DASHBOARD.relativePath,
+                element: lazyRoute(<DashboardScreen />),
+              },
 
               // STAFF
               {
                 element: <RoleGuard allow={STAFF} />,
                 children: [
-                  { path: ADMIN_ROUTES.USERS.relativePath, element: lazyRoute(<UsersListScreen />) },
+                  {
+                    path: ADMIN_ROUTES.USERS.relativePath,
+                    element: lazyRoute(<UsersListScreen />),
+                  },
                   {
                     path: ADMIN_ROUTES.USERS.DETAIL.absPath,
                     element: lazyRoute(<UserDetailScreen />),
@@ -162,11 +198,26 @@ const routes: RouteObject[] = [
                     path: ADMIN_ROUTES.KYC.DETAIL.absPath,
                     element: lazyRoute(<KycDetailScreen />),
                   },
-                  { path: ADMIN_ROUTES.CALLS.relativePath, element: lazyRoute(<CallsListScreen />) },
-                  { path: ADMIN_ROUTES.BOOKINGS.relativePath, element: lazyRoute(<BookingsListScreen />) },
-                  { path: ADMIN_ROUTES.REPORTS.relativePath, element: lazyRoute(<ReportsListScreen />) },
-                  { path: ADMIN_ROUTES.REVIEWS.relativePath, element: lazyRoute(<ReviewsListScreen />) },
-                  { path: ADMIN_ROUTES.STRIKES.relativePath, element: lazyRoute(<StrikesListScreen />) },
+                  {
+                    path: ADMIN_ROUTES.CALLS.relativePath,
+                    element: lazyRoute(<CallsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.BOOKINGS.relativePath,
+                    element: lazyRoute(<BookingsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.REPORTS.relativePath,
+                    element: lazyRoute(<ReportsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.REVIEWS.relativePath,
+                    element: lazyRoute(<ReviewsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.STRIKES.relativePath,
+                    element: lazyRoute(<StrikesListScreen />),
+                  },
                 ],
               },
 
@@ -174,9 +225,18 @@ const routes: RouteObject[] = [
               {
                 element: <RoleGuard allow={FINANCE} />,
                 children: [
-                  { path: ADMIN_ROUTES.WITHDRAWALS.relativePath, element: lazyRoute(<WithdrawalsListScreen />) },
-                  { path: ADMIN_ROUTES.REFUNDS.relativePath, element: lazyRoute(<RefundsListScreen />) },
-                  { path: ADMIN_ROUTES.TRANSACTIONS.relativePath, element: lazyRoute(<TransactionsListScreen />) },
+                  {
+                    path: ADMIN_ROUTES.WITHDRAWALS.relativePath,
+                    element: lazyRoute(<WithdrawalsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.REFUNDS.relativePath,
+                    element: lazyRoute(<RefundsListScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.TRANSACTIONS.relativePath,
+                    element: lazyRoute(<TransactionsListScreen />),
+                  },
                   {
                     path: ADMIN_ROUTES.WALLETS.relativePath,
                     element: lazyRoute(<WalletOverviewScreen />),
@@ -201,7 +261,10 @@ const routes: RouteObject[] = [
                     path: ADMIN_ROUTES.WALLETS.USER_WALLET.relativePath,
                     element: lazyRoute(<UserWalletScreen />),
                   },
-                  { path: ADMIN_ROUTES.WEBHOOKS.relativePath, element: lazyRoute(<WebhooksListScreen />) },
+                  {
+                    path: ADMIN_ROUTES.WEBHOOKS.relativePath,
+                    element: lazyRoute(<WebhooksListScreen />),
+                  },
                 ],
               },
 
@@ -209,15 +272,35 @@ const routes: RouteObject[] = [
               {
                 element: <RoleGuard allow={ADMIN_ONLY} />,
                 children: [
-                  { path: ADMIN_ROUTES.CONTENT.BANNERS.relativePath, element: lazyRoute(<BannersScreen />) },
-                  { path: ADMIN_ROUTES.CONTENT.LEGAL.relativePath, element: lazyRoute(<LegalScreen />) },
-                  { path: ADMIN_ROUTES.CONTENT.FAQS.relativePath, element: lazyRoute(<FaqsScreen />) },
+                  {
+                    path: ADMIN_ROUTES.CONTENT.BANNERS.relativePath,
+                    element: lazyRoute(<BannersScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.CONTENT.LEGAL.relativePath,
+                    element: lazyRoute(<LegalScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.CONTENT.FAQS.relativePath,
+                    element: lazyRoute(<FaqsScreen />),
+                  },
                   {
                     path: ADMIN_ROUTES.CONTENT.relativePath,
                     element: <Navigate to={ADMIN_ROUTES.CONTENT.BANNERS.absPath} replace />,
                   },
                   { path: ADMIN_ROUTES.CONFIG.relativePath, element: lazyRoute(<ConfigScreen />) },
-                  { path: ADMIN_ROUTES.AUDIT_LOG.relativePath, element: lazyRoute(<AuditLogScreen />) },
+                  {
+                    path: ADMIN_ROUTES.APP_RELEASES.relativePath,
+                    element: lazyRoute(<AppReleasesScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.CAMPAIGNS.relativePath,
+                    element: lazyRoute(<CampaignsScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.AUDIT_LOG.relativePath,
+                    element: lazyRoute(<AuditLogScreen />),
+                  },
                 ],
               },
             ],

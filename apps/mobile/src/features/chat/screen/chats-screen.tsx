@@ -1,14 +1,18 @@
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppAvatar, AppIcon, AppText, colors, stagger } from '@ohlify/mobile-ui';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 import { fileService } from '@shared/services/file-service';
 
 import type { RootStackParamList } from '../../../app.navigation';
-import { chatApi } from '../api/chat-api';
+import { useConversations } from '../api/use-conversations';
+import { BannerPlacement } from '@features/banners/api/use-banner';
+import { BannerSlot } from '@features/banners/screen/banner-slot';
+import { queryKeys } from '@shared/api/query-keys';
+import { usePullToRefresh } from '@shared/api/use-refresh-state';
 import { formatChatListTime } from '../helpers/format-chat-time';
 import { ChatEmptyState } from './parts/chat-empty-state';
 import { ChatErrorState } from './parts/chat-error-state';
@@ -20,18 +24,8 @@ type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 
 /** Poll the conversation list every 12s while the tab is focused so a new
  * inbound message (or unread bump) shows up without a manual refresh. */
-const POLL_INTERVAL_MS = 12_000;
 
 const PAGE_SIZE = 20;
-
-/** Fresh page first (it carries the newest last_message_at ordering), then any
- * previously-loaded items the page doesn't cover — keeps deeper pages on
- * screen when a silent poll refreshes page one, without ever duplicating a
- * conversation that migrated between pages. */
-function mergePages(fresh: Conversation[], existing: Conversation[]): Conversation[] {
-  const freshIds = new Set(fresh.map((c) => c.id));
-  return [...fresh, ...existing.filter((c) => !freshIds.has(c.id))];
-}
 
 /**
  * The Chats tab — floating white conversation cards on a lavender wash, a
@@ -41,67 +35,21 @@ function mergePages(fresh: Conversation[], existing: Conversation[]): Conversati
  */
 export function ChatsScreen() {
   const navigation = useNavigation<RootNavigation>();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<ApiError | undefined>(undefined);
-  const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
-  const loadingMoreRef = useRef(false);
+  const conversationsQuery = useConversations();
+  const { isRefreshing, onRefresh } = usePullToRefresh(queryKeys.conversations());
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    try {
-      const page = await chatApi.listConversations({ limit: PAGE_SIZE });
-      setConversations((prev) => (opts?.silent ? mergePages(page.items, prev) : page.items));
-      // A silent poll only refreshes page one — never rewind the cursor a
-      // deeper scroll position has already advanced past.
-      if (!opts?.silent) setNextCursor(page.nextCursor);
-      setError(undefined);
-    } catch (e) {
-      if (!opts?.silent) setError(e instanceof ApiError ? e : ApiError.network);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Poll only while focused; refetch immediately on focus too (covers
-  // returning from a thread where you just read/sent messages).
-  useFocusEffect(
-    useCallback(() => {
-      load({ silent: true });
-      const timer = setInterval(() => load({ silent: true }), POLL_INTERVAL_MS);
-      return () => clearInterval(timer);
-    }, [load]),
+  const conversations = useMemo(
+    () => conversationsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [conversationsQuery.data],
   );
+  const error = conversationsQuery.error instanceof ApiError ? conversationsQuery.error : undefined;
 
-  async function onRefresh() {
-    setRefreshing(true);
-    await load({ silent: true });
-    setRefreshing(false);
-  }
-
-  async function loadMore() {
-    if (!nextCursor || loadingMoreRef.current || query.trim()) return;
-    loadingMoreRef.current = true;
-    setLoadingMore(true);
-    try {
-      const page = await chatApi.listConversations({ cursor: nextCursor, limit: PAGE_SIZE });
-      setConversations((prev) => {
-        const seen = new Set(prev.map((c) => c.id));
-        return [...prev, ...page.items.filter((c) => !seen.has(c.id))];
-      });
-      setNextCursor(page.nextCursor);
-    } catch {
-      // Non-fatal — the next end-reach retries.
-    } finally {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
+  function loadMore() {
+    if (query.trim() || !conversationsQuery.hasNextPage || conversationsQuery.isFetchingNextPage) {
+      return;
     }
+    void conversationsQuery.fetchNextPage();
   }
 
   function openThread(c: Conversation) {
@@ -146,12 +94,13 @@ export function ChatsScreen() {
             <ChatSearchBar value={query} onChangeText={setQuery} />
           </View>
         ) : null}
+        <BannerSlot placement={BannerPlacement.CHATS} />
       </View>
 
-      {loading ? (
+      {conversationsQuery.isLoading ? (
         <ConversationListSkeleton />
       ) : error && conversations.length === 0 ? (
-        <ChatErrorState message={apiErrorMessage(error)} isNetwork={error.isNetwork} onRetry={() => { setLoading(true); load(); }} />
+        <ChatErrorState message={apiErrorMessage(error)} isNetwork={error.isNetwork} onRetry={() => void conversationsQuery.refetch()} />
       ) : conversations.length === 0 ? (
         <ChatEmptyState onBrowse={() => navigation.navigate('Professionals', undefined)} />
       ) : filtered.length === 0 ? (
@@ -167,13 +116,13 @@ export function ChatsScreen() {
           keyboardDismissMode="on-drag"
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => void onRefresh()} tintColor={colors.primary} />}
           ListFooterComponent={
-            loadingMore ? (
+            conversationsQuery.isFetchingNextPage ? (
               <View style={{ paddingVertical: 18, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
-            ) : !nextCursor && !trimmedQuery && conversations.length >= PAGE_SIZE ? (
+            ) : !conversationsQuery.hasNextPage && !trimmedQuery && conversations.length >= PAGE_SIZE ? (
               <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                 <AppText variant="bodySmall" color={colors.textSlate}>
                   You’re all caught up

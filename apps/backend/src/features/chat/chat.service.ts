@@ -1,7 +1,7 @@
 import * as authRepo from '@features/auth/auth.repo.js';
 import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
-import { withTransaction } from '@lib/db/tx.js';
+import { withTransaction, withTransactionUnless } from '@lib/db/tx.js';
 import { encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
@@ -9,6 +9,7 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { CHAT_MESSAGES } from './chat.messages.js';
 import * as repo from './chat.repo.js';
 import {
+  CallEventOutcome,
   MessageKind,
   ScheduleStatus,
   TERMINAL_SCHEDULE_STATUSES,
@@ -49,6 +50,7 @@ const toMessageView = (row: MessageRow, viewerUserId: string): MessageView => {
     kind: row.kind,
     scheduled_at: row.scheduled_at ? row.scheduled_at.toISOString() : null,
     schedule_status: row.schedule_status,
+    call_event: row.call_event,
     can_accept: pending && !mine,
     can_decline: pending && !mine,
     can_reschedule: live && mine,
@@ -65,7 +67,7 @@ const assertHasMinutes = async (
 ): Promise<ServiceError | null> => {
   const balances = await minutesRepo.listBalancesForUser(clientUserId);
   const hasMinutes = balances.some(
-    (b) => b.professional_id === professionalId && b.minutes_remaining > 0,
+    (b) => b.professional_id === professionalId && b.seconds_remaining > 0,
   );
   if (!hasMinutes) {
     return new ServiceError('forbidden', CHAT_MESSAGES.NEEDS_MINUTES, 403);
@@ -174,14 +176,15 @@ export const getConversationContext = async (conversationId: string, userId: str
   const viewerIsClient = conv.client_user_id === userId;
   const peerUserId = viewerIsClient ? conv.professional_id : conv.client_user_id;
 
-  // Minutes are always held by the CLIENT against the PRO, regardless of viewer.
+  // Prepaid time is always held by the CLIENT against the PRO, regardless of viewer.
   const balances = await minutesRepo.listBalancesForUser(conv.client_user_id);
-  const minutesRemaining = balances
+  const secondsRemaining = balances
     .filter((b) => b.professional_id === conv.professional_id)
-    .reduce((sum, b) => sum + b.minutes_remaining, 0);
+    .reduce((sum, b) => sum + b.seconds_remaining, 0);
 
   const peer = await authRepo.findUserById(peerUserId);
   const activeSchedule = await repo.findActiveSchedule(conversationId);
+  const lowMinutesThreshold = platformConfig.chat().low_minutes_threshold;
 
   return new ServiceSuccess(
     {
@@ -191,10 +194,12 @@ export const getConversationContext = async (conversationId: string, userId: str
       peer_avatar_url: peer?.avatar_url ?? null,
       /** The viewer is the paying side (and so is subject to the minutes gate). */
       viewer_is_client: viewerIsClient,
-      minutes_remaining: minutesRemaining,
-      low_minutes_threshold: platformConfig.chat().low_minutes_threshold,
-      /** Client can only send while they hold minutes; the pro can always reply. */
-      can_send: viewerIsClient ? minutesRemaining > 0 : true,
+      seconds_remaining: secondsRemaining,
+      minutes_remaining: Math.floor(secondsRemaining / 60),
+      low_minutes_threshold: lowMinutesThreshold,
+      low_seconds_threshold: lowMinutesThreshold * 60,
+      /** Client can only send while they hold time; the pro can always reply. */
+      can_send: viewerIsClient ? secondsRemaining > 0 : true,
       active_schedule: activeSchedule ? toMessageView(activeSchedule, userId) : null,
     },
     CHAT_MESSAGES.CONTEXT_FETCHED,
@@ -256,13 +261,16 @@ export const sendMessage = async (conversationId: string, senderUserId: string, 
 // old bookings flow. Either party can propose. Purely informational until
 // notifications land — the card's Join button starts a normal instant call.
 
-/** Propose a call time. Either party may schedule; the client still needs minutes. */
-export const proposeSchedule = async (
-  conversationId: string,
-  senderUserId: string,
-  scheduledAtIso: string,
-  note: string | undefined,
-) => {
+type TxClient = Parameters<Parameters<typeof withTransaction>[0]>[0];
+
+/** The narrow surface a transactional write needs — lets callers pass any runner. */
+interface QueryRunner {
+  query: TxClient['query'];
+}
+
+// Rejects a proposed time before any state changes — a reschedule cancels the
+// old card first, so an invalid new time has to be caught before that happens.
+const validateScheduleTime = (scheduledAtIso: string): ServiceError | Date => {
   const when = new Date(scheduledAtIso);
   if (Number.isNaN(when.getTime())) {
     return new ServiceError('validation_error', CHAT_MESSAGES.SCHEDULE_INVALID_TIME, 422, {
@@ -274,25 +282,46 @@ export const proposeSchedule = async (
       scheduled_at: ['Pick a time in the future'],
     });
   }
+  return when;
+};
 
-  return withTransaction(async (client) => {
-    const conv = await repo.findConversationByIdForUpdate(client, conversationId);
-    if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-    const notMine = assertParticipant(conv, senderUserId);
-    if (notMine) return notMine;
+const insertProposal = async (
+  client: TxClient,
+  conversationId: string,
+  senderUserId: string,
+  when: Date,
+  note: string | undefined,
+) => {
+  const conv = await repo.findConversationByIdForUpdate(client, conversationId);
+  if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
+  const notMine = assertParticipant(conv, senderUserId);
+  if (notMine) return notMine;
 
-    // Same gate as sending: the client must hold minutes; the pro may always act.
-    if (conv.client_user_id === senderUserId) {
-      const gate = await assertHasMinutes(senderUserId, conv.professional_id);
-      if (gate) return gate;
-    }
+  // Same gate as sending: the client must hold minutes; the pro may always act.
+  if (conv.client_user_id === senderUserId) {
+    const gate = await assertHasMinutes(senderUserId, conv.professional_id);
+    if (gate) return gate;
+  }
 
-    const body = note?.trim() ? note.trim() : 'Proposed a call';
-    const msg = await repo.insertScheduleMessage(client, conversationId, senderUserId, body, when);
-    await repo.bumpAfterMessage(client, conv, senderUserId, `📅 ${body}`);
-    await queueMessagePush(client, conv, senderUserId, msg.id, `📅 ${body}`);
-    return new ServiceSuccess(toMessageView(msg, senderUserId), CHAT_MESSAGES.SCHEDULE_PROPOSED);
-  });
+  const body = note?.trim() ? note.trim() : 'Proposed a call';
+  const msg = await repo.insertScheduleMessage(client, conversationId, senderUserId, body, when);
+  await repo.bumpAfterMessage(client, conv, senderUserId, `📅 ${body}`);
+  await queueMessagePush(client, conv, senderUserId, msg.id, `📅 ${body}`);
+  return new ServiceSuccess(toMessageView(msg, senderUserId), CHAT_MESSAGES.SCHEDULE_PROPOSED);
+};
+
+/** Propose a call time. Either party may schedule; the client still needs minutes. */
+export const proposeSchedule = async (
+  conversationId: string,
+  senderUserId: string,
+  scheduledAtIso: string,
+  note: string | undefined,
+) => {
+  const when = validateScheduleTime(scheduledAtIso);
+  if (when instanceof ServiceError) return when;
+  return withTransaction((client) =>
+    insertProposal(client, conversationId, senderUserId, when, note),
+  );
 };
 
 type ScheduleAction = 'accept' | 'decline' | 'cancel';
@@ -303,33 +332,38 @@ const statusFor = (action: ScheduleAction): ScheduleStatus => {
   return ScheduleStatus.CANCELLED;
 };
 
-// Accept/decline (invitee only) or cancel (proposer only) a live schedule.
-export const actOnSchedule = async (messageId: string, userId: string, action: ScheduleAction) => {
-  return withTransaction(async (client) => {
-    const msg = await repo.findMessageForUpdate(client, messageId);
-    if (!msg || msg.kind !== MessageKind.SCHEDULE) {
-      return new ServiceError('not_found', CHAT_MESSAGES.SCHEDULE_NOT_FOUND, 404);
-    }
-    const conv = await repo.findConversationByIdForUpdate(client, msg.conversation_id);
-    if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-    const notMine = assertParticipant(conv, userId);
-    if (notMine) return notMine;
+const applyScheduleAction = async (
+  client: TxClient,
+  messageId: string,
+  userId: string,
+  action: ScheduleAction,
+) => {
+  const msg = await repo.findMessageForUpdate(client, messageId);
+  if (!msg || msg.kind !== MessageKind.SCHEDULE) {
+    return new ServiceError('not_found', CHAT_MESSAGES.SCHEDULE_NOT_FOUND, 404);
+  }
+  const conv = await repo.findConversationByIdForUpdate(client, msg.conversation_id);
+  if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
+  const notMine = assertParticipant(conv, userId);
+  if (notMine) return notMine;
 
-    const status = msg.schedule_status;
-    if (status === null || TERMINAL_SCHEDULE_STATUSES.includes(status)) {
-      return new ServiceError('conflict', CHAT_MESSAGES.SCHEDULE_NOT_ACTIONABLE, 409);
-    }
+  const status = msg.schedule_status;
+  if (status === null || TERMINAL_SCHEDULE_STATUSES.includes(status)) {
+    return new ServiceError('conflict', CHAT_MESSAGES.SCHEDULE_NOT_ACTIONABLE, 409);
+  }
 
-    const isProposer = msg.sender_user_id === userId;
-    const permitted = permittedScheduleAction(action, isProposer, status);
-    if (!permitted) {
-      return new ServiceError('forbidden', CHAT_MESSAGES.SCHEDULE_NOT_ACTIONABLE, 403);
-    }
+  const isProposer = msg.sender_user_id === userId;
+  if (!permittedScheduleAction(action, isProposer, status)) {
+    return new ServiceError('forbidden', CHAT_MESSAGES.SCHEDULE_NOT_ACTIONABLE, 403);
+  }
 
-    const updated = await repo.updateScheduleStatus(client, messageId, statusFor(action));
-    return new ServiceSuccess(toMessageView(updated, userId), CHAT_MESSAGES.SCHEDULE_UPDATED);
-  });
+  const updated = await repo.updateScheduleStatus(client, messageId, statusFor(action));
+  return new ServiceSuccess(toMessageView(updated, userId), CHAT_MESSAGES.SCHEDULE_UPDATED);
 };
+
+// Accept/decline (invitee only) or cancel (proposer only) a live schedule.
+export const actOnSchedule = async (messageId: string, userId: string, action: ScheduleAction) =>
+  withTransaction((client) => applyScheduleAction(client, messageId, userId, action));
 
 // Accept/decline: invitee only, and only while pending.
 // Cancel: proposer only, while pending or accepted.
@@ -345,6 +379,11 @@ const permittedScheduleAction = (
 /**
  * Reschedule = cancel the old proposal + raise a fresh one at the new time.
  * Only the proposer may reschedule (per the agreed action menu).
+ *
+ * Both halves share one transaction. Running them separately meant a failure
+ * in the second — a lapsed minutes gate, a dropped connection — left the
+ * original card cancelled with nothing in its place, destroying a schedule the
+ * user only meant to move. (BUGS.md D1.)
  */
 export const reschedule = async (
   messageId: string,
@@ -352,30 +391,66 @@ export const reschedule = async (
   scheduledAtIso: string,
   note: string | undefined,
 ) => {
+  const when = validateScheduleTime(scheduledAtIso);
+  if (when instanceof ServiceError) return when;
+
   const existing = await repo.findConversationOfMessage(messageId);
   if (!existing) {
     return new ServiceError('not_found', CHAT_MESSAGES.SCHEDULE_NOT_FOUND, 404);
   }
-  // Validate the NEW time BEFORE cancelling the old card. Previously cancel
-  // committed in its own transaction and then proposeSchedule validated the
-  // time in a second transaction — so a past/invalid new time left the original
-  // permanently cancelled with no replacement (silent data loss). These are the
-  // same checks proposeSchedule runs; doing them first makes an invalid
-  // reschedule a no-op instead. (BUGS.md D1.)
-  const when = new Date(scheduledAtIso);
-  if (Number.isNaN(when.getTime())) {
-    return new ServiceError('validation_error', CHAT_MESSAGES.SCHEDULE_INVALID_TIME, 422, {
-      scheduled_at: ['Provide a valid ISO 8601 timestamp'],
-    });
-  }
-  if (when.getTime() <= Date.now()) {
-    return new ServiceError('validation_error', CHAT_MESSAGES.SCHEDULE_IN_PAST, 422, {
-      scheduled_at: ['Pick a time in the future'],
-    });
-  }
-  const cancelled = await actOnSchedule(messageId, userId, 'cancel');
-  if (!cancelled.success) return cancelled;
-  return proposeSchedule(existing.conversation_id, userId, scheduledAtIso, note);
+
+  return withTransactionUnless(
+    async (client) => {
+      const cancelled = await applyScheduleAction(client, messageId, userId, 'cancel');
+      if (!cancelled.success) return cancelled;
+      return insertProposal(client, existing.conversation_id, userId, when, note);
+    },
+    (result) => result.success,
+  );
+};
+
+const CALL_EVENT_BODIES: Record<CallEventOutcome, string> = {
+  [CallEventOutcome.COMPLETED]: 'Call',
+  [CallEventOutcome.MISSED]: 'Missed call',
+  [CallEventOutcome.DECLINED]: 'Call declined',
+  [CallEventOutcome.CANCELLED]: 'Call cancelled',
+};
+
+/**
+ * Records a finished call in the two parties' thread.
+ *
+ * Written in the caller's transaction so a settlement that rolls back cannot
+ * leave a call in the thread that never happened.
+ *
+ * Deliberately does NOT bump unread or push: the Calls tab already badges this,
+ * and a second notification for one call is noise. The thread entry is a
+ * record, not an alert.
+ */
+export const recordCallEvent = async (
+  client: QueryRunner,
+  input: {
+    clientUserId: string;
+    professionalId: string;
+    callerUserId: string;
+    callId: string;
+    callType: string;
+    outcome: CallEventOutcome;
+    seconds?: number;
+  },
+): Promise<void> => {
+  const conv = await repo.ensureConversation(client, input.clientUserId, input.professionalId);
+  await repo.insertCallEventMessage(client, {
+    conversationId: conv.id,
+    callerUserId: input.callerUserId,
+    body: CALL_EVENT_BODIES[input.outcome],
+    callEvent: {
+      call_id: input.callId,
+      call_type: input.callType,
+      outcome: input.outcome,
+      caller_user_id: input.callerUserId,
+      ...(input.seconds !== undefined ? { seconds: input.seconds } : {}),
+    },
+  });
 };
 
 export const markConversationRead = async (conversationId: string, userId: string) => {

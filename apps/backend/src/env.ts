@@ -92,6 +92,11 @@ const EnvSchema = z.object({
   WORKER_NO_SHOW_RESOLVER_ENABLED: z.string().optional(),
   WORKER_STUCK_CALL_RESOLVER_ENABLED: z.string().optional(),
   WORKER_RING_RESOLVER_ENABLED: z.string().optional(),
+  WORKER_STALE_ACTIVE_RESOLVER_ENABLED: z.string().optional(),
+  WORKER_INTENT_EXPIRY_ENABLED: z.string().optional(),
+  WORKER_CAMPAIGN_ENABLED: z.string().optional(),
+  WORKER_WITHDRAWAL_REVIEW_ENABLED: z.string().optional(),
+  WORKER_INVITE_EXPIRY_ENABLED: z.string().optional(),
   WORKER_EMAIL_ENABLED: z.string().optional(),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),

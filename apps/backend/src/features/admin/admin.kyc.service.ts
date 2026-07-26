@@ -1,6 +1,8 @@
 import { KNOWN_KYC_ITEM_KEYS, type KycItemKey } from '@features/onboarding/onboarding.types.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
+import { notify, NotificationKind } from '@features/notifications/index.js';
+import { DeeplinkTarget, encodeDeeplink } from '@lib/deeplink.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { decodeCursor, encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
@@ -133,6 +135,16 @@ export const approve = async (submissionId: string, _dto: AdminApproveKycDto, ad
         reviewed_by: reviewedBy,
       },
     });
+    // Account status has no other home in the app — the panel is where a user
+    // finds out, and finds it again later.
+    await notify(client, {
+      userId: submission.user_id,
+      kind: NotificationKind.KYC_APPROVED,
+      title: 'Your identity is verified',
+      body: 'You can now use everything Ohlify offers.',
+      deeplink: encodeDeeplink({ target: DeeplinkTarget.HOME }),
+      metadata: { submission_id: submission.id },
+    });
     await client.query('COMMIT');
     logger.info({ submissionId, userId: submission.user_id }, 'admin approved KYC');
     const fresh = await repo.findByIdForUpdate(client, submission.id);
@@ -197,6 +209,17 @@ export const reject = async (submissionId: string, dto: AdminRejectKycDto, admin
         reviewed_at: new Date().toISOString(),
         reviewed_by: reviewedBy,
       },
+    });
+    // Deep-links to KYC rather than restating the reason: the rejection screen
+    // reads the admin's note from onboarding status, so duplicating it here
+    // would risk the two drifting apart.
+    await notify(client, {
+      userId: submission.user_id,
+      kind: NotificationKind.KYC_REJECTED,
+      title: 'We couldn’t verify your identity',
+      body: 'Tap to see what needs fixing and resubmit.',
+      deeplink: encodeDeeplink({ target: DeeplinkTarget.KYC }),
+      metadata: { submission_id: submission.id, reason_code: dto.reason_code },
     });
     await client.query('COMMIT');
     logger.info(

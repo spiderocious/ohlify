@@ -21,6 +21,17 @@ export function conversationFromJson(json: Record<string, unknown>): Conversatio
   };
 }
 
+/** A call recorded in the thread. Present only on `kind === 'call_event'`. */
+export interface CallEvent {
+  callId: string;
+  callType: string;
+  /** 'completed' | 'missed' | 'declined' | 'cancelled'. */
+  outcome: string;
+  /** Talk time on a completed call. */
+  seconds?: number;
+  callerUserId: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -28,8 +39,9 @@ export interface ChatMessage {
   mine: boolean;
   body: string;
   createdAt: string;
-  /** 'text' | 'schedule'. */
+  /** 'text' | 'schedule' | 'call_event'. */
   kind: string;
+  callEvent?: CallEvent;
   scheduledAt?: string;
   /** 'pending' | 'accepted' | 'declined' | 'cancelled'. */
   scheduleStatus?: string;
@@ -54,6 +66,18 @@ export function withDeliveryStatus(message: ChatMessage, deliveryStatus: Message
   return { ...message, deliveryStatus };
 }
 
+function callEventFromJson(raw: unknown): CallEvent | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const e = raw as Record<string, unknown>;
+  return {
+    callId: (e.call_id as string) ?? '',
+    callType: (e.call_type as string) ?? 'audio',
+    outcome: (e.outcome as string) ?? 'completed',
+    ...(typeof e.seconds === 'number' ? { seconds: e.seconds } : {}),
+    callerUserId: (e.caller_user_id as string) ?? '',
+  };
+}
+
 export function chatMessageFromJson(json: Record<string, unknown>): ChatMessage {
   return {
     id: json.id as string,
@@ -63,6 +87,7 @@ export function chatMessageFromJson(json: Record<string, unknown>): ChatMessage 
     body: json.body as string,
     createdAt: json.created_at as string,
     kind: (json.kind as string) ?? 'text',
+    callEvent: callEventFromJson(json.call_event),
     scheduledAt: json.scheduled_at as string | undefined,
     scheduleStatus: json.schedule_status as string | undefined,
     canAccept: (json.can_accept as boolean) ?? false,
@@ -72,27 +97,40 @@ export function chatMessageFromJson(json: Record<string, unknown>): ChatMessage 
   };
 }
 
-/** Thread context — peer, the client's remaining minutes, low threshold, live schedule. */
+/** Thread context — peer, the client's remaining prepaid time, low threshold, live schedule. */
 export interface ConversationContext {
   id: string;
   peerUserId: string;
   peerName?: string;
   viewerIsClient: boolean;
-  minutesRemaining: number;
-  lowMinutesThreshold: number;
-  /** False when the client is out of minutes (the pro can always reply). */
+  secondsRemaining: number;
+  /** Below this many seconds the composer warns; at zero the client cannot send. */
+  lowSecondsThreshold: number;
+  /** False when the client is out of time (the pro can always reply). */
   canSend: boolean;
   activeSchedule?: ChatMessage;
 }
 
 export function conversationContextFromJson(json: Record<string, unknown>): ConversationContext {
+  const secondsRemaining =
+    typeof json.seconds_remaining === 'number'
+      ? json.seconds_remaining
+      : typeof json.minutes_remaining === 'number'
+        ? json.minutes_remaining * 60
+        : 0;
+  const lowSecondsThreshold =
+    typeof json.low_seconds_threshold === 'number'
+      ? json.low_seconds_threshold
+      : typeof json.low_minutes_threshold === 'number'
+        ? json.low_minutes_threshold * 60
+        : 300;
   return {
     id: json.id as string,
     peerUserId: json.peer_user_id as string,
     peerName: json.peer_name as string | undefined,
     viewerIsClient: (json.viewer_is_client as boolean) ?? true,
-    minutesRemaining: typeof json.minutes_remaining === 'number' ? json.minutes_remaining : 0,
-    lowMinutesThreshold: typeof json.low_minutes_threshold === 'number' ? json.low_minutes_threshold : 5,
+    secondsRemaining,
+    lowSecondsThreshold,
     canSend: (json.can_send as boolean) ?? true,
     activeSchedule: json.active_schedule ? chatMessageFromJson(json.active_schedule as Record<string, unknown>) : undefined,
   };

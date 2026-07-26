@@ -46,11 +46,15 @@ export const register = (app: Express): void => {
     validate(ListBannersPublicQuerySchema, 'query'),
     controller.publicList,
   );
+  // The resolved single banner for a screen, with targeting applied.
+  authed.get('/banners/resolve', requireAuth, controller.resolve);
+  authed.post('/banners/:id/seen', requireAuth, controller.markSeen);
   app.use('/api/v1/', authed);
 
   // Admin CRUD — banners are admin-only per spec (public-facing copy).
   const admin = Router();
   admin.use(requireAdmin, requireAdminRole(ADMIN_ONLY));
+  admin.post('/audience-preview', controller.previewAudience);
   admin.get('/', validate(ListBannersAdminQuerySchema, 'query'), controller.adminList);
   admin.get('/:id', controller.adminGet);
   admin.post(

@@ -67,6 +67,8 @@ export const ADMIN_ROUTES = route('', {
   }),
 
   CONFIG: route('config'),
+  APP_RELEASES: route('app-releases'),
+  CAMPAIGNS: route('campaigns'),
 
   AUDIT_LOG: route('audit-log'),
 });

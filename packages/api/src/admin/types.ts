@@ -743,3 +743,64 @@ export interface AdminStrikeDetailView extends AdminStrikeView {
   };
   audit_trail: AdminAuditTrailEntry[];
 }
+
+export const AppPlatform = {
+  IOS: 'ios',
+  ANDROID: 'android',
+} as const;
+
+export type AppPlatform = (typeof AppPlatform)[keyof typeof AppPlatform];
+
+/** One row per platform: the minimum build still accepted, plus the prompt shown below it. */
+export interface AdminAppVersion {
+  platform: AppPlatform;
+  min_version: string;
+  /** When true the prompt cannot be dismissed. */
+  forced: boolean;
+  store_url: string;
+  title: string;
+  /** Markdown — the app renders links and emphasis. */
+  description_md: string | null;
+  illustration_key: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export const CampaignStatus = {
+  DRAFT: 'draft',
+  SCHEDULED: 'scheduled',
+  SENDING: 'sending',
+  SENT: 'sent',
+  CANCELLED: 'cancelled',
+  FAILED: 'failed',
+} as const;
+
+export type CampaignStatus = (typeof CampaignStatus)[keyof typeof CampaignStatus];
+
+/** Audience predicate. Evaluated at send time, not when the campaign is written. */
+export interface SegmentPredicate {
+  role?: 'client' | 'professional';
+  kyc_status?: string;
+  platform?: Array<'ios' | 'android' | 'web'>;
+  account_age_max_days?: number;
+  account_age_min_days?: number;
+  min_balance_kobo?: number;
+  max_balance_kobo?: number;
+  app_version_below?: string;
+}
+
+export interface AdminCampaign {
+  id: string;
+  title: string;
+  body: string | null;
+  deeplink: string | null;
+  segment: SegmentPredicate;
+  status: CampaignStatus;
+  /** When the delayed send fires. Cancellable until then. */
+  send_at: string | null;
+  /** How many notification rows the send actually wrote. */
+  recipients: number;
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+}

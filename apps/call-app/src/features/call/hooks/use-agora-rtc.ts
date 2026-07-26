@@ -5,7 +5,7 @@ import AgoraRTC, {
   type ICameraVideoTrack,
   type NetworkQuality,
 } from 'agora-rtc-sdk-ng';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { NETWORK_QUALITY_LEVEL, type NetworkQualityLevel } from '@shared/bridge/bridge.types.js';
 import { env } from '@shared/config/env.js';
@@ -98,6 +98,9 @@ export interface AgoraRtcHandle {
   leave: () => void;
   localVideoRef: React.RefObject<HTMLDivElement | null>;
   remoteVideoRef: React.RefObject<HTMLDivElement | null>;
+  secondRemoteVideoRef: React.RefObject<HTMLDivElement | null>;
+  /** Remote uids currently in the channel — drives the split layout. */
+  remoteUids: number[];
 }
 
 // ── sendStreamMessage shim ────────────────────────────────────────────────────
@@ -198,6 +201,11 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
   const camRef = useRef<ICameraVideoTrack | null>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
+  const secondRemoteVideoRef = useRef<HTMLDivElement>(null);
+  // Which uid owns which video container. Without this, a third participant's
+  // video would play into the second's element and silently replace them.
+  const videoSlotsRef = useRef<Map<number, 'primary' | 'secondary'>>(new Map());
+  const [remoteUids, setRemoteUids] = useState<number[]>([]);
   const renewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leftRef = useRef(false);
   // Tracks local mute state for VAD — suppresses speaking broadcasts when muted.
@@ -245,6 +253,9 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
           user.audioTrack?.play();
           if (!joinedUids.has(user.uid as number)) {
             joinedUids.add(user.uid as number);
+            setRemoteUids((prev) =>
+              prev.includes(user.uid as number) ? prev : [...prev, user.uid as number],
+            );
             emit({ kind: AGORA_EVENT.REMOTE_JOINED, uid: user.uid as number });
             emit({ kind: AGORA_EVENT.ACTIVE, connectedAt: Date.now() });
           } else {
@@ -252,15 +263,27 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
             emit({ kind: AGORA_EVENT.REMOTE_MUTED, uid: user.uid as number, muted: false });
           }
         }
-        if (mediaType === AGORA_MEDIA_TYPE.VIDEO && remoteVideoRef.current) {
-          user.videoTrack?.play(remoteVideoRef.current);
+        if (mediaType === AGORA_MEDIA_TYPE.VIDEO) {
+          const uid = user.uid as number;
+          const slot =
+            videoSlotsRef.current.get(uid) ??
+            ([...videoSlotsRef.current.values()].includes('primary') ? 'secondary' : 'primary');
+          videoSlotsRef.current.set(uid, slot);
+          const container =
+            slot === 'primary' ? remoteVideoRef.current : secondRemoteVideoRef.current;
+          if (container) user.videoTrack?.play(container);
         }
       },
     );
 
     client.on(AGORA_CLIENT_EVENTS.USER_LEFT, (user: IAgoraRTCRemoteUser) => {
-      joinedUids.delete(user.uid as number);
-      emit({ kind: AGORA_EVENT.REMOTE_LEFT, uid: user.uid as number });
+      const uid = user.uid as number;
+      joinedUids.delete(uid);
+      // Free the container so the next joiner can take it — a departed
+      // participant must not hold a slot for the rest of the call.
+      videoSlotsRef.current.delete(uid);
+      setRemoteUids((prev) => prev.filter((u) => u !== uid));
+      emit({ kind: AGORA_EVENT.REMOTE_LEFT, uid });
     });
 
     // user-unpublished audio = remote muted (Agora unpublishes the track on setMuted).
@@ -440,5 +463,7 @@ export function useAgoraRtc(options: AgoraRtcOptions | null): AgoraRtcHandle {
     leave,
     localVideoRef,
     remoteVideoRef,
+    secondRemoteVideoRef,
+    remoteUids,
   };
 }

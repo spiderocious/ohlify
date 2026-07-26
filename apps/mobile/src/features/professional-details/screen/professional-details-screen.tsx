@@ -1,17 +1,23 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CallType } from '@ohlify/core';
 import { AppButton, AppText, colors, ProfessionalHeader, showToast } from '@ohlify/mobile-ui';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
+import { useIsOnline } from '@shared/api/use-refresh-state';
 import { fileService } from '@shared/services/file-service';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import { chatApi } from '@features/chat/api/chat-api';
 import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
-import { professionalsApi } from '@features/professionals/api/professionals-api';
-import type { ProfessionalDetail, ProfessionalRateView, ReviewItem } from '@features/professionals/types/professional-models';
+import {
+  useProfessionalDetail,
+  useProfessionalRates,
+  useProfessionalReviews,
+} from '../api/use-professional-details';
+import type { ProfessionalRateView, ReviewItem } from '@features/professionals/types/professional-models';
 import type { Professional } from '@features/professionals/types/professional';
 import type { ProfessionalRate } from '@features/professionals/types/professional-rate';
 import type { Review } from '@features/professionals/types/review';
@@ -19,6 +25,8 @@ import { BuyMinutesSection } from './parts/buy-minutes-section';
 import { DescriptionSection } from './parts/description-section';
 import { RatesSection } from './parts/rates-section';
 import { ReviewsSection } from './parts/reviews-section';
+import { showTalkToSheet, type TalkToOption } from './parts/talk-to-sheet';
+import { secondsHeldFor, useMyBalances } from '@features/minutes/api/use-my-balances';
 
 type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
 type RouteType = RouteProp<RootStackParamList, 'Professional'>;
@@ -67,50 +75,28 @@ export function ProfessionalDetailsScreen() {
   const route = useRoute<RouteType>();
   const { professionalId } = route.params;
 
-  const [detail, setDetail] = useState<ProfessionalDetail | undefined>(undefined);
-  const [detailError, setDetailError] = useState<ApiError | undefined>(undefined);
-  const [detailLoading, setDetailLoading] = useState(true);
-  const [rates, setRates] = useState<ProfessionalRateView[]>([]);
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const isOnline = useIsOnline();
+  const detailQuery = useProfessionalDetail(professionalId);
+  const balances = useMyBalances();
+  const ratesQuery = useProfessionalRates(professionalId);
+  const reviewsQuery = useProfessionalReviews(professionalId);
   const [calling, setCalling] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setDetailLoading(true);
-    professionalsApi
-      .getById(professionalId)
-      .then((d) => {
-        if (!cancelled) setDetail(d);
-      })
-      .catch((e) => {
-        if (!cancelled) setDetailError(e instanceof ApiError ? e : ApiError.network);
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false);
-      });
-    professionalsApi
-      .getRates(professionalId)
-      .then((r) => {
-        if (!cancelled) setRates(r);
-      })
-      .catch(() => undefined);
-    professionalsApi
-      .getReviews(professionalId)
-      .then((page) => {
-        if (!cancelled) setReviews(page.items);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [professionalId]);
+  const detail = detailQuery.data;
+  const rates = ratesQuery.data ?? [];
+  const reviews = reviewsQuery.data ?? [];
 
-  async function startCall() {
+  async function startCall(callType: CallType) {
     if (calling) return;
+    // A cached balance is fine to READ and wrong to act on: the minutes shown
+    // may have been spent on another device, and the server preflight is the
+    // only thing that actually knows. Failing here beats starting a call that
+    // cannot be paid for.
+    if (!isOnline) {
+      showToast('You’re offline. Reconnect to start a call.', { type: 'error' });
+      return;
+    }
     setCalling(true);
-    const proRates = rates.map(toProRate);
-    const hasVideo = proRates.some((r) => r.callType === 'video');
-    const callType = hasVideo ? 'video' : 'audio';
     try {
       const join = await instantCallsApi.start({ professionalId, callType });
       // The pro's devices are ringing (server pushed) — go dial in the
@@ -130,6 +116,8 @@ export function ProfessionalDetailsScreen() {
           uid: join.agoraUid,
           agoraToken: join.agoraToken,
           expiresAt: join.expiresAt,
+          secondsAllotted: join.secondsAllotted,
+          professionalId,
         },
       });
     } catch (e) {
@@ -143,7 +131,14 @@ export function ProfessionalDetailsScreen() {
   async function openChat() {
     try {
       const conversationId = await chatApi.openConversation(professionalId);
-      navigation.navigate('ChatThread', { conversationId, peerName: detail?.name, peerAvatarUrl: detail?.avatarKey });
+      navigation.navigate('ChatThread', {
+        conversationId,
+        peerName: detail?.name,
+        peerAvatarUrl: detail?.avatarKey,
+        // Opens the thread ready to send rather than blank: the user came here
+        // to talk, and an empty composer makes them compose a cold open first.
+        draft: `Hi ${firstName}, I'd like to talk about `,
+      });
     } catch (e) {
       const error = e instanceof ApiError ? e : ApiError.network;
       showToast(error.reason === 'forbidden' ? 'Buy minutes with this professional to start chatting.' : apiErrorMessage(error), { type: 'error' });
@@ -152,7 +147,7 @@ export function ProfessionalDetailsScreen() {
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  if (detailLoading) {
+  if (detailQuery.isLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceLight }}>
         <ActivityIndicator color={colors.primary} />
@@ -160,11 +155,11 @@ export function ProfessionalDetailsScreen() {
     );
   }
 
-  if (detailError && !detail) {
+  if (detailQuery.isError && !detail) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceLight, padding: 24 }}>
         <AppText variant="body" color={colors.textMuted} align="center">
-          {apiErrorMessage(detailError)}
+          {apiErrorMessage(detailQuery.error instanceof ApiError ? detailQuery.error : ApiError.network)}
         </AppText>
       </View>
     );
@@ -182,6 +177,24 @@ export function ProfessionalDetailsScreen() {
   };
   const proRates = rates.map(toProRate);
   const reviewItems = reviews.map(toReview);
+  const firstName = detail.name.trim().split(/\s+/)[0] || 'them';
+  // One option per call type the professional actually offers, priced at their
+  // cheapest per-minute rate for it — the sheet must never show a type the pro
+  // does not sell, nor a price they do not charge.
+  const talkOptions: TalkToOption[] = ([CallType.AUDIO, CallType.VIDEO] as const)
+    .map((callType) => {
+      const cheapest = rates
+        .filter((r) => r.callType === callType && r.pricePerMinuteKobo !== undefined)
+        .sort((a, b) => (a.pricePerMinuteKobo ?? 0) - (b.pricePerMinuteKobo ?? 0))[0];
+      return cheapest === undefined
+        ? undefined
+        : {
+            callType,
+            perMinuteLabel: `${formatKobo(cheapest.pricePerMinuteKobo ?? 0)} / min`,
+            secondsHeld: secondsHeldFor(balances.data, professionalId, callType),
+          };
+    })
+    .filter((option): option is TalkToOption => option !== undefined);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
@@ -210,14 +223,15 @@ export function ProfessionalDetailsScreen() {
         </View>
         <View style={{ height: 24 }} />
       </ScrollView>
-      <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, backgroundColor: colors.surfaceLight, borderTopWidth: 1, borderTopColor: colors.border }}>
-        <View style={{ flex: 1 }}>
-          <AppButton label="Message" onPress={openChat} radius={100} height={52} variant="outline" expanded />
-        </View>
-        <View style={{ width: 12 }} />
-        <View style={{ flex: 1 }}>
-          <AppButton label="Call" onPress={startCall} radius={100} height={52} isDisabled={calling} expanded />
-        </View>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, backgroundColor: colors.surfaceLight, borderTopWidth: 1, borderTopColor: colors.border }}>
+        <AppButton
+          label={`Talk to ${firstName}`}
+          onPress={() => showTalkToSheet(firstName, { options: talkOptions, onCall: startCall, onMessage: openChat })}
+          radius={100}
+          height={52}
+          isDisabled={calling}
+          expanded
+        />
       </View>
     </View>
   );

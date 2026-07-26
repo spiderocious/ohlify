@@ -21,6 +21,9 @@ import type { MainTabParamList } from '../../../main-tabs.navigation';
 import { useMe } from '@features/profile/api/use-me';
 import { prewarmMeEmail, runFundWalletFlow } from '../providers/fund-wallet-flow';
 import { useWithdrawMutation, useWallet, useWalletStats, useWalletTransactions } from '../api/use-wallet';
+import { queryKeys } from '@shared/api/query-keys';
+import { useLastRefreshed } from '@shared/api/use-refresh-state';
+import { RefreshStatusLine } from '@shared/parts/refresh-status-line';
 import { FundAmountForm } from './parts/fund-amount-form';
 import { TransactionHistoryList } from './parts/transaction-history-list';
 import { WalletBalanceCard } from './parts/wallet-balance-card';
@@ -37,6 +40,7 @@ export function WalletScreen() {
   const route = useRoute<WalletRouteProp>();
   const queryClient = useQueryClient();
   const wallet = useWallet();
+  const lastRefreshed = useLastRefreshed(queryKeys.wallet());
   const stats = useWalletStats();
   const transactions = useWalletTransactions();
   const me = useMe();
@@ -190,8 +194,14 @@ export function WalletScreen() {
         <AppText variant="title" color={colors.textJet} align="left" weight="800">
           Wallet
         </AppText>
+        <RefreshStatusLine queryKey={queryKeys.wallet()} />
         <View style={{ height: 20 }} />
-        <WalletBalanceCard balanceKobo={balanceKobo} currency={balanceCurrency} onWithdraw={openWithdraw} />
+        <WalletBalanceCard
+          balanceKobo={balanceKobo}
+          currency={balanceCurrency}
+          lastRefreshedLabel={lastRefreshed}
+          onWithdraw={openWithdraw}
+        />
         <ClientView>
           <View style={{ height: 12 }} />
           <AppButton label="Fund wallet" variant="outline" expanded radius={100} onPress={openFund} />
@@ -202,7 +212,19 @@ export function WalletScreen() {
         {isLoadingBalance ? (
           <TransactionHistorySkeleton />
         ) : (
-          <TransactionHistoryList transactions={txItems} />
+          <TransactionHistoryList
+            transactions={txItems}
+            onTap={(tx) =>
+              navigation.navigate('TransactionDetail', {
+                title: tx.title,
+                amountKobo: tx.amountKobo,
+                createdAt: tx.createdAt,
+                ...(tx.relatedWithdrawalId === undefined
+                  ? {}
+                  : { withdrawalId: tx.relatedWithdrawalId }),
+              })
+            }
+          />
         )}
         {transactions.hasNextPage ? (
           <>

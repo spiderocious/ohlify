@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { ADMIN_EP, type AdminWithdrawal } from '@ohlify/api';
+import { ADMIN_EP, adminApiClient, parseApiError, type AdminWithdrawal } from '@ohlify/api';
 
 import { useAdminMutation } from '../../../shared/api/use-admin-mutation.js';
 import { useCursorList } from '../../../shared/api/use-cursor-list.js';
@@ -32,9 +32,7 @@ function withdrawalAction<TBody = void>(buildUrl: (id: string) => string) {
 export const useApproveWithdrawal = withdrawalAction<{ note?: string }>(
   ADMIN_EP.WITHDRAWAL_APPROVE,
 );
-export const useRejectWithdrawal = withdrawalAction<{ reason: string }>(
-  ADMIN_EP.WITHDRAWAL_REJECT,
-);
+export const useRejectWithdrawal = withdrawalAction<{ reason: string }>(ADMIN_EP.WITHDRAWAL_REJECT);
 export const useForceFailWithdrawal = withdrawalAction<{ reason: string }>(
   ADMIN_EP.WITHDRAWAL_FORCE_FAIL,
 );
@@ -50,4 +48,40 @@ export function useSyncPayouts() {
       },
     },
   );
+}
+
+export interface BulkWithdrawalResult {
+  succeeded: string[];
+  failed: { id: string; message: string }[];
+}
+
+/**
+ * Applies one action across a selection, sequentially.
+ *
+ * Serial rather than parallel: each approval fires a Paystack transfer, and a
+ * burst of them is exactly the shape that trips rate limits. Failures are
+ * collected rather than thrown — one bad row must not hide the fact that the
+ * other nine went through, and the caller reports both halves.
+ */
+export function useBulkWithdrawalAction(
+  buildUrl: (id: string) => string,
+  body?: (id: string) => Record<string, unknown>,
+) {
+  const qc = useQueryClient();
+  return useMutation<BulkWithdrawalResult, never, string[]>({
+    mutationFn: async (ids) => {
+      const result: BulkWithdrawalResult = { succeeded: [], failed: [] };
+      for (const id of ids) {
+        try {
+          await adminApiClient.post(buildUrl(id), { json: body?.(id) ?? {} }).json();
+          result.succeeded.push(id);
+        } catch (err) {
+          const parsed = await parseApiError(err);
+          result.failed.push({ id, message: parsed.errorMessage ?? 'Failed' });
+        }
+      }
+      return result;
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['admin', 'withdrawals'] }),
+  });
 }
