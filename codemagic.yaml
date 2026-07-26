@@ -8,7 +8,9 @@
 #    on @ohlify/api, @ohlify/core, @ohlify/mobile-ui via "workspace:*").
 #  - .npmrc sets node-linker=hoisted, which Metro requires. Do not override it.
 #  - apps/mobile/android and /ios are gitignored (managed Expo workflow), so CI
-#    must run `expo prebuild` to generate them before any native build.
+#    must run `expo prebuild` to generate them before any native build. Always
+#    pass --platform: a bare prebuild generates BOTH platforms and the Firebase
+#    plugin then fails on the missing iOS GoogleService-Info.plist.
 #  - google-services.json is gitignored and injected from a secure env var.
 
 definitions:
@@ -80,14 +82,18 @@ definitions:
           echo "sdkmanager not found; relying on pre-accepted licenses in the image"
         fi
 
-    - &prebuild
-      name: Expo prebuild (generate native android/ios projects)
+    - &prebuild_android
+      name: Expo prebuild (Android native project)
       script: |
         cd apps/mobile
-        # --clean guarantees a deterministic native project on every run; the
-        # android/ and ios/ dirs are gitignored so there is nothing to preserve.
+        # --platform android is REQUIRED, not an optimization. A bare
+        # `expo prebuild` also generates iOS, and the @react-native-firebase/app
+        # plugin then aborts with "Path to GoogleService-Info.plist is not
+        # defined" because app.config.ts only sets android.googleServicesFile
+        # (there is no iOS Firebase config yet).
+        # --clean gives a deterministic project each run (android/ is gitignored).
         # --no-install because pnpm already installed at the workspace root.
-        npx expo prebuild --clean --no-install
+        npx expo prebuild --clean --no-install --platform android
 
 workflows:
   # ---------------------------------------------------------------------------
@@ -140,7 +146,7 @@ workflows:
       - *write_google_services
       - *verify
       - *accept_sdk_licenses
-      - *prebuild
+      - *prebuild_android
       - name: Build Android APK
         script: |
           cd apps/mobile/android
@@ -202,27 +208,31 @@ workflows:
       cache_paths:
         - $HOME/.pnpm-store
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'apps/mobile'
-          - 'packages'
-          - 'pnpm-lock.yaml'
-          - 'codemagic.yaml'
+    # No `triggering:` block on purpose — this workflow is MANUAL-ONLY (start it
+    # from the Codemagic UI). It cannot succeed until two things exist:
+    #   1. apps/mobile/GoogleService-Info.plist (add an iOS app in the Firebase
+    #      console, then set ios.googleServicesFile in app.config.ts and inject
+    #      the plist here the same way google-services.json is injected).
+    #   2. An Apple Developer account + App Store Connect key in Codemagic.
+    # Auto-triggering it on every push to main would just email a failure each time.
     scripts:
+      - name: Check iOS prerequisites
+        script: |
+          # Fail fast with an actionable message instead of dying deep inside
+          # the Firebase config plugin ~8 steps later.
+          if ! grep -q "googleServicesFile" <(sed -n '/ios: {/,/},/p' apps/mobile/app.config.ts); then
+            echo "app.config.ts has no ios.googleServicesFile."
+            echo "iOS Firebase is not configured yet — see the comment above this workflow."
+            exit 1
+          fi
       - *install_deps
       - *write_env_file
       - *write_google_services
+      - name: Expo prebuild (iOS native project)
+        script: |
+          cd apps/mobile
+          npx expo prebuild --clean --no-install --platform ios
       - *verify
-      - *prebuild
       - name: Install CocoaPods dependencies
         script: |
           cd apps/mobile/ios
