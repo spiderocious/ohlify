@@ -66,8 +66,19 @@ definitions:
       name: Accept Android SDK licenses
       script: |
         # Expo/AGP resolve compileSdk 36 at prebuild time. Codemagic images ship
-        # the SDK but an unaccepted license silently fails the first build.
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        # the SDK but an unaccepted license fails the first build. On the macOS
+        # images sdkmanager is not on PATH, so look it up under the SDK root.
+        SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/programs/android-sdk-macosx}}"
+        SDKMANAGER="$(command -v sdkmanager || true)"
+        if [ -z "$SDKMANAGER" ]; then
+          SDKMANAGER="$(find "$SDK_ROOT" -name sdkmanager -type f 2>/dev/null | head -1)"
+        fi
+        if [ -n "$SDKMANAGER" ]; then
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          echo "Accepted Android SDK licenses via $SDKMANAGER"
+        else
+          echo "sdkmanager not found; relying on pre-accepted licenses in the image"
+        fi
 
     - &prebuild
       name: Expo prebuild (generate native android/ios projects)
@@ -85,7 +96,10 @@ workflows:
   # ---------------------------------------------------------------------------
   android-preview:
     name: Android Preview (APK)
-    instance_type: linux_x2
+    # mac_mini_m1 is the instance available on the free plan (linux_x2 and the
+    # larger macs require a paid plan). Android builds fine on macOS — it just
+    # burns the shared 500 free macOS minutes/month.
+    instance_type: mac_mini_m1
     max_build_duration: 60
     environment:
       node: 22.14.0
@@ -131,12 +145,16 @@ workflows:
         script: |
           cd apps/mobile/android
           # JDK 17 is REQUIRED. React Native 0.86 + AGP fail on JDK 21/26 with
-          # "Failed to transform core-for-system-modules.jar ... JdkImageTransform".
-          # `java: 17` in the environment block sets this, but Codemagic images
-          # ship several JDKs, so pin JAVA_HOME explicitly and assert it.
-          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
-          java -version
-          case "$(java -version 2>&1)" in
+          # "Failed to transform core-for-system-modules.jar ... JdkImageTransform"
+          # (reproduced locally on JDK 26; the same build passes on 17).
+          # This runs on a macOS instance, so resolve the JDK with java_home
+          # rather than `readlink -f`, which BSD coreutils does not support.
+          if [ -x /usr/libexec/java_home ]; then
+            export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
+          fi
+          echo "JAVA_HOME=$JAVA_HOME"
+          "$JAVA_HOME/bin/java" -version
+          case "$("$JAVA_HOME/bin/java" -version 2>&1)" in
             *'version "17'*) echo "JDK 17 confirmed" ;;
             *) echo "ERROR: expected JDK 17, aborting"; exit 1 ;;
           esac
@@ -164,7 +182,8 @@ workflows:
   # ---------------------------------------------------------------------------
   ios-preview:
     name: iOS Preview (IPA)
-    instance_type: mac_mini_m2
+    # Free-plan instance (mac_mini_m2 requires a paid plan).
+    instance_type: mac_mini_m1
     max_build_duration: 90
     environment:
       node: 22.14.0
