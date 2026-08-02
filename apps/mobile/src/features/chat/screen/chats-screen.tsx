@@ -70,9 +70,8 @@ export function ChatsScreen() {
     );
   }, [conversations, trimmedQuery]);
 
-  const unreadChats = conversations.filter((c) => c.unreadCount > 0).length;
+  const unreadChats = conversations.filter((c) => c.unreadCount > 0)?.length;
   const showSearch = conversations.length > 0 || trimmedQuery.length > 0;
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceDark }}>
       <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 }}>
@@ -99,11 +98,11 @@ export function ChatsScreen() {
 
       {conversationsQuery.isLoading ? (
         <ConversationListSkeleton />
-      ) : error && conversations.length === 0 ? (
+      ) : error && conversations?.length === 0 ? (
         <ChatErrorState message={apiErrorMessage(error)} isNetwork={error.isNetwork} onRetry={() => void conversationsQuery.refetch()} />
-      ) : conversations.length === 0 ? (
+      ) : conversations?.length === 0 ? (
         <ChatEmptyState onBrowse={() => navigation.navigate('Professionals', undefined)} />
-      ) : filtered.length === 0 ? (
+      ) : filtered?.length === 0 ? (
         <SearchEmptyState query={query.trim()} />
       ) : (
         <FlatList
@@ -122,7 +121,7 @@ export function ChatsScreen() {
               <View style={{ paddingVertical: 18, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
-            ) : !conversationsQuery.hasNextPage && !trimmedQuery && conversations.length >= PAGE_SIZE ? (
+            ) : !conversationsQuery.hasNextPage && !trimmedQuery && conversations?.length >= PAGE_SIZE ? (
               <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                 <AppText variant="bodySmall" color={colors.textSlate}>
                   You’re all caught up

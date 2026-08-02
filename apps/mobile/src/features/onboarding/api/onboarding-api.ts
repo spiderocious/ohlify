@@ -32,11 +32,19 @@ export const onboardingApi = {
     );
   },
 
-  saveClientKyc(params: { fullName?: string; description?: string; interests?: string[] }): Promise<KycProgress> {
+  saveClientKyc(params: {
+    fullName?: string;
+    description?: string;
+    interests?: string[];
+    clientSelfie?: { uploadKey: string };
+  }): Promise<KycProgress> {
     const body: Record<string, unknown> = {};
     if (params.fullName !== undefined) body.full_name = params.fullName;
     if (params.description !== undefined) body.description = params.description;
     if (params.interests !== undefined) body.interests = params.interests;
+    if (params.clientSelfie !== undefined) {
+      body.client_selfie = { upload_key: params.clientSelfie.uploadKey };
+    }
     return apiClient.patch('onboarding/kyc/client', body, {
       fromJson: (data) =>
         kycProgressFromJson(((data as Record<string, unknown>).kyc_progress as Record<string, unknown>) ?? {}),

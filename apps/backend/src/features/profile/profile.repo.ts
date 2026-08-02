@@ -1,5 +1,6 @@
 import type { UserRow } from '@features/auth/auth.types.js';
 import { pool } from '@lib/db/pool.js';
+import { listBanksCached } from '@lib/paystack/list-banks-cached.js';
 
 import type { BankAccountRow, NotificationPreferencesRow } from './profile.types.js';
 
@@ -153,14 +154,25 @@ export const findBankAccount = async (userId: string): Promise<BankAccountRow | 
   return res.rows[0] ?? null;
 };
 
+/**
+ * Looks a bank up by code against the cached Paystack list.
+ *
+ * Not a DB read: migration 0075 dropped the `banks` table and made Paystack's
+ * `/bank` (24h Redis cache) the source of truth, exactly as `banks.service`
+ * already does for `GET /banks` and `/banks/resolve`. This call site was missed
+ * in that refactor and kept querying the dropped table, so every
+ * `PUT /me/bank-account` threw `relation "banks" does not exist` — which closed
+ * professional onboarding entirely, since a bank account is a required KYC item.
+ *
+ * Inactive banks are filtered out here, preserving the old `is_active = TRUE`
+ * semantics.
+ */
 export const findBankByCode = async (
   bankCode: string,
 ): Promise<{ code: string; name: string } | null> => {
-  const res = await pool.query<{ code: string; name: string }>(
-    'SELECT code, name FROM banks WHERE code = $1 AND is_active = TRUE LIMIT 1',
-    [bankCode],
-  );
-  return res.rows[0] ?? null;
+  const { banks } = await listBanksCached();
+  const bank = banks.find((b) => b.code === bankCode && b.active);
+  return bank ? { code: bank.code, name: bank.name } : null;
 };
 
 export const upsertBankAccount = async (input: {

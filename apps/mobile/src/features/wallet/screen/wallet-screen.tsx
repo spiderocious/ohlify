@@ -25,6 +25,7 @@ import { queryKeys } from '@shared/api/query-keys';
 import { useLastRefreshed } from '@shared/api/use-refresh-state';
 import { RefreshStatusLine } from '@shared/parts/refresh-status-line';
 import { FundAmountForm } from './parts/fund-amount-form';
+import { TransactionDetailContent } from './parts/transaction-detail-content';
 import { TransactionHistoryList } from './parts/transaction-history-list';
 import { WalletBalanceCard } from './parts/wallet-balance-card';
 import { WalletStatsRow } from './parts/wallet-stats-row';
@@ -70,6 +71,22 @@ export function WalletScreen() {
     } finally {
       setIsRefreshing(false);
     }
+  }
+
+  function openTransactionDetail(tx: WalletTransaction) {
+    showCustomModal(
+      tx.title,
+      () => (
+        <TransactionDetailContent
+          amountKobo={tx.amountKobo}
+          createdAt={tx.createdAt}
+          {...(tx.relatedWithdrawalId === undefined
+            ? {}
+            : { withdrawalId: tx.relatedWithdrawalId })}
+        />
+      ),
+      { position: 'bottom' },
+    );
   }
 
   async function openFund() {
@@ -212,19 +229,7 @@ export function WalletScreen() {
         {isLoadingBalance ? (
           <TransactionHistorySkeleton />
         ) : (
-          <TransactionHistoryList
-            transactions={txItems}
-            onTap={(tx) =>
-              navigation.navigate('TransactionDetail', {
-                title: tx.title,
-                amountKobo: tx.amountKobo,
-                createdAt: tx.createdAt,
-                ...(tx.relatedWithdrawalId === undefined
-                  ? {}
-                  : { withdrawalId: tx.relatedWithdrawalId }),
-              })
-            }
-          />
+          <TransactionHistoryList transactions={txItems} onTap={openTransactionDetail} />
         )}
         {transactions.hasNextPage ? (
           <>

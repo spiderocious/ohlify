@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { AppPlatform } from './app-versions.types.js';
 
-const PLATFORMS = [AppPlatform.IOS, AppPlatform.ANDROID] as const;
+const PLATFORMS = [AppPlatform.IOS, AppPlatform.ANDROID, AppPlatform.WEB] as const;
 
 /** `major.minor.patch`, with an optional pre-release/build suffix the comparison ignores. */
 const VERSION_PATTERN = /^\d+(\.\d+){0,2}([-+][0-9A-Za-z.-]+)?$/;

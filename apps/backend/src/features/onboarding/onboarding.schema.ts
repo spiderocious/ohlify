@@ -12,14 +12,6 @@ export const SetRoleSchema = z.object({
   role: z.enum(['client', 'professional']),
 });
 
-export const ClientKycPatchSchema = z
-  .object({
-    full_name: z.string().min(2).max(120).optional(),
-    description: z.string().max(1000).optional(),
-    interests: z.array(z.string().min(1).max(60)).max(20).optional(),
-  })
-  .strict();
-
 // File-service key shape: <uuid>.<ext>. See api-docs/file-uploads-apis.md.
 const UPLOAD_KEY_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|webp|pdf)$/;
@@ -27,6 +19,19 @@ const UPLOAD_KEY_REGEX =
 const uploadKeySchema = z.string().regex(UPLOAD_KEY_REGEX, {
   message: 'Invalid upload key (expected <uuid>.<ext>).',
 });
+
+export const ClientSelfieSchema = z.object({
+  upload_key: uploadKeySchema,
+});
+
+export const ClientKycPatchSchema = z
+  .object({
+    full_name: z.string().min(2).max(120).optional(),
+    description: z.string().max(1000).optional(),
+    interests: z.array(z.string().min(1).max(60)).max(20).optional(),
+    client_selfie: ClientSelfieSchema.optional(),
+  })
+  .strict();
 
 export const IdentitySchema = z.object({
   type: z.enum(['nin', 'bvn', 'passport', 'drivers_license']),

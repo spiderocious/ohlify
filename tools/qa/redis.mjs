@@ -3,7 +3,9 @@
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const Redis = require('/Users/feranmi/codebases/2026/ohlify/backend/node_modules/.pnpm/ioredis@5.10.1/node_modules/ioredis/built/index.js');
+// Resolved by name, not by a pinned .pnpm path — a version bump used to break
+// every script in this folder at once.
+const Redis = require('ioredis');
 
 export const redis = new Redis.default(process.env.REDIS_URL ?? 'redis://localhost:6379');
 

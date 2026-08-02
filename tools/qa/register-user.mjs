@@ -53,12 +53,10 @@ if (r2.error) {
   process.exit(1);
 }
 
+// OTPs live in Redis alone since migration 0059 dropped `otp_codes`. Forcing
+// the known hash here keeps the script working even when USE_DEFAULT_OTP is off.
 const tokenHash = sha256(token);
 await redis.set(`otp:${tokenHash}`, KNOWN_HASH, 'KEEPTTL');
-await pool.query(
-  "UPDATE otp_codes SET code_hash = $1 WHERE subject_key = $2 AND consumed_at IS NULL",
-  [KNOWN_HASH, tokenHash],
-);
 
 await flushRl();
 const r3 = await json('/auth/register/verify', { body: { registration_token: token, otp: '123456' } });

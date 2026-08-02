@@ -1,5 +1,3 @@
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatedBalance, AppIcon, AppText, colors } from '@ohlify/mobile-ui';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
@@ -7,12 +5,8 @@ import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { queryKeys } from '@shared/api/query-keys';
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 
-import type { RootStackParamList } from '../../../app.navigation';
-import { walletApi } from '../api/wallet-api';
-import { formatKobo } from '../types/wallet-models';
-
-type RouteType = RouteProp<RootStackParamList, 'TransactionDetail'>;
-type RootNavigation = NativeStackNavigationProp<RootStackParamList>;
+import { walletApi } from '../../api/wallet-api';
+import { formatKobo } from '../../types/wallet-models';
 
 const STATUS_TINT: Record<string, string> = {
   completed: colors.success,
@@ -23,18 +17,34 @@ const STATUS_TINT: Record<string, string> = {
 };
 
 /**
+ * The sheet body caps its own height. `showCustomModal` only wraps content in
+ * a ScrollView for `position: 'fullscreen'`, so a long failure reason would
+ * otherwise push the rows off-screen with no way to reach them.
+ */
+const MAX_BODY_HEIGHT = 460;
+
+export interface TransactionDetailContentProps {
+  amountKobo: number;
+  createdAt: string;
+  withdrawalId?: string;
+}
+
+/**
  * What actually happened to one movement of money.
  *
  * The list row can only say "failed" — this is where the *reason* lives, which
  * for a rejected withdrawal is the only thing that tells the professional what
  * to fix. Withdrawals get a real timeline because they are the transactions
  * that sit in limbo; everything else resolves immediately and shows a summary.
+ *
+ * Lives in a bottom sheet: it is a glance at one row, not a place to navigate
+ * to, and the sheet keeps the list visible behind it.
  */
-export function TransactionDetailScreen() {
-  const route = useRoute<RouteType>();
-  const navigation = useNavigation<RootNavigation>();
-  const { withdrawalId, title, amountKobo, createdAt } = route.params;
-
+export function TransactionDetailContent({
+  amountKobo,
+  createdAt,
+  withdrawalId,
+}: TransactionDetailContentProps) {
   const withdrawal = useQuery({
     queryKey: queryKeys.withdrawal(withdrawalId ?? ''),
     queryFn: () => walletApi.getWithdrawal(withdrawalId ?? ''),
@@ -45,12 +55,13 @@ export function TransactionDetailScreen() {
   const status = data?.status ?? 'completed';
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }}>
-      <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-        <AppText variant="body" color={colors.textMuted}>
-          {title}
-        </AppText>
-        <View style={{ height: 8 }} />
+    <ScrollView
+      style={{ maxHeight: MAX_BODY_HEIGHT }}
+      contentContainerStyle={{ paddingBottom: 4 }}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* No title here — the sheet chrome already renders it. */}
+      <View style={{ alignItems: 'center', paddingBottom: 12 }}>
         <AnimatedBalance
           value={amountKobo}
           format={(v) => formatKobo(v)}
@@ -109,7 +120,7 @@ export function TransactionDetailScreen() {
             </View>
           ) : null}
 
-          <View style={{ height: 20 }} />
+          <View style={{ height: 8 }} />
           {data.bankName ? <DetailRow label="Bank" value={data.bankName} /> : null}
           {data.accountNumberMasked ? (
             <DetailRow label="Account" value={data.accountNumberMasked} />
@@ -122,21 +133,8 @@ export function TransactionDetailScreen() {
       ) : null}
 
       {withdrawalId === undefined ? (
-        <>
-          <View style={{ height: 20 }} />
-          <DetailRow label="Date" value={new Date(createdAt).toLocaleString()} />
-        </>
+        <DetailRow label="Date" value={new Date(createdAt).toLocaleString()} />
       ) : null}
-
-      <View style={{ height: 24 }} />
-      <AppText
-        variant="bodySmall"
-        color={colors.primary}
-        align="center"
-        onPress={() => navigation.goBack()}
-      >
-        Back to wallet
-      </AppText>
     </ScrollView>
   );
 }

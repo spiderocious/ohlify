@@ -122,6 +122,8 @@ export interface ClientKycPayload {
   full_name?: string;
   description?: string;
   interests?: string[];
+  /** File-service key for the client's own photo. Stored on `users`. */
+  client_selfie?: { upload_key: string };
 }
 
 // ── KYC spec ─────────────────────────────────────────────────────────────────
@@ -138,6 +140,7 @@ export type KycItemKey =
   | 'bank_account'
   | 'identity'
   | 'selfie'
+  | 'client_selfie'
   | 'rates';
 
 export type KycItemKind =

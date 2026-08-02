@@ -1,6 +1,7 @@
 export const AppPlatform = {
   IOS: 'ios',
   ANDROID: 'android',
+  WEB: 'web',
 } as const;
 
 export type AppPlatform = (typeof AppPlatform)[keyof typeof AppPlatform];

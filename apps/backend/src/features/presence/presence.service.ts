@@ -8,7 +8,7 @@ import { ServiceSuccess } from '@lib/service-result.js';
 
 import { PRESENCE_MESSAGES } from './presence.messages.js';
 import * as repo from './presence.repo.js';
-import { ReachabilityReason, type PresenceView } from './presence.types.js';
+import { ReachabilityDetail, ReachabilityReason, type PresenceView } from './presence.types.js';
 
 // A device token FCM has touched recently can wake a phone even with the app
 // killed, which is what makes ringing work at all. 30 days matches FCM's own
@@ -53,24 +53,40 @@ const unreachable = (professionalId: string, lastSeenAt: Date | null): PresenceV
  */
 export const resolveReachability = async (
   professionalId: string,
-): Promise<{ view: PresenceView; reason: ReachabilityReason }> => {
+): Promise<{ view: PresenceView; reason: ReachabilityReason; detail?: ReachabilityDetail }> => {
   const row = await repo.findPresence(professionalId);
 
   // A suspended, blocked, or un-approved pro is never reachable. kyc_status
   // survives a suspension, so both have to be checked. (BUGS.md D8.)
-  if (
-    !row ||
-    row.role !== 'professional' ||
-    row.status !== 'active' ||
-    row.kyc_status !== 'approved'
-  ) {
-    return { view: unreachable(professionalId, null), reason: ReachabilityReason.OFFLINE };
+  // All three collapse to one `offline` reason (and one message) on purpose —
+  // `detail` is what tells them apart after the fact.
+  if (!row || row.role !== 'professional') {
+    return {
+      view: unreachable(professionalId, null),
+      reason: ReachabilityReason.OFFLINE,
+      detail: ReachabilityDetail.NOT_PROFESSIONAL,
+    };
+  }
+  if (row.status !== 'active') {
+    return {
+      view: unreachable(professionalId, null),
+      reason: ReachabilityReason.OFFLINE,
+      detail: ReachabilityDetail.ACCOUNT_NOT_ACTIVE,
+    };
+  }
+  if (row.kyc_status !== 'approved') {
+    return {
+      view: unreachable(professionalId, null),
+      reason: ReachabilityReason.OFFLINE,
+      detail: ReachabilityDetail.KYC_NOT_APPROVED,
+    };
   }
 
   if (!(await hasFreshDeviceToken(professionalId))) {
     return {
       view: unreachable(professionalId, row.last_seen_at),
       reason: ReachabilityReason.UNREACHABLE,
+      detail: ReachabilityDetail.NO_DEVICE_TOKEN,
     };
   }
 
@@ -78,6 +94,7 @@ export const resolveReachability = async (
     return {
       view: { ...unreachable(professionalId, row.last_seen_at), online: true },
       reason: ReachabilityReason.NOT_ACCEPTING,
+      detail: ReachabilityDetail.NOT_ACCEPTING,
     };
   }
 
@@ -90,6 +107,7 @@ export const resolveReachability = async (
         dnd: true,
       },
       reason: ReachabilityReason.DND,
+      detail: ReachabilityDetail.DND,
     };
   }
 
@@ -103,6 +121,7 @@ export const resolveReachability = async (
         accepting_calls: true,
       },
       reason: ReachabilityReason.BUSY,
+      detail: ReachabilityDetail.BUSY,
     };
   }
 

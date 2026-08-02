@@ -11,8 +11,8 @@ import { KycRejectedScreen } from '@features/kyc-rejected/screen/kyc-rejected-sc
 import { RoleSelectionScreen } from '@features/role-selection/screen/role-selection-screen';
 import { CallDetailsScreen } from '@features/call-details/screen/call-details-screen';
 import { ChatThreadScreen } from '@features/chat/screen/chat-thread-screen';
-import { TransactionDetailScreen } from '@features/wallet/screen/transaction-detail-screen';
 import { IncomingCallScreen } from '@features/instant-calls/screen/incoming-call-screen';
+import { OutgoingCallScreen } from '@features/instant-calls/screen/outgoing-call-screen';
 import { navigationRef } from '@shared/navigation/navigation-ref';
 import { flushPushIntent } from '@shared/push/push-intents';
 import { CallRatingScreen } from '@features/call-session/screen/call-rating-screen';
@@ -93,6 +93,16 @@ export type RootStackParamList = {
     ringExpiresAt?: string;
     autoAccept?: boolean;
   };
+  // The dialing half of the ring. Owns POST /instant-calls, so the tap that
+  // starts a call has somewhere to show progress and somewhere to fail — the
+  // request cannot run any earlier, since CallSession needs the Agora creds
+  // only its response carries.
+  OutgoingCall: {
+    professionalId: string;
+    professionalName: string;
+    professionalAvatarUrl?: string;
+    callType: 'audio' | 'video';
+  };
   CallRating: { peerName: string; peerAvatarUrl?: string; callId?: string };
   Professional: { professionalId: string };
   Professionals: { focus?: boolean; category?: string } | undefined;
@@ -106,12 +116,6 @@ export type RootStackParamList = {
   // a professional profile) so the header shows the right person instantly,
   // before the context request resolves.
   ChatThread: { conversationId: string; peerName?: string; peerAvatarUrl?: string; draft?: string };
-  TransactionDetail: {
-    title: string;
-    amountKobo: number;
-    createdAt: string;
-    withdrawalId?: string;
-  };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -154,17 +158,13 @@ export function AppNavigation() {
         <RootStack.Screen name="Call" component={CallDetailsScreen} />
         <RootStack.Screen name="CallSession" component={CallSessionScreen} options={{ gestureEnabled: false }} />
         <RootStack.Screen name="IncomingCall" component={IncomingCallScreen} options={{ gestureEnabled: false, animation: 'fade' }} />
+        <RootStack.Screen name="OutgoingCall" component={OutgoingCallScreen} options={{ gestureEnabled: false, animation: 'fade' }} />
         <RootStack.Screen name="CallRating" component={CallRatingScreen} />
         <RootStack.Screen name="Professional" component={ProfessionalDetailsScreen} />
         <RootStack.Screen name="Professionals" component={ProfessionalSearchScreen} />
         <RootStack.Screen name="ScheduleCall">{() => <RouteNotBuiltYet name="ScheduleCall" />}</RootStack.Screen>
         <RootStack.Screen name="Notifications" component={NotificationsScreen} />
         <RootStack.Screen name="ChatThread" component={ChatThreadScreen} />
-        <RootStack.Screen
-          name="TransactionDetail"
-          component={TransactionDetailScreen}
-          options={{ title: 'Transaction' }}
-        />
       </RootStack.Navigator>
     </NavigationContainer>
   );

@@ -2,16 +2,14 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CallType } from '@ohlify/core';
 import { AppButton, AppText, colors, ProfessionalHeader, showToast } from '@ohlify/mobile-ui';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
-import { useIsOnline } from '@shared/api/use-refresh-state';
 import { fileService } from '@shared/services/file-service';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import { chatApi } from '@features/chat/api/chat-api';
-import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
 import {
   useProfessionalDetail,
   useProfessionalRates,
@@ -75,57 +73,25 @@ export function ProfessionalDetailsScreen() {
   const route = useRoute<RouteType>();
   const { professionalId } = route.params;
 
-  const isOnline = useIsOnline();
   const detailQuery = useProfessionalDetail(professionalId);
   const balances = useMyBalances();
   const ratesQuery = useProfessionalRates(professionalId);
   const reviewsQuery = useProfessionalReviews(professionalId);
-  const [calling, setCalling] = useState(false);
 
   const detail = detailQuery.data;
   const rates = ratesQuery.data ?? [];
   const reviews = reviewsQuery.data ?? [];
 
-  async function startCall(callType: CallType) {
-    if (calling) return;
-    // A cached balance is fine to READ and wrong to act on: the minutes shown
-    // may have been spent on another device, and the server preflight is the
-    // only thing that actually knows. Failing here beats starting a call that
-    // cannot be paid for.
-    if (!isOnline) {
-      showToast('You’re offline. Reconnect to start a call.', { type: 'error' });
-      return;
-    }
-    setCalling(true);
-    try {
-      const join = await instantCallsApi.start({ professionalId, callType });
-      // The pro's devices are ringing (server pushed) — go dial in the
-      // call session; the callee joining the channel completes the call.
-      navigation.navigate('CallSession', {
-        sessionId: join.callId,
-        kind: join.callType === 'video' ? 'video' : 'audio',
-        role: 'caller',
-        selfId: '',
-        peerId: professionalId,
-        peerName: detail?.name ?? 'Professional',
-        peerRole: 'professional',
-        peerAvatarUrl: detail?.avatarKey,
-        instant: {
-          appId: join.agoraAppId,
-          channel: join.agoraChannelName,
-          uid: join.agoraUid,
-          agoraToken: join.agoraToken,
-          expiresAt: join.expiresAt,
-          secondsAllotted: join.secondsAllotted,
-          professionalId,
-        },
-      });
-    } catch (e) {
-      const error = e instanceof ApiError ? e : ApiError.network;
-      showToast(error.reason === 'insufficient_balance' ? 'You don’t have minutes with this professional. Buy minutes to call.' : apiErrorMessage(error), { type: 'error' });
-    } finally {
-      setCalling(false);
-    }
+  function startCall(callType: CallType) {
+    // The dial screen owns the request itself — navigating first is what makes
+    // the tap feel immediate, and gives a failed call somewhere to be shown
+    // besides a toast on a screen the user has already left behind.
+    navigation.navigate('OutgoingCall', {
+      professionalId,
+      professionalName: detail?.name ?? 'Professional',
+      ...(detail?.avatarKey === undefined ? {} : { professionalAvatarUrl: detail.avatarKey }),
+      callType,
+    });
   }
 
   async function openChat() {
@@ -229,7 +195,6 @@ export function ProfessionalDetailsScreen() {
           onPress={() => showTalkToSheet(firstName, { options: talkOptions, onCall: startCall, onMessage: openChat })}
           radius={100}
           height={52}
-          isDisabled={calling}
           expanded
         />
       </View>

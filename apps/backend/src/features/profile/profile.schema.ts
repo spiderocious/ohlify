@@ -110,11 +110,14 @@ export const RegisterDeviceTokenSchema = z
   .object({
     token: z.string().min(8).max(4096),
     platform: z.enum(['ios', 'android', 'web']),
-    app_version: z.string().max(40).optional(),
-    // Best-effort telemetry — a client that omits these still registers.
-    device_name: z.string().max(128).optional(),
-    device_model: z.string().max(128).optional(),
-    os_version: z.string().max(32).optional(),
+    app_version: z.string().max(40).nullish(),
+    // Best-effort telemetry — a client that omits these still registers, and so
+    // does one that sends an explicit `null`. `deviceInfo()` on mobile nulls
+    // whatever `expo-device` cannot supply, so `.optional()` (undefined-only)
+    // rejected push registration outright on web, simulators, and stripped builds.
+    device_name: z.string().max(128).nullish(),
+    device_model: z.string().max(128).nullish(),
+    os_version: z.string().max(32).nullish(),
   })
   .strict();
 

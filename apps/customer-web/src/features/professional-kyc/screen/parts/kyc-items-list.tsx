@@ -36,6 +36,9 @@ const ICONS: Record<KycItemKey, LucideIcon> = {
   bank_account: IconBuilding,
   identity: IconIdCard,
   selfie: IconCamera,
+  // Client-only item — never rendered by this professional list, but the map
+  // is exhaustive over KycItemKey, so it needs an entry.
+  client_selfie: IconCamera,
   rates: IconTag,
 };
 

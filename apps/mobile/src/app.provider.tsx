@@ -8,6 +8,7 @@ import { AppState } from 'react-native';
 
 import { AuthSessionProvider } from '@features/auth/providers/auth-session-provider';
 import { PERSISTED_CACHE_KEY } from '@shared/api/cache-keys';
+import { queryKeys } from '@shared/api/query-keys';
 import { AppConfigProvider } from '@shared/providers/app-config-provider';
 import { RealtimeProvider } from '@shared/realtime/realtime-provider';
 
@@ -45,11 +46,49 @@ const queryClient = new QueryClient({
   },
 });
 
-const persister = createAsyncStoragePersister({
+const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: PERSISTED_CACHE_KEY,
   throttleTime: 2_000,
 });
+
+/**
+ * Keys read by useInfiniteQuery. Their cache entries MUST look like
+ * `{ pages, pageParams }` — InfiniteQueryObserver reads `data.pages.length`
+ * while mounting, so a flat entry throws before any component can guard.
+ *
+ * A first-run prefetch used to warm the conversations key with a plain
+ * prefetchQuery, storing the raw page instead (fixed in use-prefetch.ts).
+ * Installs that already ran it still have the flat entry on disk, and it
+ * rehydrates on every cold start — so it has to be rejected on the way in.
+ */
+const INFINITE_QUERY_KEYS: readonly (readonly string[])[] = [
+  queryKeys.conversations(),
+  queryKeys.callHistory(),
+  queryKeys.walletTransactions(),
+];
+
+const startsWith = (key: readonly unknown[], prefix: readonly string[]): boolean =>
+  prefix.every((segment, i) => key[i] === segment);
+
+function isCorruptInfiniteEntry(key: readonly unknown[], data: unknown): boolean {
+  if (!INFINITE_QUERY_KEYS.some((prefix) => startsWith(key, prefix))) return false;
+  if (typeof data !== 'object' || data === null) return true;
+  return !Array.isArray((data as { pages?: unknown }).pages);
+}
+
+/** Wraps the storage persister to sanitize what a cold start restores. */
+const persister: typeof asyncStoragePersister = {
+  ...asyncStoragePersister,
+  restoreClient: async () => {
+    const client = await asyncStoragePersister.restoreClient();
+    if (!client) return client;
+    const queries = client.clientState.queries.filter(
+      (query) => !isCorruptInfiniteEntry(query.queryKey, query.state.data),
+    );
+    return { ...client, clientState: { ...client.clientState, queries } };
+  },
+};
 
 /**
  * React Query's default online/focus detection is browser-shaped. Without

@@ -17,6 +17,7 @@ export type KycItemKey =
   | 'bankAccount'
   | 'identity'
   | 'selfie'
+  | 'clientSelfie'
   | 'rates'
   | 'unknown';
 
@@ -29,6 +30,7 @@ const KYC_ITEM_KEY_WIRE: Record<KycItemKey, string> = {
   bankAccount: 'bank_account',
   identity: 'identity',
   selfie: 'selfie',
+  clientSelfie: 'client_selfie',
   rates: 'rates',
   unknown: 'unknown',
 };

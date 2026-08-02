@@ -22,7 +22,6 @@ import { fileService } from '@shared/services/file-service';
 import { setFocusedConversation } from '@shared/push/focused-conversation';
 
 import type { RootStackParamList } from '../../../app.navigation';
-import { instantCallsApi } from '@features/instant-calls/api/instant-calls-api';
 import { chatApi } from '../api/chat-api';
 import { formatBubbleTime, formatDayLabel } from '../helpers/format-chat-time';
 import { CreditsBanner } from './parts/credits-banner';
@@ -186,34 +185,18 @@ export function ChatThreadScreen() {
     }
   }
 
-  async function call() {
+  function call() {
     const peer = context?.peerUserId;
     if (!peer) return;
-    try {
-      const join = await instantCallsApi.start({ professionalId: peer, callType: 'audio' });
-      navigation.navigate('CallSession', {
-        sessionId: join.callId,
-        kind: join.callType === 'video' ? 'video' : 'audio',
-        role: 'caller',
-        selfId: '',
-        peerId: peer,
-        peerName,
-        peerRole: 'professional',
-        peerAvatarUrl: initialPeerAvatar,
-        instant: {
-          appId: join.agoraAppId,
-          channel: join.agoraChannelName,
-          uid: join.agoraUid,
-          agoraToken: join.agoraToken,
-          expiresAt: join.expiresAt,
-          secondsAllotted: join.secondsAllotted,
-          professionalId: peer,
-        },
-      });
-    } catch (e) {
-      const error = e instanceof ApiError ? e : ApiError.network;
-      toastError(error.reason === 'insufficient_balance' ? 'You don’t have minutes with this professional. Buy minutes to call.' : apiErrorMessage(error));
-    }
+    // Navigate, don't dial: the outgoing screen owns the request. That also
+    // retires the double-tap here — the header icon had no disabled state, so
+    // two quick taps used to fire two POSTs.
+    navigation.navigate('OutgoingCall', {
+      professionalId: peer,
+      professionalName: peerName,
+      ...(initialPeerAvatar === undefined ? {} : { professionalAvatarUrl: initialPeerAvatar }),
+      callType: 'audio',
+    });
   }
 
   async function propose() {

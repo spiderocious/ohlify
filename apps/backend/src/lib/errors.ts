@@ -7,6 +7,12 @@ export class AppError extends Error {
   /** Optional i18n key the error handler resolves into the user-facing `errorMessage`. */
   public readonly messageKey?: MessageKey;
   /**
+   * Which branch produced this error, when `code` alone is too coarse to say.
+   * Rendered as the envelope's `rejectionReason` — diagnostic only, never
+   * something a client is expected to branch on.
+   */
+  public readonly rejectionReason?: string;
+  /**
    * Verbatim user-facing text, bypassing the message registry.
    *
    * Reserved for copy an OPERATOR authored at runtime — a maintenance notice,
@@ -24,11 +30,13 @@ export class AppError extends Error {
     public readonly fieldErrors?: Record<string, string[]>,
     retryAfter?: number,
     messageKey?: MessageKey,
+    rejectionReason?: string,
   ) {
     super(message);
     this.name = 'AppError';
     if (retryAfter !== undefined) this.retryAfter = retryAfter;
     if (messageKey !== undefined) this.messageKey = messageKey;
+    if (rejectionReason !== undefined) this.rejectionReason = rejectionReason;
     Error.captureStackTrace(this, this.constructor);
   }
 }

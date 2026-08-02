@@ -3,7 +3,11 @@ import * as eventsRepo from '@features/call-session-events/call-session-events.r
 import { recordCallEvent } from '@features/chat/chat.service.js';
 import { CallEventOutcome } from '@features/chat/chat.types.js';
 import { DurationEvent } from '@features/call-session-events/duration.js';
-import { resolveReachability, ReachabilityReason } from '@features/presence/index.js';
+import {
+  resolveReachability,
+  ReachabilityReason,
+  type ReachabilityDetail,
+} from '@features/presence/index.js';
 import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { agoraUidForUserId, issueAgoraRtcToken } from '@lib/agora/index.js';
 
@@ -82,8 +86,22 @@ const REASON_MESSAGES: Record<ReachabilityReason, MessageKey> = {
   [ReachabilityReason.BUSY]: INSTANT_CALL_MESSAGES.BUSY,
 };
 
-const reasonToError = (reason: ReachabilityReason): ServiceError =>
-  new ServiceError('professional_unavailable', REASON_MESSAGES[reason], 409);
+/**
+ * `professional_unavailable` covers eight distinct outcomes — five preflight
+ * branches, three of which used to hide behind one `offline` message, plus the
+ * lost-race path below. `rejectionReason` carries which one it actually was.
+ */
+const RACE_LOST_DETAIL = 'race_lost';
+
+const reasonToError = (reason: ReachabilityReason, detail?: ReachabilityDetail): ServiceError =>
+  new ServiceError(
+    'professional_unavailable',
+    REASON_MESSAGES[reason],
+    409,
+    undefined,
+    undefined,
+    detail,
+  );
 
 // Start an instant call: run the preflight (minutes / online / DnD), then
 // create the ringing call and return the caller's join credentials.
@@ -99,9 +117,9 @@ export const startCall = async (dto: StartCallDto, callerUserId: string) => {
   }
 
   // Gates 2 + 3: online + accepting + not in a DnD block.
-  const { reason } = await resolveReachability(dto.professional_id);
+  const { reason, detail } = await resolveReachability(dto.professional_id);
   if (reason !== ReachabilityReason.OK) {
-    return reasonToError(reason);
+    return reasonToError(reason, detail);
   }
 
   // Caller identity rides in the push payload so the callee's ring UI can
@@ -161,7 +179,17 @@ export const startCall = async (dto: StartCallDto, callerUserId: string) => {
     );
   } catch (err) {
     if (isUniqueViolation(err)) {
-      return new ServiceError('professional_unavailable', INSTANT_CALL_MESSAGES.BUSY, 409);
+      // Distinct from a preflight `busy`: nothing was wrong with the pro when
+      // we checked — another caller simply won the gap before our insert. Same
+      // copy for the user, very different signal for us.
+      return new ServiceError(
+        'professional_unavailable',
+        INSTANT_CALL_MESSAGES.BUSY,
+        409,
+        undefined,
+        undefined,
+        RACE_LOST_DETAIL,
+      );
     }
     throw err;
   }

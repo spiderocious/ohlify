@@ -7,15 +7,21 @@ import { z } from 'zod';
  * undeclared block would never reach `requestMeta`. Everything is optional and
  * loosely typed on purpose — telemetry must never be why a login is rejected.
  */
+// `.nullish()`, not `.optional()`: the mobile client sends an explicit `null`
+// for anything `expo-device` cannot supply — which is every field on web, on a
+// simulator, and on a stripped build. `.optional()` accepts only `undefined`,
+// so those clients were rejected with a 400 and no way to sign in at all.
+// `requestMeta` already drops non-strings (`request-meta.ts:20`); this just
+// stops the validator from failing the request before that runs.
 export const DeviceInfoSchema = z
   .object({
-    platform: z.string().max(16).optional(),
-    app_version: z.string().max(32).optional(),
-    device_name: z.string().max(128).optional(),
-    device_model: z.string().max(128).optional(),
-    os_version: z.string().max(32).optional(),
+    platform: z.string().max(16).nullish(),
+    app_version: z.string().max(32).nullish(),
+    device_name: z.string().max(128).nullish(),
+    device_model: z.string().max(128).nullish(),
+    os_version: z.string().max(32).nullish(),
   })
-  .optional();
+  .nullish();
 
 const passwordPolicy = z
   .string()

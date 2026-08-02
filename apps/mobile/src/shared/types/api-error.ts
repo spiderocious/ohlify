@@ -16,6 +16,15 @@ export class ApiError extends Error {
   readonly errorCode: number;
   /** Stable string identity to branch on (e.g. 'invalid_otp', 'cannot_book_self'). */
   readonly reason: string;
+  /**
+   * Which branch produced the error, where `reason` covers several distinct
+   * causes (e.g. `professional_unavailable` → `dnd` / `busy` / `race_lost`).
+   *
+   * Diagnostic, not contract: the backend may add or rename values at any
+   * time, so treat it as a hint for better copy and never as the sole basis
+   * for control flow. Always keep a `reason`-level fallback.
+   */
+  readonly rejectionReason?: string;
   readonly fieldErrors: Record<string, string[]>;
   readonly retryAfterSeconds?: number;
 
@@ -24,6 +33,7 @@ export class ApiError extends Error {
     errorCode: number;
     reason: string;
     message: string;
+    rejectionReason?: string;
     fieldErrors?: Record<string, string[]>;
     retryAfterSeconds?: number;
   }) {
@@ -32,6 +42,7 @@ export class ApiError extends Error {
     this.statusCode = params.statusCode;
     this.errorCode = params.errorCode;
     this.reason = params.reason;
+    this.rejectionReason = params.rejectionReason;
     this.fieldErrors = params.fieldErrors ?? {};
     this.retryAfterSeconds = params.retryAfterSeconds;
   }
@@ -76,6 +87,7 @@ export class ApiError extends Error {
     let errorCode = 1009;
     let reason = 'internal';
     let message = 'An unexpected error occurred.';
+    let rejectionReason: string | undefined;
     let fieldErrors: Record<string, string[]> = {};
 
     if (params.body && typeof params.body === 'object') {
@@ -83,6 +95,7 @@ export class ApiError extends Error {
       if (typeof b.errorCode === 'number') errorCode = b.errorCode;
       if (typeof b.reason === 'string') reason = b.reason;
       if (typeof b.errorMessage === 'string') message = b.errorMessage;
+      if (typeof b.rejectionReason === 'string') rejectionReason = b.rejectionReason;
       if (b.fieldErrors && typeof b.fieldErrors === 'object') {
         fieldErrors = Object.fromEntries(
           Object.entries(b.fieldErrors as Record<string, unknown>).map(([key, value]) => [
@@ -98,6 +111,7 @@ export class ApiError extends Error {
       errorCode,
       reason,
       message,
+      rejectionReason,
       fieldErrors,
       retryAfterSeconds: params.retryAfterSeconds,
     });

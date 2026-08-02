@@ -123,6 +123,10 @@ export const KNOWN_KYC_ITEM_KEYS = [
   'bank_account',
   'identity',
   'selfie',
+  // The client-side photo. Deliberately NOT `selfie`: that one lives on
+  // kyc_submissions and only means something next to an ID document, which
+  // clients never submit. This one is a standalone column on `users`.
+  'client_selfie',
   'rates',
 ] as const;
 export type KycItemKey = (typeof KNOWN_KYC_ITEM_KEYS)[number];

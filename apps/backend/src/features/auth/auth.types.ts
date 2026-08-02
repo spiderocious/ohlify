@@ -27,6 +27,11 @@ export interface UserRow {
   handle: string | null;
   handle_changed_at: Date | null;
   avatar_url: string | null;
+  /**
+   * The client-side KYC photo. Separate from the professional `selfie`, which
+   * lives on kyc_submissions and only means something beside an ID document.
+   */
+  selfie_upload_key: string | null;
   cover_photo_url: string | null;
   occupation: string | null;
   description: string | null;

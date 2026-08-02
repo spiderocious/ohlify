@@ -150,6 +150,13 @@ const buildItemSpec = (config: KycItemConfig, user: UserRow, agg: KycAggregates)
       const value: SelfieValue = { upload_key: agg.identity.selfie_upload_key };
       return { ...base, value, complete: true };
     }
+    case 'client_selfie': {
+      // Reads `users`, not kyc_submissions — a client has no submission row to
+      // read from, which is exactly why this key is separate from `selfie`.
+      if (!user.selfie_upload_key) return base;
+      const value: SelfieValue = { upload_key: user.selfie_upload_key };
+      return { ...base, value, complete: true };
+    }
     case 'rates': {
       if (agg.rates.length === 0) return base;
       const value: RateValue[] = agg.rates.map((r) => ({

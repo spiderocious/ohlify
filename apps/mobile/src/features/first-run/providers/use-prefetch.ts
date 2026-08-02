@@ -23,6 +23,11 @@ const STEPS = [
     label: 'Fetching your chats',
     key: queryKeys.conversations(),
     fetch: () => chatApi.listConversations({ limit: 20 }),
+    // The Chats tab reads this key with useInfiniteQuery, which stores
+    // `{ pages, pageParams }`. Warming it with a plain prefetchQuery would
+    // write the raw page instead, and the observer would then throw on
+    // `data.pages.length` the first time the tab mounts.
+    infinite: true,
   },
   {
     label: 'Almost there',
@@ -58,7 +63,15 @@ export function usePrefetch(isAuthenticated: boolean): PrefetchState {
   const run = useCallback(async () => {
     for (const step of STEPS) {
       try {
-        await queryClient.prefetchQuery({ queryKey: [...step.key], queryFn: step.fetch });
+        if ('infinite' in step && step.infinite) {
+          await queryClient.prefetchInfiniteQuery({
+            queryKey: [...step.key],
+            queryFn: step.fetch,
+            initialPageParam: undefined as string | undefined,
+          });
+        } else {
+          await queryClient.prefetchQuery({ queryKey: [...step.key], queryFn: step.fetch });
+        }
       } catch {
         // Best-effort: the screen will fetch it again on mount.
       }

@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { Env } from '@shared/config/env';
@@ -176,6 +177,27 @@ export const CallAppWebView = forwardRef<CallAppWebViewHandle, CallAppWebViewPro
       allowsInlineMediaPlayback
       javaScriptEnabled
       domStorageEnabled
+      // Fetching the call-app bundle takes long enough to notice, and the
+      // default is an undifferentiated black rectangle between the dial screen
+      // and the call-app's own first paint.
+      startInLoadingState
+      renderLoading={renderWebViewLoading}
     />
   );
 });
+
+/** Bridges the gap between the dial screen and the call-app's first paint. */
+function renderWebViewLoading() {
+  return (
+    <View
+      style={{
+        ...StyleSheet.absoluteFill,
+        backgroundColor: '#111122',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <ActivityIndicator size="large" color="#FFFFFF" />
+    </View>
+  );
+}

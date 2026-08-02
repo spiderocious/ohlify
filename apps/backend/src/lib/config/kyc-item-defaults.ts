@@ -139,6 +139,15 @@ export const DEFAULT_CLIENT_KYC_ITEMS: KycItemConfig[] = [
       { rule: 'max_items', value: 8 },
     ],
   },
+  {
+    key: 'client_selfie',
+    kind: 'selfie',
+    label: 'Your photo',
+    subtitle: 'Add a clear photo of yourself so professionals know who they’re talking to.',
+    required: true,
+    enabled: true,
+    validation: [{ rule: 'allowed_extensions', value: ['jpg', 'jpeg', 'png'] }],
+  },
 ];
 
 /**

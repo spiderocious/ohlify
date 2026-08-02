@@ -19,7 +19,10 @@ export const errorHandler = (
 
   if (err instanceof AppError) {
     if (err.status >= 500) {
-      logger.error({ err, requestId, reason: err.code }, err.message);
+      logger.error(
+        { err, requestId, reason: err.code, rejectionReason: err.rejectionReason },
+        err.message,
+      );
     }
     if (err.retryAfter !== undefined) {
       res.setHeader('Retry-After', err.retryAfter);
@@ -31,6 +34,7 @@ export const errorHandler = (
       // single reviewable place.
       errorMessage: err.publicMessage ?? resolveErrorMessage(err.code, err.messageKey),
       reason: err.code,
+      ...(err.rejectionReason !== undefined ? { rejectionReason: err.rejectionReason } : {}),
       ...(err.fieldErrors !== undefined ? { fieldErrors: err.fieldErrors } : {}),
     });
     return;

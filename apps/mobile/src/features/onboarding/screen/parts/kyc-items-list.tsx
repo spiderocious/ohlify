@@ -47,6 +47,7 @@ const ICON_FOR_KEY: Record<KycItemKey, AppIconName> = {
   bankAccount: 'building',
   identity: 'badge',
   selfie: 'cameraAlt',
+  clientSelfie: 'cameraAlt',
   rates: 'payments',
   unknown: 'info',
 };
@@ -274,12 +275,23 @@ export function KycItemsList({ role, items, resubmitKeys }: KycItemsListProps) {
   }
 
   function openSelfieModal(item: KycItemSpec) {
+    // Two items share `kind: 'selfie'` and nothing else. The client's photo is
+    // a standalone field on their own record; the professional's only means
+    // something beside the ID document it is checked against — which is why
+    // only that one can fail with `identity_required_first`.
+    const isClientPhoto = item.key === 'clientSelfie';
     const handle = showCustomModal(
       item.label,
       (dismiss) => (
         <SelfieModalContent
           initialKey={kycSelfieValue(item)?.uploadKey}
           onSubmit={async (key) => {
+            if (isClientPhoto) {
+              await onboardingApi.saveClientKyc({ clientSelfie: { uploadKey: key } });
+              await refetch();
+              dismiss();
+              return;
+            }
             try {
               await onboardingApi.saveProfessionalKyc({ selfie: { upload_key: key } });
               await refetch();
@@ -299,9 +311,9 @@ export function KycItemsList({ role, items, resubmitKeys }: KycItemsListProps) {
     );
     handle.onDismissed.then(async () => {
       await refetch();
-      const fresh = itemFor('selfie');
+      const fresh = itemFor(item.key);
       if (fresh?.complete === true && item.complete === false) {
-        showToast('Selfie saved', { type: 'success' });
+        showToast(isClientPhoto ? 'Photo saved' : 'Selfie saved', { type: 'success' });
       }
     });
   }

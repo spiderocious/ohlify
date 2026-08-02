@@ -233,6 +233,7 @@ const collectClientTouchedKeys = (dto: ClientKycPatchDto): KycItemKey[] => {
   if (dto.full_name !== undefined) out.push('full_name');
   if (dto.description !== undefined) out.push('description');
   if (dto.interests !== undefined) out.push('interests');
+  if (dto.client_selfie !== undefined) out.push('client_selfie');
   return out;
 };
 
@@ -265,8 +266,20 @@ export const patchClientKyc = async (dto: ClientKycPatchDto, userId: string) => 
   if (dto.full_name !== undefined) updates['full_name'] = dto.full_name;
   if (dto.description !== undefined) updates['description'] = dto.description;
   if (dto.interests !== undefined) updates['interests'] = dto.interests;
+  // Straight onto `users` — unlike the professional selfie, there is no
+  // kyc_submissions row to hang it off, and a client never has one.
+  if (dto.client_selfie !== undefined) {
+    updates['selfie_upload_key'] = dto.client_selfie.upload_key;
+  }
 
   const updated = (await repo.updateUserFields(userId, updates)) ?? user;
+
+  // The whole point of the photo is that a professional can see who they are
+  // talking to, so it doubles as the avatar until the client picks one. Never
+  // overwrites: `setAvatarFromSelfieIfNull` only fills a null.
+  if (dto.client_selfie !== undefined) {
+    await repo.setAvatarFromSelfieIfNull(userId, dto.client_selfie.upload_key);
+  }
 
   // If the user is mid-resubmit, mark the touched keys as acknowledged
   // on the rejected submission row. The complete endpoint reads this

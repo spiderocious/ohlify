@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 /**
  * Local app lock.
@@ -14,6 +16,25 @@ import * as SecureStore from 'expo-secure-store';
 const PIN_HASH_KEY = 'ohlify.applock.pin';
 const PIN_SALT_KEY = 'ohlify.applock.salt';
 const BIOMETRICS_KEY = 'ohlify.applock.biometrics';
+
+/**
+ * expo-secure-store has no web implementation — its web module is an empty
+ * stub, so calling it throws `getValueWithKeyAsync is not a function` and takes
+ * the whole provider tree down before anything renders. Web falls back to
+ * AsyncStorage (localStorage there), exactly as `shared/services/token-service.ts`
+ * already does. The lock is a screen guard, not a secret store, and web is a
+ * development/QA target rather than a shipped surface.
+ */
+const isWeb = Platform.OS === 'web';
+
+const secureGet = (key: string): Promise<string | null> =>
+  isWeb ? AsyncStorage.getItem(key) : SecureStore.getItemAsync(key);
+
+const secureSet = (key: string, value: string): Promise<void> =>
+  isWeb ? AsyncStorage.setItem(key, value) : SecureStore.setItemAsync(key, value);
+
+const secureDelete = (key: string): Promise<void> =>
+  isWeb ? AsyncStorage.removeItem(key) : SecureStore.deleteItemAsync(key);
 
 const randomSalt = (): string =>
   Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -39,22 +60,22 @@ async function digest(pin: string, salt: string): Promise<string | null> {
 
 export const appLockService = {
   async isPinSet(): Promise<boolean> {
-    return (await SecureStore.getItemAsync(PIN_HASH_KEY)) !== null;
+    return (await secureGet(PIN_HASH_KEY)) !== null;
   },
 
   async setPin(pin: string): Promise<boolean> {
     const salt = randomSalt();
     const hash = await digest(pin, salt);
     if (!hash) return false;
-    await SecureStore.setItemAsync(PIN_SALT_KEY, salt);
-    await SecureStore.setItemAsync(PIN_HASH_KEY, hash);
+    await secureSet(PIN_SALT_KEY, salt);
+    await secureSet(PIN_HASH_KEY, hash);
     return true;
   },
 
   async verifyPin(pin: string): Promise<boolean> {
     const [salt, stored] = await Promise.all([
-      SecureStore.getItemAsync(PIN_SALT_KEY),
-      SecureStore.getItemAsync(PIN_HASH_KEY),
+      secureGet(PIN_SALT_KEY),
+      secureGet(PIN_HASH_KEY),
     ]);
     if (!salt || !stored) return false;
     const hash = await digest(pin, salt);
@@ -64,9 +85,9 @@ export const appLockService = {
   /** Clears everything. Called on sign-out so the next user is not locked out. */
   async clear(): Promise<void> {
     await Promise.all([
-      SecureStore.deleteItemAsync(PIN_HASH_KEY),
-      SecureStore.deleteItemAsync(PIN_SALT_KEY),
-      SecureStore.deleteItemAsync(BIOMETRICS_KEY),
+      secureDelete(PIN_HASH_KEY),
+      secureDelete(PIN_SALT_KEY),
+      secureDelete(BIOMETRICS_KEY),
     ]);
   },
 
@@ -79,7 +100,7 @@ export const appLockService = {
   },
 
   async isBiometricsEnabled(): Promise<boolean> {
-    return (await SecureStore.getItemAsync(BIOMETRICS_KEY)) === 'true';
+    return (await secureGet(BIOMETRICS_KEY)) === 'true';
   },
 
   /**
@@ -91,7 +112,7 @@ export const appLockService = {
    */
   async setBiometricsEnabled(enabled: boolean): Promise<boolean> {
     if (enabled && !(await this.isPinSet())) return false;
-    await SecureStore.setItemAsync(BIOMETRICS_KEY, enabled ? 'true' : 'false');
+    await secureSet(BIOMETRICS_KEY, enabled ? 'true' : 'false');
     return true;
   },
 

@@ -23,10 +23,15 @@ export type SeverityBand = (typeof SeverityBand)[keyof typeof SeverityBand];
 
 /**
  * Flat error envelope (see docs/error-envelope-redesign.md):
- *   { errorCode, errorMessage, reason, fieldErrors? }
+ *   { errorCode, errorMessage, reason, rejectionReason?, fieldErrors? }
  * - errorCode:    numeric severity band.
  * - errorMessage: resolved, user-displayable text.
  * - reason:       stable string identity to branch on.
+ * - rejectionReason: which branch rejected the request, where `reason` covers
+ *                 several distinct causes (e.g. `professional_unavailable` →
+ *                 `dnd` / `busy` / `race_lost`). Diagnostic only: values may be
+ *                 added or renamed at any time, so log it, show it to support —
+ *                 do NOT branch on it.
  * - fieldErrors:  present only for validation errors; the backend sends ONE
  *                 field at a time (the first invalid field), so callers can read
  *                 the single entry directly.
@@ -35,6 +40,7 @@ export interface ApiError {
   errorCode: SeverityBand;
   errorMessage: string;
   reason: string;
+  rejectionReason?: string;
   fieldErrors?: Record<string, string[]>;
 }
 

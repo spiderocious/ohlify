@@ -4,7 +4,9 @@
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const pg = require('/Users/feranmi/codebases/2026/ohlify/backend/node_modules/.pnpm/pg@8.20.0/node_modules/pg/lib/index.js');
+// Resolved by name, not by a pinned .pnpm path — a version bump used to break
+// every script in this folder at once.
+const pg = require('pg');
 
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL ?? 'postgresql://feranmi@localhost:5432/ohlify',
