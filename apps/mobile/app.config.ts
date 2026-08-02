@@ -84,6 +84,10 @@ const config: ExpoConfig = {
       },
     ],
     '@react-native-community/datetimepicker',
+    // Notifee ships its Android artifact inside the npm package instead of a
+    // public Maven repo, and provides no config plugin. Without this the
+    // generated build.gradle cannot resolve `app.notifee:core`.
+    './plugins/with-notifee-repo',
   ],
   extra: {
     eas: {

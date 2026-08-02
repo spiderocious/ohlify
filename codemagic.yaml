@@ -34,6 +34,22 @@ definitions:
         # time. They are public by definition (extractable from the APK), but
         # they live in a Codemagic variable group so changing an API URL does
         # not require a commit.
+        # Fail here, not on the user's phone. `Env.requireEnv` throws during
+        # module evaluation — before React mounts, so no error boundary can
+        # catch it — and the app dies with SIGABRT on launch. A build that
+        # cannot possibly run must not go green.
+        missing=""
+        for key in EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_FILE_SERVICE_URL; do
+          eval "value=\$$key"
+          [ -z "$value" ] && missing="$missing $key"
+        done
+        if [ -n "$missing" ]; then
+          echo "✗ Required build-time vars are empty or unset:$missing"
+          echo "  These live in the 'ohlify_mobile_public' variable group —"
+          echo "  check it is attached to this workflow and populated."
+          exit 1
+        fi
+
         cat > apps/mobile/.env <<EOF
         EXPO_PUBLIC_API_BASE_URL=$EXPO_PUBLIC_API_BASE_URL
         EXPO_PUBLIC_FILE_SERVICE_URL=$EXPO_PUBLIC_FILE_SERVICE_URL
@@ -41,8 +57,15 @@ definitions:
         EXPO_PUBLIC_USE_MOCKS=$EXPO_PUBLIC_USE_MOCKS
         EXPO_PUBLIC_PAYSTACK_CALLBACK_URL=$EXPO_PUBLIC_PAYSTACK_CALLBACK_URL
         EXPO_PUBLIC_CALL_APP_URL=$EXPO_PUBLIC_CALL_APP_URL
+        EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
         EOF
-        echo "Wrote apps/mobile/.env with $(grep -c . apps/mobile/.env) vars"
+        # `grep -c .` counted `KEY=` with an empty value as a line, so it could
+        # never detect an empty var — it reported "6 vars" for the build that
+        # crashed every device. Report set/EMPTY per key instead.
+        echo "Wrote apps/mobile/.env:"
+        while IFS='=' read -r key value; do
+          [ -n "$key" ] && echo "  $key=$([ -n "$value" ] && echo '<set>' || echo '<EMPTY>')"
+        done < apps/mobile/.env
 
     - &write_google_services
       name: Restore google-services.json (gitignored; FCM client config)
