@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
+import { useKeyboardInset } from '../../hooks/use-keyboard-inset';
 import { AppIcon } from '../../icons/app-icons';
 import { colors } from '../../theme/colors';
 import { AppTag } from '../app-tag/app-tag';
@@ -40,6 +41,7 @@ export function AppMultiSelectDropdown({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [otherText, setOtherText] = useState('');
+  const bottomInset = useKeyboardInset();
 
   const filtered =
     search.length === 0
@@ -126,6 +128,10 @@ export function AppMultiSelectDropdown({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
+            // Keeps the panel (search field and "Other" free-text input
+            // included) above the keyboard, and above the navigation bar when
+            // the keyboard is closed.
+            paddingBottom: 24 + bottomInset,
           }}
         >
           <Pressable

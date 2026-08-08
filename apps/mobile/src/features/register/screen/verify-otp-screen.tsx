@@ -12,7 +12,6 @@ import {
 } from '@ohlify/mobile-ui';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useRegisterFlow } from '@features/auth/providers/register-flow-provider';
 import { IMAGES } from '@shared/config/images';
@@ -139,7 +138,7 @@ export function VerifyOtpScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <SafeAreaView edges={['top']} className="flex-1">
+      <View className="flex-1">
         <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 16, paddingBottom: 24 }}>
           <AppIconButton
             icon={<AppIcon name="back" size={18} color={colors.textPrimary} />}
@@ -193,7 +192,7 @@ export function VerifyOtpScreen() {
             </Pressable>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       <ScreenContinueBar
         label={submitting ? 'Verifying…' : 'Continue'}

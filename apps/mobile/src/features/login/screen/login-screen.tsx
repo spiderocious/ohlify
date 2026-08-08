@@ -11,7 +11,6 @@ import {
 } from '@ohlify/mobile-ui';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthSession } from '@features/auth/providers/auth-session-provider';
 import type { OnboardingStep, AuthSession } from '@features/auth/types/auth-models';
@@ -87,7 +86,7 @@ export function LoginScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <SafeAreaView edges={['top']} className="flex-1">
+      <View className="flex-1">
         <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 16, paddingBottom: 24 }}>
           <AppIconButton
             icon={<AppIcon name="back" size={18} color={colors.textPrimary} />}
@@ -162,7 +161,7 @@ export function LoginScreen() {
             </Text>
           </Pressable>
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       <ScreenContinueBar
         label={submitting ? 'Logging in…' : 'Login'}

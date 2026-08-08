@@ -1,7 +1,6 @@
 import { AppText, colors } from '@ohlify/mobile-ui';
 import { useEffect, useRef } from 'react';
 import { Animated, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 export interface SetupScreenProps {
   /** 0–1, driven by prefetches that actually completed. */
@@ -27,7 +26,7 @@ export function SetupScreen({ progress, label }: SetupScreenProps) {
   }, [progress, width]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
+    <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
         <AppText variant="title" weight="800" color={colors.textJet} align="center">
           Setting things up
@@ -65,6 +64,6 @@ export function SetupScreen({ progress, label }: SetupScreenProps) {
           {label}
         </AppText>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

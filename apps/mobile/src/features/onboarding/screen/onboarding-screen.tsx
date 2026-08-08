@@ -3,7 +3,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppButton, colors } from '@ohlify/mobile-ui';
 import { useEffect, useRef, useState } from 'react';
 import { Dimensions, ScrollView, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from '../../../app.navigation';
 import { OnboardingSlide, type OnboardingSlideData } from './parts/onboarding-slide';
@@ -61,7 +60,7 @@ export function OnboardingScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <View className="flex-1 bg-white">
       <View style={{ paddingTop: 20, paddingHorizontal: 20 }}>
         <SlideIndicator count={SLIDES.length} current={currentPage} />
       </View>
@@ -103,7 +102,7 @@ export function OnboardingScreen() {
           onPress={() => navigation.navigate('Auth', { screen: 'Login' })}
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

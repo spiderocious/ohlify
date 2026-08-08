@@ -3,7 +3,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppButton, AppIcon, AppIconButton, AppText, colors, KycProgressHeader, showToast } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthSession } from '@features/auth/providers/auth-session-provider';
 import { onboardingApi } from '@features/onboarding/api/onboarding-api';
@@ -91,7 +90,7 @@ export function ClientKycScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
           <AppIconButton
             icon={<AppIcon name="back" size={18} color={colors.textJet} />}
@@ -121,7 +120,7 @@ export function ClientKycScreen() {
           <View style={{ height: 10 }} />
           <AppButton label="Log out" variant="plain" expanded radius={100} isDisabled={completing} onPress={completing ? undefined : logoutAndGoToLogin} />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

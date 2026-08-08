@@ -2,7 +2,6 @@ import { useNavigation } from '@react-navigation/native';
 import { AppButton, AppText, colors, showToast } from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Switch, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppLock } from '../providers/app-lock-provider';
 import { appLockService } from '../services/app-lock-service';
@@ -90,7 +89,7 @@ export function AppLockSettingsScreen() {
 
   if (stage !== 'idle') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
+      <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
           <AppText variant="title" weight="800" color={colors.textJet} align="center">
             {stage === 'choose' ? 'Choose a PIN' : 'Confirm your PIN'}
@@ -114,12 +113,12 @@ export function AppLockSettingsScreen() {
             </AppText>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
+    <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <AppText variant="title" weight="800" color={colors.textJet} align="left">
           App lock
@@ -175,6 +174,6 @@ export function AppLockSettingsScreen() {
           </AppText>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

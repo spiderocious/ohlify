@@ -39,6 +39,8 @@ export function BootFailureScreen({ onRetry }: BootFailureScreenProps) {
       }}
     >
       <Image
+        // RN's asset resolver only understands require() for static images.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         source={require('../../../assets/icon.png')}
         style={{ width: 88, height: 88, borderRadius: 20, marginBottom: 32 }}
         resizeMode="contain"

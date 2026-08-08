@@ -3,7 +3,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppButton, AppIcon, AppText, colors } from '@ohlify/mobile-ui';
 import { useQuery } from '@tanstack/react-query';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthSession } from '@features/auth/providers/auth-session-provider';
 import { onboardingApi } from '@features/onboarding/api/onboarding-api';
@@ -54,7 +53,7 @@ export function KycRejectedScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
         {isLoading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator />
@@ -77,7 +76,7 @@ export function KycRejectedScreen() {
             <ActivityIndicator />
           </View>
         )}
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

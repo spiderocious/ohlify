@@ -96,7 +96,16 @@ export function ChatsScreen() {
         <BannerSlot placement={BannerPlacement.CHATS} />
       </View>
 
-      {conversationsQuery.isLoading ? (
+      {/*
+        Gated on "there is nothing to show yet" rather than `isLoading`.
+        `isLoading` stays true for the whole offline retry sequence (three
+        attempts with exponential backoff under networkMode 'offlineFirst'), so
+        keying the skeleton off it left a restored-from-cache list sitting behind
+        a spinner while a doomed fetch ran — the thread was cached, but never
+        rendered. With `data` present the list paints immediately and the
+        refetch updates it if it lands.
+      */}
+      {conversationsQuery.data === undefined && conversationsQuery.isFetching ? (
         <ConversationListSkeleton />
       ) : error && conversations?.length === 0 ? (
         <ChatErrorState message={apiErrorMessage(error)} isNetwork={error.isNetwork} onRetry={() => void conversationsQuery.refetch()} />

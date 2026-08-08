@@ -1,9 +1,16 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CallType } from '@ohlify/core';
-import { AppButton, AppText, colors, ProfessionalHeader, showToast } from '@ohlify/mobile-ui';
+import {
+  AppButton,
+  AppText,
+  colors,
+  ProfessionalDetailsSkeleton,
+  ProfessionalHeader,
+  showToast,
+} from '@ohlify/mobile-ui';
 import { useRef } from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 import { fileService } from '@shared/services/file-service';
@@ -113,10 +120,13 @@ export function ProfessionalDetailsScreen() {
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  if (detailQuery.isLoading) {
+  // `data === undefined` rather than `isLoading`, so a cached profile paints
+  // straight away instead of hiding behind a loader for the whole offlineFirst
+  // retry sequence. Same fix as chats-screen and home-screen.
+  if (detail === undefined && detailQuery.isFetching) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceLight }}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
+        <ProfessionalDetailsSkeleton />
       </View>
     );
   }

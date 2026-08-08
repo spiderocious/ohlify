@@ -24,11 +24,16 @@ function loadRoot(): Parameters<typeof registerRootComponent>[0] {
     // Background/killed-state push handlers must be registered before React
     // mounts — on a headless FCM wake the root component never renders at all.
     // No-op on web.
+    // These stay require()s, and stay inside the try: a static import is hoisted
+    // above the try block and would throw before the catch exists — which is the
+    // exact crash this guard is here to prevent.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const push = require('./src/shared/push/push-service') as {
       installBackgroundPushHandlers: () => void;
     };
     push.installBackgroundPushHandlers();
 
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above
     return (require('./src/app') as { App: Parameters<typeof registerRootComponent>[0] }).App;
   } catch (error) {
     reportBootFailure(error);

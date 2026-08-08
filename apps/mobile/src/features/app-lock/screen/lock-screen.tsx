@@ -1,7 +1,6 @@
 import { AppButton, AppText, colors } from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppLock } from '../providers/app-lock-provider';
 import { appLockService } from '../services/app-lock-service';
@@ -49,7 +48,7 @@ export function LockScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
+    <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
         <AppText variant="title" weight="800" color={colors.textJet} align="center">
           Enter your PIN
@@ -83,6 +82,6 @@ export function LockScreen() {
           </>
         ) : null}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

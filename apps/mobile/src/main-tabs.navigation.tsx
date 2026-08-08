@@ -7,7 +7,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { Animated, Pressable, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './app.navigation';
 import { CallsScreen } from '@features/calls/screen/calls-screen';
@@ -60,6 +59,8 @@ const TAB_LABELS: Record<keyof MainTabParamList, string> = {
 
 const TAB_WIDTH = 64;
 const TAB_HEIGHT = 48;
+/** Bar height excluding the bottom safe-area inset, which is added at render. */
+const TAB_BAR_HEIGHT = 68;
 // Large enough that the circle's radius covers every corner of the pill
 // once fully grown, from a bottom-center origin.
 const RIPPLE_MAX_DIAMETER = Math.hypot(TAB_WIDTH, TAB_HEIGHT) * 2.2;
@@ -164,23 +165,23 @@ function HomeTabHeader() {
   const { isAuthenticated } = useAuthSession();
   const badges = useBadges(isAuthenticated);
   return (
-    <SafeAreaView style={{ backgroundColor: colors.surface }} edges={['top']}>
+    <View style={{ backgroundColor: colors.surface }}>
       <AppHeader
         notificationCount={badges.notificationsUnread}
         onCopyLink={() => undefined}
         onNotification={() => navigation.navigate('Notifications')}
       />
       <KycReviewBanner />
-    </SafeAreaView>
+    </View>
   );
 }
 
 /** Every other tab: no AppHeader, just the sticky KYC review banner (with its own top safe-area padding since there's no app bar). */
 function TabKycBannerHeader() {
   return (
-    <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
+    <View style={{ backgroundColor: colors.background }}>
       <KycReviewBanner />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -248,7 +249,18 @@ function MainTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   }
 
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: colors.navBackground, height: 68, paddingTop: 10, paddingBottom: 10 }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        backgroundColor: colors.navBackground,
+        // Plain fixed height — AppSafeArea at the root already keeps the whole
+        // app clear of the navigation bar, so adding the inset here again would
+        // leave a nav-bar-sized gap under the tabs.
+        height: TAB_BAR_HEIGHT,
+        paddingTop: 10,
+        paddingBottom: 10,
+      }}
+    >
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const options = descriptors[route.key]?.options;

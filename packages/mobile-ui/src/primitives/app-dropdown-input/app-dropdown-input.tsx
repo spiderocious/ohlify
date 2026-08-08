@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
+import { useKeyboardInset } from '../../hooks/use-keyboard-inset';
 import { AppIcon } from '../../icons/app-icons';
 import { colors } from '../../theme/colors';
 
@@ -44,6 +45,7 @@ export function AppDropdownInput<T>({
 }: AppDropdownInputProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const bottomInset = useKeyboardInset();
 
   const selected = options.find((o) => o.value === value);
   const filtered =
@@ -138,6 +140,10 @@ export function AppDropdownInput<T>({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
+            // Re-centres the panel in the space the keyboard leaves when the
+            // list is searchable, instead of letting it sit underneath. Falls
+            // back to the navigation-bar inset while the keyboard is closed.
+            paddingBottom: 24 + bottomInset,
           }}
         >
           <Pressable

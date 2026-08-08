@@ -3,7 +3,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppIcon, AppIconButton, AppText, AppTextInput, colors, ScreenContinueBar, showToast } from '@ohlify/mobile-ui';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useForgotPasswordFlow } from '@features/auth/providers/forgot-password-flow-provider';
 import { ApiError } from '@shared/types/api-error';
@@ -45,7 +44,7 @@ export function ForgotPasswordScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <SafeAreaView edges={['top']} className="flex-1">
+      <View className="flex-1">
         <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 16, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <AppIconButton
@@ -87,7 +86,7 @@ export function ForgotPasswordScreen() {
             }}
           />
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       <ScreenContinueBar
         label={submitting ? 'Sending OTP…' : 'Continue'}

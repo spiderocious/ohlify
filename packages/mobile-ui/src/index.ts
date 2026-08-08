@@ -7,6 +7,7 @@
  * this barrel only exports what actually exists.
  */
 export * from './theme';
+export * from './hooks/use-keyboard-inset';
 export * from './utils/cn';
 export * from './icons';
 export * from './primitives/app-text/app-text';
@@ -36,6 +37,7 @@ export * from './primitives/date-time-picker/app-date-time-picker';
 export * from './primitives/screen-continue-bar/screen-continue-bar';
 export * from './shell/app-tab-view/app-tab-view';
 export * from './shell/app-error-boundary/app-error-boundary';
+export * from './shell/app-safe-area/app-safe-area';
 export * from './modals/toast-store';
 export * from './modals/toast-host';
 export * from './modals/show-toast';
@@ -45,6 +47,7 @@ export * from './modals/show-feedback-modal';
 export * from './modals/show-confirmation-modal';
 export * from './modals/show-input-modal';
 export * from './modals/show-custom-modal';
+export * from './modals/run-after-modal-close';
 export * from './domain/kyc-progress-header/kyc-progress-header';
 export * from './domain/kyc-item-tile/kyc-item-tile';
 export * from './domain/add-rate-form/add-rate-form';

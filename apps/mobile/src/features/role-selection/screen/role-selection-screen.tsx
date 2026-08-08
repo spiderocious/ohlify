@@ -11,7 +11,6 @@ import {
 import type { Role } from '@ohlify/core';
 import { useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { onboardingApi } from '@features/onboarding/api/onboarding-api';
 import type { RoleResult } from '@features/onboarding/types/role-result';
@@ -145,7 +144,7 @@ export function RoleSelectionScreen() {
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.surfaceLight }}>
-      <SafeAreaView edges={['top', 'bottom']} className="flex-1">
+      <View className="flex-1">
         <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 24, paddingBottom: 24 }}>
           <AppText variant="title" color={colors.textJet} weight="800" align="left">
             How will you use Ohlify?
@@ -192,7 +191,7 @@ export function RoleSelectionScreen() {
             onPress={!selected || submitting ? undefined : onContinue}
           />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

@@ -1,5 +1,4 @@
 import { Pressable, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '../../icons/app-icons';
 import { colors } from '../../theme/colors';
@@ -17,7 +16,6 @@ export interface ScreenContinueBarProps {
 
 export function ScreenContinueBar({ onPress, label = 'Continue' }: ScreenContinueBarProps) {
   const isEnabled = onPress !== undefined;
-  const insets = useSafeAreaInsets();
 
   return (
     <Pressable onPress={onPress} disabled={!isEnabled}>
@@ -28,7 +26,9 @@ export function ScreenContinueBar({ onPress, label = 'Continue' }: ScreenContinu
           backgroundColor: isEnabled ? colors.primary : `${colors.primary}80`,
           paddingHorizontal: 24,
           paddingTop: 18,
-          paddingBottom: 18 + insets.bottom,
+          // No bottom inset: this renders inside the app's content area, which
+          // AppSafeArea already keeps clear of the navigation bar.
+          paddingBottom: 18,
         }}
       >
         <Text

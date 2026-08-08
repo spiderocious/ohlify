@@ -1,5 +1,6 @@
 import { View } from 'react-native';
 
+import { colors } from '../../theme/colors';
 import { Skeleton, SkeletonLines } from './skeleton';
 
 /** Matches ProfessionalListTile's shape (80x80 avatar, radius 20 card). */
@@ -103,23 +104,92 @@ export function NotificationListSkeleton({ count = 5 }: { count?: number }) {
 }
 
 /** Professional details page — header block + rate cards + description lines. */
+/**
+ * Traces professional-details-screen.tsx exactly: the 300pt full-bleed cover
+ * header (not a centred avatar — the real screen has no such thing), then
+ * description, rates, buy-minutes and reviews sections at 16pt horizontal
+ * padding with the same 16/20/20/20 gaps, and the pinned "Talk to …" bar.
+ *
+ * The point of matching is that nothing jumps when the data lands. Keep this in
+ * step with that screen — a skeleton that has drifted is worse than none,
+ * because it promises a layout the app then rearranges.
+ */
 export function ProfessionalDetailsSkeleton() {
   return (
-    <View>
-      <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-        <Skeleton width={96} height={96} borderRadius={48} />
-        <View style={{ height: 14 }} />
-        <Skeleton height={16} width={160} />
-        <View style={{ height: 8 }} />
-        <Skeleton height={12} width={100} />
-      </View>
+    <View style={{ flex: 1 }}>
+      {/* Cover header — ProfessionalHeader's default height is 300. */}
+      <Skeleton width="100%" height={300} borderRadius={0} />
+
+      <View style={{ height: 16 }} />
+      {/* DescriptionSection */}
       <View style={{ paddingHorizontal: 16 }}>
-        <SkeletonLines count={3} lastLineWidth="80%" />
-        <View style={{ height: 20 }} />
+        <Skeleton height={18} width={120} />
+        <View style={{ height: 12 }} />
+        <SkeletonLines count={3} lastLineWidth="70%" />
+      </View>
+
+      <View style={{ height: 20 }} />
+      {/* RatesSection */}
+      <View style={{ paddingHorizontal: 16 }}>
+        <Skeleton height={18} width={90} />
+        <View style={{ height: 12 }} />
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Skeleton height={72} style={{ flex: 1 }} borderRadius={14} />
           <Skeleton height={72} style={{ flex: 1 }} borderRadius={14} />
         </View>
+      </View>
+
+      <View style={{ height: 20 }} />
+      {/* BuyMinutesSection — one MinuteRow per call type, each a label block
+          on the left and a fixed 40pt "Buy" pill on the right. */}
+      <View style={{ paddingHorizontal: 16 }}>
+        <Skeleton height={18} width={110} />
+        <View style={{ height: 12 }} />
+        {[0, 1].map((row) => (
+          <View
+            key={row}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8 }}
+          >
+            <View style={{ flex: 1 }}>
+              <Skeleton height={15} width="55%" />
+              <View style={{ height: 6 }} />
+              <Skeleton height={12} width="35%" />
+            </View>
+            <Skeleton width={78} height={40} borderRadius={100} />
+          </View>
+        ))}
+      </View>
+
+      <View style={{ height: 20 }} />
+      {/* ReviewsSection */}
+      <View style={{ paddingHorizontal: 16 }}>
+        <Skeleton height={18} width={100} />
+        <View style={{ height: 12 }} />
+        {[0, 1].map((row) => (
+          <View key={row} style={{ flexDirection: 'row', paddingVertical: 10 }}>
+            <Skeleton width={40} height={40} borderRadius={20} />
+            <View style={{ width: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Skeleton height={14} width="45%" />
+              <View style={{ height: 8 }} />
+              <SkeletonLines count={2} lastLineWidth="60%" />
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={{ flex: 1, minHeight: 24 }} />
+      {/* Pinned CTA bar. */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 16,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+        }}
+      >
+        <Skeleton height={52} borderRadius={100} />
       </View>
     </View>
   );

@@ -43,9 +43,14 @@ export function AnimatedToast({
 
   useEffect(() => {
     if (!isExiting) return;
-    Animated.timing(progress, { toValue: 0, duration: duration.fast, useNativeDriver: true }).start(({ finished }) => {
-      if (finished) onExited();
-    });
+    Animated.timing(progress, { toValue: 0, duration: duration.fast, useNativeDriver: true }).start(
+      ({ finished }) => {
+        // Deferred by a tick for the same reason as ModalHost's exit: unmounting
+        // from inside the animation callback can drop views the native driver is
+        // still updating, which Fabric treats as a fatal assertion.
+        if (finished) setTimeout(onExited, 0);
+      },
+    );
   }, [isExiting, progress, onExited]);
 
   function dismiss() {

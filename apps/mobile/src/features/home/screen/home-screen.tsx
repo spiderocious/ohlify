@@ -63,7 +63,10 @@ function ClientHomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceLight }}>
-      {home.isLoading ? (
+      {/* `data === undefined` rather than `isLoading`: offlineFirst keeps
+          isLoading true through the whole retry sequence, hiding cached content
+          behind a spinner. Same fix as chats-screen. */}
+      {home.data === undefined && home.isFetching ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.primary} />
         </View>

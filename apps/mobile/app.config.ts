@@ -58,9 +58,23 @@ const config: ExpoConfig = {
     [
       'expo-splash-screen',
       {
-        image: './assets/splash.png',
-        resizeMode: 'cover',
-        backgroundColor: '#FFFFFF',
+        // A centred wordmark on a solid brand background, NOT a full-bleed
+        // artwork.
+        //
+        // Android 12+ routes the splash through the platform SplashScreen API,
+        // which ignores `resizeMode` entirely: it always draws the image as a
+        // small centred icon over windowSplashScreenBackground, masked to a
+        // circle. Feeding it the old 390x844 full-screen artwork meant Android
+        // squashed a whole screen into an 864x864 square — mostly empty
+        // background with a tiny mark, which is why launch looked like a blank
+        // field with a small block in the middle.
+        //
+        // `splash-icon.png` is the wordmark alone, pre-padded to sit inside the
+        // circular mask, so the same asset works on both the modern Android
+        // path and the iOS/Android-11 `cover` path.
+        image: './assets/splash-icon.png',
+        resizeMode: 'contain',
+        backgroundColor: '#4A3FE5',
       },
     ],
     [

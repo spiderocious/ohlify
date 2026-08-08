@@ -36,9 +36,24 @@ type NotifeeModule = typeof NotifeeNS;
 type MessagingModule = typeof MessagingNS;
 
 const loadNotifee = (): NotifeeModule => require('@notifee/react-native') as NotifeeModule;
-const loadMessaging = (): MessagingModule['default'] =>
-  (require('@react-native-firebase/messaging') as MessagingModule).default;
+
+/**
+ * The modular (v22+) messaging API.
+ *
+ * The namespaced form — `messaging().getToken()` — still works, but every call
+ * logs a deprecation warning. Twelve of them fire on each launch, which is
+ * enough to trip RN's LogBox notification: a bar pinned over the navigation bar
+ * reading "Open debugger to view warnings." It renders as an unreadable white
+ * strip against this app's theme, so it looked like a broken app toast rather
+ * than a dev tool.
+ */
+const loadMessagingModule = (): MessagingModule =>
+  require('@react-native-firebase/messaging') as MessagingModule;
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+/** The Messaging instance the modular functions take as their first argument. */
+const messagingInstance = (): ReturnType<MessagingModule['getMessaging']> =>
+  loadMessagingModule().getMessaging();
 
 const CHANNEL_INCOMING_CALLS = 'incoming_calls';
 const CHANNEL_CALLS = 'calls';
@@ -255,9 +270,9 @@ const handleOpenedFromTray = (message: FirebaseMessagingTypes.RemoteMessage): vo
  */
 export const installBackgroundPushHandlers = (): void => {
   if (!isNative) return;
-  const messaging = loadMessaging();
+  const { setBackgroundMessageHandler } = loadMessagingModule();
   const { default: notifee } = loadNotifee();
-  messaging().setBackgroundMessageHandler((message) =>
+  setBackgroundMessageHandler(messagingInstance(), (message) =>
     handleRemoteMessage(message, 'background'),
   );
   notifee.onBackgroundEvent(handleNotifeeEvent);
@@ -270,20 +285,21 @@ export const initForegroundPush = async (): Promise<void> => {
   if (!isNative || foregroundReady) return;
   foregroundReady = true;
 
-  const messaging = loadMessaging();
+  const { onMessage, onNotificationOpenedApp, getInitialNotification } = loadMessagingModule();
+  const messaging = messagingInstance();
   const { default: notifee } = loadNotifee();
 
   await createChannels();
 
-  messaging().onMessage((message) => handleRemoteMessage(message, 'foreground'));
+  onMessage(messaging, (message) => handleRemoteMessage(message, 'foreground'));
   notifee.onForegroundEvent((event) => {
     void handleNotifeeEvent(event);
   });
-  messaging().onNotificationOpenedApp(handleOpenedFromTray);
+  onNotificationOpenedApp(messaging, handleOpenedFromTray);
 
   // Cold starts from a notification tap: FCM tray taps and notifee
   // (ring UI) taps surface through two different APIs.
-  const initialRemote = await messaging().getInitialNotification();
+  const initialRemote = await getInitialNotification(messaging);
   if (initialRemote) handleOpenedFromTray(initialRemote);
   const initialNotifee = await notifee.getInitialNotification();
   if (initialNotifee) {
@@ -308,8 +324,9 @@ export const registerDeviceTokenWithBackend = async (): Promise<void> => {
   try {
     const { default: notifee } = loadNotifee();
     await notifee.requestPermission();
-    const messaging = loadMessaging();
-    const token = await messaging().getToken();
+    const { getToken, onTokenRefresh } = loadMessagingModule();
+    const messaging = messagingInstance();
+    const token = await getToken(messaging);
     if (!token) return;
     // Telemetry rides along so support can tell which handset a push landed
     // on — the push side and the session side then answer the same questions.
@@ -318,7 +335,7 @@ export const registerDeviceTokenWithBackend = async (): Promise<void> => {
 
     await apiClient.post('me/device-tokens', { token, ...telemetry }, { fromJson: () => undefined });
     // FCM rotates tokens occasionally — keep the backend current.
-    messaging().onTokenRefresh((fresh) => {
+    onTokenRefresh(messaging, (fresh) => {
       void apiClient
         .post('me/device-tokens', { token: fresh, ...telemetry }, { fromJson: () => undefined })
         .catch(() => undefined);
@@ -333,8 +350,8 @@ export const registerDeviceTokenWithBackend = async (): Promise<void> => {
 export const unregisterDeviceToken = async (): Promise<void> => {
   if (!isNative) return;
   try {
-    const messaging = loadMessaging();
-    const token = await messaging().getToken();
+    const { getToken } = loadMessagingModule();
+    const token = await getToken(messagingInstance());
     if (!token) return;
     await apiClient.delete('me/device-tokens', { body: { token }, fromJson: () => undefined });
   } catch {

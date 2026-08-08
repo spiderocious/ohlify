@@ -3,6 +3,24 @@ import { Pressable, View } from 'react-native';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as const;
 
+const KEY_WIDTH = 80;
+const KEY_HEIGHT = 64;
+const KEY_GAP = 12;
+/**
+ * Wide enough for three keys and two gaps (264) plus a pixel of slack, so
+ * sub-pixel rounding at high densities cannot push the third key onto its own
+ * row. The original had exactly 264 and collapsed into a column on a 3x-density
+ * screen.
+ *
+ * Percentage widths were tried here and are worse: this pad is rendered inside
+ * a parent with `alignItems: 'center'`, which sizes children to their content,
+ * so a percentage resolves against a zero-width row and every key shrinks to
+ * its glyph — the keypad renders as the bare run "123456789".
+ */
+const PAD_WIDTH = KEY_WIDTH * 3 + KEY_GAP * 2 + 1;
+
+const KEY_SIZE = { width: KEY_WIDTH, height: KEY_HEIGHT } as const;
+
 export interface PinPadProps {
   length: number;
   filled: number;
@@ -47,17 +65,27 @@ export function PinPad({ length, filled, error, onKey, onDelete }: PinPadProps) 
       ) : null}
 
       <View style={{ height: 28 }} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: 264, gap: 12 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          width: PAD_WIDTH,
+          columnGap: KEY_GAP,
+          rowGap: KEY_GAP,
+        }}
+      >
         {KEYS.map((key, index) => {
-          if (key === '') return <View key={`gap-${index}`} style={{ width: 80, height: 64 }} />;
+          if (key === '') return <View key={`gap-${index}`} style={KEY_SIZE} />;
           const isDelete = key === 'del';
           return (
             <Pressable
               key={key}
               onPress={() => (isDelete ? onDelete() : onKey(key))}
+              accessibilityRole="button"
+              accessibilityLabel={isDelete ? 'Delete' : key}
               style={({ pressed }) => ({
-                width: 80,
-                height: 64,
+                ...KEY_SIZE,
                 borderRadius: 16,
                 alignItems: 'center',
                 justifyContent: 'center',

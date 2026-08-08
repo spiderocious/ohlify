@@ -1,7 +1,15 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { formatSecondsAsDuration } from '@ohlify/core';
-import { AppButton, AppText, colors, showCustomModal, showFeedbackModal, showToast } from '@ohlify/mobile-ui';
+import {
+  AppButton,
+  AppText,
+  colors,
+  runAfterModalClose,
+  showCustomModal,
+  showFeedbackModal,
+  showToast,
+} from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -80,6 +88,8 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
   async function goToChat() {
     try {
       const conversationId = await chatApi.openConversation(professionalId);
+      // Callers already wait for the modal to close (runAfterModalClose), so
+      // this navigates from a settled tree.
       navigation.navigate('ChatThread', { conversationId });
     } catch {
       // Non-fatal — the purchase succeeded; stay on the details page.
@@ -91,7 +101,12 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
       kind: 'warning',
       showCloseButton: true,
       confirmButtonText: 'Fund wallet',
-      onConfirm: () => navigation.navigate('Home', { screen: 'WalletTab', params: { openFund: true } }),
+      // onConfirm fires as this modal starts closing; navigating into that
+      // teardown is the Fabric crash again.
+      onConfirm: () =>
+        runAfterModalClose(() =>
+          navigation.navigate('Home', { screen: 'WalletTab', params: { openFund: true } }),
+        ),
     });
   }
 
@@ -100,13 +115,25 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
     try {
       const res = await minutesApi.buyMinutes({ professionalId, callType, amountKobo });
       setSecondsRemaining(res.secondsRemaining);
-      showToast(`Added ${formatSecondsAsDuration(res.secondsPurchased)}.`, { type: 'success' });
-      await goToChat();
+      // Both the toast and the navigation are deferred until after the caller
+      // has dismissed this modal and its exit animation has run. Firing them
+      // here mounted a second native surface (the toast) and pushed a screen
+      // while the buy <Modal> was still tearing down — Fabric aborts the
+      // process on that with `AssertionError` in
+      // SurfaceMountingManager.overridePropsReadableMap, a native crash with no
+      // JS frames (Sentry REACT-NATIVE-2).
+      runAfterModalClose(() => {
+        showToast(`Added ${formatSecondsAsDuration(res.secondsPurchased)}.`, { type: 'success' });
+        void goToChat();
+      });
       return null;
     } catch (e) {
       const error = e instanceof ApiError ? e : ApiError.network;
       if (error.reason === 'insufficient_balance') {
-        promptFundWallet();
+        // Deferred for the same reason as the success path: this closes the buy
+        // modal and opens the fund-wallet one, and stacking those two native
+        // surfaces in a single tick is what Fabric aborts on.
+        runAfterModalClose(promptFundWallet);
         return 'handled';
       }
       return apiErrorMessage(error);

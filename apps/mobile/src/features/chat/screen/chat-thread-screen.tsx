@@ -1,19 +1,26 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { formatSecondsAsDuration } from '@ohlify/core';
-import { AppAvatar, AppIcon, AppText, colors, showToast, Skeleton, spring, type AppIconName } from '@ohlify/mobile-ui';
+import {
+  AppAvatar,
+  AppIcon,
+  AppText,
+  colors,
+  showToast,
+  Skeleton,
+  spring,
+  useKeyboardInset,
+  type AppIconName,
+} from '@ohlify/mobile-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { apiErrorMessage, ApiError } from '@shared/types/api-error';
 import { pickDateTime } from '@shared/parts/pick-date-time';
@@ -60,6 +67,7 @@ export function ChatThreadScreen() {
 
   const [messages, setMessages] = useState<OptimisticChatMessage[]>([]);
   const [context, setContext] = useState<ConversationContext | undefined>(undefined);
+  const bottomInset = useKeyboardInset();
 
   // While this thread is on screen, its push notifications are suppressed
   // (the user is already reading it) — see push-service's chat handler.
@@ -257,7 +265,7 @@ export function ChatThreadScreen() {
           zIndex: 2,
         }}
       >
-        <SafeAreaView edges={['top']}>
+        <View>
           <ThreadHeader
             name={peerName}
             avatarKey={peerAvatarKey}
@@ -266,10 +274,18 @@ export function ChatThreadScreen() {
             onSchedule={propose}
             onCall={context?.viewerIsClient ? call : undefined}
           />
-        </SafeAreaView>
+        </View>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+      {/*
+        Padded by hand instead of with KeyboardAvoidingView. The previous
+        `behavior={ios ? 'padding' : undefined}` made the component inert on
+        Android, and `adjustResize` cannot compensate while the app draws
+        edge-to-edge — so the keyboard simply painted over the composer. See
+        useKeyboardInset. When the keyboard is closed this resolves to the
+        navigation-bar inset, which keeps the composer off the system keys.
+      */}
+      <View style={{ flex: 1, paddingBottom: bottomInset }}>
         <View style={{ flex: 1 }}>
           {loading ? (
             <ThreadSkeleton />
@@ -321,7 +337,7 @@ export function ChatThreadScreen() {
         {context ? <CreditsBanner context={context} onBuyMinutes={buyMinutes} /> : null}
 
         <Composer draft={draft} canSend={canSend} onChange={setDraft} onSend={() => send()} />
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }
@@ -441,8 +457,11 @@ function Composer({ draft, canSend, onChange, onSend }: { draft: string; canSend
     elevation: 3,
   } as const;
 
+  // No bottom SafeAreaView here: the screen's container already reserves the
+  // keyboard-or-navigation-bar inset (see useKeyboardInset). Claiming the inset
+  // again would stack the two and leave a gap above the keyboard.
   return (
-    <SafeAreaView edges={['bottom']}>
+    <>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 14, paddingTop: 6, paddingBottom: 10, gap: 10 }}>
         <View
           style={{
@@ -529,7 +548,7 @@ function Composer({ draft, canSend, onChange, onSend }: { draft: string; canSend
           </Pressable>
         </Animated.View>
       </View>
-    </SafeAreaView>
+    </>
   );
 }
 

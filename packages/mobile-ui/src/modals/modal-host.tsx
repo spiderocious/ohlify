@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable } from 'react-native';
+import { Animated, Modal, Pressable, View } from 'react-native';
 
+import { useKeyboardInset } from '../hooks/use-keyboard-inset';
 import { duration, spring } from '../theme/motion';
 import { AppConfirmationModal } from './app-confirmation-modal';
 import { AppCustomModal } from './app-custom-modal';
@@ -32,6 +33,9 @@ export function ModalHost() {
   const [displayed, setDisplayed] = useState<ModalEntry | undefined>(undefined);
   const [isExiting, setIsExiting] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
+  // Called before the `!displayed` early return below — hooks cannot be
+  // conditional.
+  const bottomInset = useKeyboardInset();
 
   useEffect(() => {
     if (storeTop && storeTop.id !== displayed?.id) {
@@ -48,7 +52,20 @@ export function ModalHost() {
         duration: duration.base,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        if (finished) setDisplayed(undefined);
+        if (!finished) return;
+        // Unmount on the NEXT tick, not inside the animation callback.
+        //
+        // This callback runs while the native animation driver is still
+        // finishing its work on these views. Tearing the <Modal> out from
+        // under it lets a queued prop update land on a surface that is already
+        // gone, and Fabric aborts the process with
+        // `AssertionError` in SurfaceMountingManager.overridePropsReadableMap
+        // (Sentry REACT-NATIVE-2 — a native crash with no JS frames, which is
+        // why it could not be caught or traced from JS).
+        //
+        // A zero-delay timeout is enough: it lets the driver settle the frame
+        // before React removes the views.
+        setTimeout(() => setDisplayed(undefined), 0);
       });
     }
     // Intentionally keyed on `storeTop` alone: re-running on the animated
@@ -86,10 +103,14 @@ export function ModalHost() {
 
   return (
     <Modal transparent={!isFullscreen} animationType="none" visible onRequestClose={dismiss}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
+      {/*
+        Padded by hand rather than with KeyboardAvoidingView: its usual
+        `behavior={ios ? 'padding' : undefined}` form is a no-op on Android, and
+        `adjustResize` cannot rescue it while the app draws edge-to-edge. See
+        useKeyboardInset. This keeps input modals clear of the keyboard and
+        bottom-positioned modals clear of the navigation bar.
+      */}
+      <View style={{ flex: 1, paddingBottom: isFullscreen ? 0 : bottomInset }}>
         {isFullscreen ? (
           <Animated.View style={{ flex: 1, opacity: contentOpacity }}>{content}</Animated.View>
         ) : (
@@ -121,7 +142,7 @@ export function ModalHost() {
             </Animated.View>
           </Pressable>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

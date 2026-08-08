@@ -12,7 +12,6 @@ import {
 } from '@ohlify/mobile-ui';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useForgotPasswordFlow } from '@features/auth/providers/forgot-password-flow-provider';
 import { IMAGES } from '@shared/config/images';
@@ -86,7 +85,7 @@ export function ResetPasswordScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <SafeAreaView edges={['top']} className="flex-1">
+      <View className="flex-1">
         <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 16, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <AppIconButton
@@ -163,7 +162,7 @@ export function ResetPasswordScreen() {
             hasLowercase={hasLowercase}
           />
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       <ScreenContinueBar label={submitting ? 'Saving…' : 'Continue'} onPress={isValid ? onSubmit : undefined} />
     </View>

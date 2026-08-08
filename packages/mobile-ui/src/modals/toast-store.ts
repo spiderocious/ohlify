@@ -70,6 +70,15 @@ function dismissAll(): void {
 function add(message: string, options: ToastOptions = {}): { id: string; dismiss: () => void } {
   const id = `toast_${nextId++}`;
   const merged: Required<ToastOptions> = { ...DEFAULT_OPTIONS, ...options };
+
+  // A toast with no message is a bar with an icon, a close button, and nothing
+  // to read — the user cannot act on it and cannot tell what it was for. Many
+  // callers pass `error.message` straight through, and an API error without a
+  // message produces exactly that. Drop it rather than render a mystery.
+  if (message.trim().length === 0) {
+    return { id, dismiss: () => undefined };
+  }
+
   toasts = [...toasts, { id, message, options: merged }];
   emit();
 
