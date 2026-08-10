@@ -75,6 +75,16 @@ const config: ExpoConfig = {
         image: './assets/splash-icon.png',
         resizeMode: 'contain',
         backgroundColor: '#4A3FE5',
+        // iOS has no icon-in-circle constraint, so it can show the real
+        // artwork: `splash-full.png` is the JS splash composed into one image
+        // (hex-pattern background + centred wordmark, same 160pt sizing).
+        // Native and JS splash are pixel-identical there; Android 12+ stays
+        // wordmark-on-indigo because the platform allows nothing else.
+        ios: {
+          image: './assets/splash-full.png',
+          resizeMode: 'cover',
+          backgroundColor: '#4A3FE5',
+        },
       },
     ],
     [

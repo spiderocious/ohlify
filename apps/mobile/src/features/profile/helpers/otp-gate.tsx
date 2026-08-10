@@ -1,4 +1,4 @@
-import { AppButton, AppOtpInput, AppText, colors, showCustomModal, showToast } from '@ohlify/mobile-ui';
+import { AppButton, AppOtpInput, AppText, colors, runAfterModalClose, showCustomModal, showToast } from '@ohlify/mobile-ui';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -70,7 +70,11 @@ function openVerifyModal(params: { action: SensitiveAction; hint: string; onSubm
               if (error.reason === 'otp_expired') return 'This code has expired. Tap "Resend code".';
               if (error.reason === 'otp_max_attempts') return 'Too many attempts. Request a new code.';
               dismiss();
-              showToast(apiErrorMessage(error), { type: 'error' });
+              // Deferred: this builder dismisses itself directly rather than
+              // through the store's onConfirm path, so the toast would
+              // otherwise mount while the modal is still tearing down (the
+              // Fabric abort, Sentry REACT-NATIVE-2).
+              runAfterModalClose(() => showToast(apiErrorMessage(error), { type: 'error' }));
               return undefined;
             }
           }}

@@ -1,4 +1,4 @@
-import { AppButton, AppIcon, AppText, AppTextInput, colors, showCustomModal, showToast, type AppIconName } from '@ohlify/mobile-ui';
+import { AppButton, AppIcon, AppText, AppTextInput, colors, runAfterModalClose, showCustomModal, showToast, type AppIconName } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 
@@ -44,7 +44,13 @@ export function HelpDeskScreen() {
               try {
                 await helpApi.submitTicket({ subject, message });
                 dismiss();
-                showToast("Thanks — we'll get back to you shortly.", { type: 'success' });
+                // Deferred: a custom modal's builder dismisses itself directly
+                // rather than through the store's onConfirm path, so mounting
+                // the toast here would land mid-teardown — the Fabric abort in
+                // SurfaceMountingManager (Sentry REACT-NATIVE-2).
+                runAfterModalClose(() =>
+                  showToast("Thanks — we'll get back to you shortly.", { type: 'success' }),
+                );
               } catch (e) {
                 showToast(apiErrorMessage(e instanceof ApiError ? e : ApiError.network), { type: 'error' });
               }

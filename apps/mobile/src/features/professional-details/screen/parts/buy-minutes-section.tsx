@@ -101,12 +101,11 @@ function MinuteRow({ professionalId, callType, rate }: { professionalId: string;
       kind: 'warning',
       showCloseButton: true,
       confirmButtonText: 'Fund wallet',
-      // onConfirm fires as this modal starts closing; navigating into that
-      // teardown is the Fabric crash again.
-      onConfirm: () =>
-        runAfterModalClose(() =>
-          navigation.navigate('Home', { screen: 'WalletTab', params: { openFund: true } }),
-        ),
+      // No runAfterModalClose here: modal-store defers every onConfirm until
+      // the modal has closed and settled, so this already runs from a quiet
+      // tree. The manual guards elsewhere in this file are for the custom
+      // modal, whose builder dismisses itself outside that path.
+      onConfirm: () => navigation.navigate('Home', { screen: 'WalletTab', params: { openFund: true } }),
     });
   }
 

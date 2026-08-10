@@ -1,11 +1,11 @@
 import { AppErrorBoundary, AppSafeArea, ModalHost, ToastHost } from '@ohlify/mobile-ui';
 import { useEffect, useState } from 'react';
 import { useFonts } from 'expo-font';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { markAppTreeReady } from '@shared/boot/boot-splash';
 import { FONT_ASSETS } from '@shared/config/fonts';
 import { initForegroundPush } from '@shared/push/push-service';
 import { initAmountVisibility } from '@shared/services/amount-visibility-storage';
@@ -17,10 +17,6 @@ import { AppNavigation } from './app.navigation';
 import { AppProvider } from './app.provider';
 
 import './shared/styles/global.css';
-
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // Already hidden / not supported on this platform (e.g. some web contexts) — non-fatal.
-});
 
 /**
  * Matches `splashscreen_background` in android/app/src/main/res/values/colors.xml
@@ -46,21 +42,14 @@ export function App() {
     void initAmountVisibility();
   }, []);
 
-  // Hide the native splash only once the real tree is mounted and laid out.
-  //
-  // This used to be an `onLayout` handler, which cannot fire while `appReady`
-  // is false because the component returned `null` — nothing to lay out. The
-  // splash was therefore torn down by Expo's own timeout with an empty tree
-  // behind it, which is the white screen with a small centred logo: the OS
-  // window background plus a shrunken splash image, not a screen the app drew.
-  //
-  // Driving it from an effect keyed on `appReady` ties the hide to the thing
-  // that actually matters — the app being ready to paint.
+  // The native splash lifecycle lives in boot-splash.ts: it hides once the
+  // tree is ready AND the Splash route has resolved where to go (capped, so
+  // gate paths and slow networks fall through to the JS splash instead of
+  // hanging on the native one). This effect only reports readiness — the
+  // early-return below guarantees nothing needing fonts paints before it.
   useEffect(() => {
     if (!appReady) return;
-    SplashScreen.hideAsync().catch(() => {
-      // Already hidden, or unsupported on this platform — non-fatal.
-    });
+    markAppTreeReady();
   }, [appReady]);
 
   if (!appReady) {

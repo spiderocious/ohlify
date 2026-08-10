@@ -9,7 +9,7 @@ import {
   showToast,
 } from '@ohlify/mobile-ui';
 import type { Role } from '@ohlify/core';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { onboardingApi } from '@features/onboarding/api/onboarding-api';
@@ -33,17 +33,12 @@ export function RoleSelectionScreen() {
   const navigation = useNavigation<RoleSelectionNavigationProp>();
   const [selected, setSelected] = useState<Role>();
   const [submitting, setSubmitting] = useState(false);
-  // Captures the confirm intent across the confirmation modal's dismiss
-  // promise — mirrors the Dart source's `_confirmed` field, which exists so
-  // the success feedback modal only shows after the confirmation modal has
-  // fully closed (avoids the two overlapping).
-  const confirmedRef = useRef(false);
 
   function onContinue() {
     const role = selected;
     if (!role || submitting) return;
 
-    const confirmation = showConfirmationModal(
+    showConfirmationModal(
       `Continue as ${ROLE_LABEL[role]}?`,
       role === 'professional'
         ? 'You will need to complete a short profile so clients can discover and book you.'
@@ -52,17 +47,17 @@ export function RoleSelectionScreen() {
         kind: 'info',
         confirmButtonText: 'Yes, continue',
         cancelButtonText: 'Change',
-        onConfirm: () => {
-          confirmedRef.current = true;
-        },
+        // Submits directly from onConfirm. modal-store defers this until the
+        // modal has closed and settled, so there is nothing left to wait for.
+        //
+        // This previously set a `confirmedRef` flag and did the work in
+        // `onDismissed` instead, because onConfirm used to fire in the same
+        // tick as the dismiss. Both are now deferred by the same delay, which
+        // makes their relative order unspecified — so the flag could be read
+        // before it was written and the submit would silently never happen.
+        onConfirm: () => void submitRole(role),
       },
     );
-
-    confirmation.onDismissed.then(() => {
-      if (!confirmedRef.current) return;
-      confirmedRef.current = false;
-      void submitRole(role);
-    });
   }
 
   async function submitRole(role: Role) {

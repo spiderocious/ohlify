@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { runAfterModalClose } from './run-after-modal-close';
+
 /**
  * Central modal stack. 1:1 with mobile/lib/shared/notifiers/modal_notifier.dart
  * — same 4 modal types, same options shape, same stack (push/dismiss/dismissAll)
@@ -224,8 +226,31 @@ function dismiss(id: string): void {
   if (!stack.some((e) => e.id === id)) return;
   stack = stack.filter((e) => e.id !== id);
   emit();
-  dismissResolvers.get(id)?.();
+
+  // Resolve only AFTER the host's exit animation and native unmount have
+  // settled — not here, in the same tick the entry left the stack.
+  //
+  // Resolving synchronously is what made `await handle.onDismissed` a false
+  // guarantee: it fired while ModalHost was still animating the modal out and
+  // had not yet torn down the native <Modal>. Anything the caller did next
+  // (navigate, open another modal, show a toast) mounted or unmounted a
+  // surface mid-teardown, and Fabric aborts the process on that with
+  // `AssertionError` in SurfaceMountingManager.overridePropsReadableMap —
+  // a native crash with no JS frames (Sentry REACT-NATIVE-2).
+  //
+  // Doing it here rather than at each call site means every current and future
+  // caller is covered by construction, instead of having to remember the rule.
+  const resolve = dismissResolvers.get(id);
   dismissResolvers.delete(id);
+
+  // Runs even when there is no resolver: `onDismissed` is only awaited by some
+  // callers, but the queued callbacks belong to every modal and must still be
+  // flushed or the confirm action would silently never happen.
+  runAfterModalClose(() => {
+    // Callbacks first, THEN the promise — see runPendingCallbacks.
+    runPendingCallbacks(id);
+    resolve?.();
+  });
 }
 
 function dismissAll(): void {
@@ -251,6 +276,64 @@ function updateOptions<T extends ModalEntry>(id: string, patch: Partial<T['optio
   emit();
 }
 
+/**
+ * Callbacks captured from `onConfirm` / `onCancel` / `onAction`, queued per
+ * modal id until that modal has closed and settled.
+ */
+const pendingCallbacks = new Map<string, (() => void)[]>();
+
+function runPendingCallbacks(id: string): void {
+  const queued = pendingCallbacks.get(id);
+  pendingCallbacks.delete(id);
+  if (!queued) return;
+  for (const run of queued) run();
+}
+
+/**
+ * Wraps a user-supplied modal callback so it runs after the modal has closed
+ * and settled, rather than in the same tick as the dismiss.
+ *
+ * The modal components call `onDismiss()` and `options.onConfirm?.()` back to
+ * back (see app-feedback-modal / app-confirmation-modal / app-input-modal), so
+ * an unwrapped callback that navigates or opens another modal does so while
+ * this one is still tearing down — the Fabric abort described in `dismiss`.
+ *
+ * ## Why a queue rather than each callback arming its own timer
+ *
+ * Several screens use the callback to set a local flag and then read that flag
+ * after `await handle.onDismissed` (logout, cancel booking, delete account,
+ * Paystack confirm). If both the callback and the promise merely started equal
+ * delays, their relative order would be unspecified and the flag could be read
+ * before it was written — turning a crash into a silent no-op, which is worse.
+ *
+ * Queuing instead lets `dismiss` run the callbacks and then resolve the
+ * promise inside one settle window, so "callback before onDismissed" holds by
+ * construction — the same order those screens already relied on.
+ *
+ * Applied once here, at entry creation, so it covers every call site including
+ * ones written later. `undefined` passes through untouched so the modal
+ * components' optional-call checks still behave the same.
+ */
+function deferCallback<A extends unknown[]>(
+  id: string,
+  callback: ((...args: A) => void) | undefined,
+): ((...args: A) => void) | undefined {
+  if (!callback) return undefined;
+  return (...args: A) => {
+    // A modal left open on purpose (a confirmation with `isLoading`, which
+    // does not dismiss on confirm) would never flush its queue, so run
+    // immediately in that case — nothing is tearing down, so nothing to wait
+    // for.
+    if (!stack.some((e) => e.id === id)) {
+      runAfterModalClose(() => callback(...args));
+      return;
+    }
+    const queued = pendingCallbacks.get(id) ?? [];
+    queued.push(() => callback(...args));
+    pendingCallbacks.set(id, queued);
+  };
+}
+
 function makeHandle(id: string): ModalHandle {
   const onDismissed = new Promise<void>((resolve) => {
     dismissResolvers.set(id, resolve);
@@ -270,7 +353,12 @@ function addFeedback(
   options: FeedbackModalOptions = {},
 ): ModalHandle {
   const id = `modal_${nextId++}`;
-  const merged: FeedbackModalEntry['options'] = { ...DEFAULT_FEEDBACK_OPTIONS, ...options };
+  const merged: FeedbackModalEntry['options'] = {
+    ...DEFAULT_FEEDBACK_OPTIONS,
+    ...options,
+    onConfirm: deferCallback(id, options.onConfirm),
+    onAction: deferCallback(id, options.onAction),
+  };
   const entry: FeedbackModalEntry = { id, type: 'feedback', title, message, options: merged };
   stack = [...stack, entry];
   emit();
@@ -288,7 +376,12 @@ function addConfirmation(
   options: ConfirmationModalOptions = {},
 ): ModalHandle {
   const id = `modal_${nextId++}`;
-  const merged: ConfirmationModalEntry['options'] = { ...DEFAULT_CONFIRMATION_OPTIONS, ...options };
+  const merged: ConfirmationModalEntry['options'] = {
+    ...DEFAULT_CONFIRMATION_OPTIONS,
+    ...options,
+    onConfirm: deferCallback(id, options.onConfirm),
+    onCancel: deferCallback(id, options.onCancel),
+  };
   const entry: ConfirmationModalEntry = {
     id,
     type: 'confirmation',
@@ -303,7 +396,12 @@ function addConfirmation(
 
 function addInput(title: string, message: string, options: InputModalOptions = {}): ModalHandle {
   const id = `modal_${nextId++}`;
-  const merged: InputModalEntry['options'] = { ...DEFAULT_INPUT_OPTIONS, ...options };
+  const merged: InputModalEntry['options'] = {
+    ...DEFAULT_INPUT_OPTIONS,
+    ...options,
+    onConfirm: deferCallback(id, options.onConfirm),
+    onCancel: deferCallback(id, options.onCancel),
+  };
   const entry: InputModalEntry = { id, type: 'input', title, message, options: merged };
   stack = [...stack, entry];
   emit();
