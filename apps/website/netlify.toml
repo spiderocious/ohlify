@@ -1,6 +1,13 @@
 [build]
   base = "apps/website"
-  command = "pnpm install --filter @ohlify/website... && pnpm --filter @ohlify/website build"
+  # Netlify's own install step already installs all 11 workspace projects.
+  # Do NOT run a second `pnpm install --filter ...` here: the root .npmrc
+  # sets `node-linker=hoisted` (required by Metro/Expo for apps/mobile), so
+  # every project shares ONE flat node_modules tree. A filtered install
+  # prunes that shared tree (-232 packages), which pulled React out from
+  # under the Next prerender worker => "Cannot read properties of null
+  # (reading 'useRef')" on /404. Just build.
+  command = "pnpm --filter @ohlify/website build"
   publish = ".next"
 
 # Native Next.js support on Netlify. The plugin handles middleware,
