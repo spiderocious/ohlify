@@ -26,6 +26,8 @@
     "migrate:down": "node-pg-migrate -m migrations --migration-file-language ts down"
   },
   "dependencies": {
+    "@bull-board/api": "^8.6.1",
+    "@bull-board/express": "^8.6.1",
     "agora-token": "^2.0.5",
     "argon2": "^0.44.0",
     "bullmq": "^5.76.2",

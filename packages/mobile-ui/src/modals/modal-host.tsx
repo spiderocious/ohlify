@@ -32,6 +32,24 @@ export function ModalHost() {
 
   const [displayed, setDisplayed] = useState<ModalEntry | undefined>(undefined);
   const [isExiting, setIsExiting] = useState(false);
+  // Keeps the native <Modal> mounted for a beat after `displayed` clears.
+  //
+  // Unmounting <Modal> is not a plain view removal on Android: it tears down a
+  // whole native window (a DialogFragment). That teardown is asynchronous, so
+  // the frames right after it still carry queued prop updates for views inside
+  // the dying window. If something mounts a new native surface during those
+  // frames — and `navigation.reset()` from a modal's onConfirm mounts an entire
+  // screen stack — Fabric delivers one of those updates to a surface that is
+  // already gone and aborts the process:
+  //
+  //     AssertionError at SurfaceMountingManager.overridePropsReadableMap
+  //
+  // Observed as `RNSScreen parentTag=-1` (an orphaned outgoing screen) sitting
+  // in the crash's mount-state dump next to a freshly mounting tree.
+  //
+  // Holding an empty <Modal> open across that window lets the native side
+  // finish on its own schedule, decoupled from whatever React does next.
+  const [modalMounted, setModalMounted] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   // Called before the `!displayed` early return below — hooks cannot be
   // conditional.
@@ -42,6 +60,7 @@ export function ModalHost() {
       // A new modal became the top of the stack — show it immediately,
       // even if one was mid-exit (the new one just replaces it in place).
       setDisplayed(storeTop);
+      setModalMounted(true);
       setIsExiting(false);
       progress.setValue(0);
       Animated.spring(progress, { toValue: 1, useNativeDriver: true, ...spring.snappy }).start();
@@ -72,17 +91,32 @@ export function ModalHost() {
     // values would restart the transition mid-flight.
   }, [storeTop]);
 
-  if (!displayed) return null;
+  // Content is gone but the native window is still open — close it only after
+  // the frames that could still be carrying updates for it have passed. See
+  // `modalMounted`. Cancelled if a new modal arrives meanwhile, so a rapid
+  // open-close-open does not tear the window down under the new content.
+  useEffect(() => {
+    if (displayed || !modalMounted) return;
+    const timer = setTimeout(() => setModalMounted(false), duration.base);
+    return () => clearTimeout(timer);
+  }, [displayed, modalMounted]);
+
+  if (!modalMounted) return null;
 
   const current = displayed;
-  const isFullscreen = current.options.position === 'fullscreen';
+  const isFullscreen = current?.options.position === 'fullscreen';
   const dismiss = () => {
-    if (current.options.dismissible) modalStore.dismiss(current.id);
+    if (current?.options.dismissible) modalStore.dismiss(current.id);
   };
-  const onDismiss = () => modalStore.dismiss(current.id);
+  const onDismiss = () => {
+    if (current) modalStore.dismiss(current.id);
+  };
 
+  // `current` is undefined during the lingering window described above: the
+  // content has been removed but the native <Modal> is deliberately still
+  // mounted. It renders empty and fully transparent for those few frames.
   let content;
-  switch (current.type) {
+  switch (current?.type) {
     case 'feedback':
       content = <AppFeedbackModal entry={current} onDismiss={onDismiss} />;
       break;
@@ -95,6 +129,8 @@ export function ModalHost() {
     case 'custom':
       content = <AppCustomModal entry={current} onDismiss={onDismiss} />;
       break;
+    default:
+      content = null;
   }
 
   const scrimOpacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
@@ -102,7 +138,14 @@ export function ModalHost() {
   const contentScale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] });
 
   return (
-    <Modal transparent={!isFullscreen} animationType="none" visible onRequestClose={dismiss}>
+    <Modal
+      // Transparent while lingering with no content, so the few frames the
+      // window stays open are invisible.
+      transparent={!isFullscreen || !current}
+      animationType="none"
+      visible
+      onRequestClose={dismiss}
+    >
       {/*
         Padded by hand rather than with KeyboardAvoidingView: its usual
         `behavior={ios ? 'padding' : undefined}` form is a no-op on Android, and
@@ -110,7 +153,12 @@ export function ModalHost() {
         useKeyboardInset. This keeps input modals clear of the keyboard and
         bottom-positioned modals clear of the navigation bar.
       */}
-      <View style={{ flex: 1, paddingBottom: isFullscreen ? 0 : bottomInset }}>
+      <View
+        // No touch target once the content is gone — the empty window must not
+        // swallow taps meant for the screen behind it.
+        pointerEvents={current ? 'auto' : 'none'}
+        style={{ flex: 1, paddingBottom: isFullscreen ? 0 : bottomInset }}
+      >
         {isFullscreen ? (
           <Animated.View style={{ flex: 1, opacity: contentOpacity }}>{content}</Animated.View>
         ) : (
@@ -124,9 +172,9 @@ export function ModalHost() {
                 flex: 1,
                 alignItems: 'center',
                 justifyContent:
-                  current.options.position === 'top'
+                  current?.options.position === 'top'
                     ? 'flex-start'
-                    : current.options.position === 'bottom'
+                    : current?.options.position === 'bottom'
                       ? 'flex-end'
                       : 'center',
                 paddingVertical: 24,

@@ -39,8 +39,11 @@ export const registerSetPassword: RequestHandler = asyncHandler(
 
 export const registerVerify: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const r = await service.registerVerify(req.body as RegisterVerifyDto, requestMeta(req));
-  if (!r.success) bail(r);
-  else ResponseUtil.created(res, r.data);
+  if (!r.success) {
+    bail(r);
+  } else {
+    ResponseUtil.created(res, r.data);
+  }
 });
 
 export const resendOtp: RequestHandler = asyncHandler(async (req: Request, res: Response) => {

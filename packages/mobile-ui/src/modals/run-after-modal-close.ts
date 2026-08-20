@@ -33,13 +33,24 @@ import { duration } from '../theme/motion';
  *
  * ## Why both delays
  *
- * `duration.base` covers ModalHost's exit animation; the extra frame lets the
- * native driver settle before anything else mounts. `runAfterInteractions` then
- * waits for any in-flight touch/animation handling. Neither alone is reliable —
- * the timeout without the interaction wait still lands mid-gesture, and the
- * interaction wait alone can resolve while the exit animation is still playing.
+ * The wait has to cover ModalHost's *whole* close sequence, which is two
+ * `duration.base` phases back to back:
+ *
+ *   1. the exit animation, after which the content is removed, then
+ *   2. the window ModalHost deliberately holds the native <Modal> open for
+ *      (see its `modalMounted` state) so Android can finish tearing down the
+ *      dialog window on its own schedule.
+ *
+ * Waiting only for phase 1 was not enough: navigation.reset() from a modal's
+ * onConfirm then mounted a whole screen stack while phase 2 was still running,
+ * which is the `RNSScreen parentTag=-1` orphan seen in the crash dump.
+ *
+ * The extra frame lets the native driver settle, and `runAfterInteractions`
+ * then waits for any in-flight touch/animation handling. Neither alone is
+ * reliable — the timeout without the interaction wait still lands mid-gesture,
+ * and the interaction wait alone can resolve while the animation is playing.
  */
-const EXIT_SETTLE_MS = duration.base + 32;
+const EXIT_SETTLE_MS = duration.base * 2 + 32;
 
 export function runAfterModalClose(action: () => void): void {
   setTimeout(() => {

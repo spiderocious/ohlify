@@ -17,7 +17,10 @@ const transport: LoggerOptions['transport'] =
         target: 'pino-pretty',
         options: {
           colorize: true,
-          singleLine: true,
+          // Bodies (`reqBody`/`resBody`, dev only) are the one thing worth
+          // reading across multiple lines — crammed onto one they are
+          // unusable, which would defeat the point of capturing them.
+          singleLine: false,
           translateTime: 'HH:MM:ss.l',
           ignore:
             'pid,hostname,service,env,adminId,adminRole,method,path,statusCode,durationMs,ip,userAgent,route',

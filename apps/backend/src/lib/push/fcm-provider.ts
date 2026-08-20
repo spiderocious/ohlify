@@ -27,13 +27,23 @@ interface FirebaseMessagingLike {
   sendEachForMulticast(message: unknown): Promise<MulticastResponse>;
 }
 
-interface FirebaseAdminLike {
-  apps: ReadonlyArray<FirebaseAppLike | null>;
-  credential: {
-    cert(input: { projectId: string; privateKey: string; clientEmail: string }): unknown;
-  };
+// firebase-admin v14 ships ONLY the modular API. The legacy namespace
+// surface this file used to describe — `admin.apps`, `admin.credential`,
+// `admin.messaging()` — was removed, and reading it yields `undefined`,
+// so `sdk.apps.find(...)` threw `Cannot read properties of undefined`
+// and every push silently fell back to the no-op provider.
+//
+// Two entry points now, matching what v14 actually exports:
+//   firebase-admin/app       → initializeApp, getApps, cert
+//   firebase-admin/messaging → getMessaging
+interface FirebaseAppModuleLike {
+  getApps(): ReadonlyArray<FirebaseAppLike>;
   initializeApp(opts: unknown, name?: string): FirebaseAppLike;
-  messaging(app: FirebaseAppLike): FirebaseMessagingLike;
+  cert(input: { projectId: string; privateKey: string; clientEmail: string }): unknown;
+}
+
+interface FirebaseMessagingModuleLike {
+  getMessaging(app: FirebaseAppLike): FirebaseMessagingLike;
 }
 
 /**
@@ -55,11 +65,12 @@ export const buildFcmProvider = async (opts: BuildOptions): Promise<PushProvider
   // The cast is over a narrow surface so we can compile cleanly without
   // the package installed; only environments that actually ship push
   // need to `pnpm add firebase-admin`.
-  const moduleName = 'firebase-admin';
-  const admin = (await import(moduleName)) as unknown as
-    | FirebaseAdminLike
-    | { default: FirebaseAdminLike };
-  const sdk: FirebaseAdminLike = 'default' in admin ? admin.default : admin;
+  const appModuleName = 'firebase-admin/app';
+  const messagingModuleName = 'firebase-admin/messaging';
+  const appModule = (await import(appModuleName)) as unknown as FirebaseAppModuleLike;
+  const messagingModule = (await import(
+    messagingModuleName
+  )) as unknown as FirebaseMessagingModuleLike;
 
   const serviceAccountJson = JSON.parse(
     Buffer.from(opts.serviceAccountJsonBase64, 'base64').toString('utf8'),
@@ -68,12 +79,12 @@ export const buildFcmProvider = async (opts: BuildOptions): Promise<PushProvider
   // Initialize an isolated Firebase app for our project. If multiple
   // services init the default app, this still keeps ours separate.
   const appName = `ohlify-push-${opts.projectId}`;
-  const existing = sdk.apps.find((a): a is FirebaseAppLike => a?.name === appName);
+  const existing = appModule.getApps().find((a) => a?.name === appName);
   const app =
     existing ??
-    sdk.initializeApp(
+    appModule.initializeApp(
       {
-        credential: sdk.credential.cert({
+        credential: appModule.cert({
           projectId: serviceAccountJson.project_id,
           privateKey: serviceAccountJson.private_key.replace(/\\n/g, '\n'),
           clientEmail: serviceAccountJson.client_email,
@@ -83,7 +94,7 @@ export const buildFcmProvider = async (opts: BuildOptions): Promise<PushProvider
       appName,
     );
 
-  const messaging = sdk.messaging(app);
+  const messaging = messagingModule.getMessaging(app);
 
   return {
     isEnabled: () => true,

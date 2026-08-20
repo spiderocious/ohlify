@@ -34,28 +34,30 @@ export const register = (app: Express): void => {
   authRouter.post(
     '/register/initiate',
     requireFeatureEnabled('registration'),
-    ipRateLimit(10, 15 * 60),
+    ipRateLimit(10, 15 * 60, 'auth:register'),
     validate(RegisterInitiateSchema),
     controller.registerInitiate,
   );
 
   authRouter.post(
     '/register/set-password',
-    ipRateLimit(10, 15 * 60),
+    ipRateLimit(10, 15 * 60, 'auth:register'),
     validate(RegisterSetPasswordSchema),
     controller.registerSetPassword,
   );
 
   authRouter.post(
     '/register/verify',
-    ipRateLimit(20, 15 * 60),
+    // Its own budget, and larger: mistyping a 6-digit OTP is ordinary, and
+    // burning the registration allowance on typos would strand a real signup.
+    ipRateLimit(20, 15 * 60, 'auth:register:verify'),
     validate(RegisterVerifySchema),
     controller.registerVerify,
   );
 
   authRouter.post(
     '/register/resend-otp',
-    ipRateLimit(10, 15 * 60),
+    ipRateLimit(10, 15 * 60, 'auth:register:resend'),
     validate(ResendOtpSchema),
     controller.resendOtp,
   );
@@ -67,6 +69,16 @@ export const register = (app: Express): void => {
   authRouter.post(
     '/login',
     requireFeatureEnabled('login'),
+    // Explicitly limited. It previously carried no `ipRateLimit` of its own
+    // and leaned on the shared per-IP counter — which, now that counters are
+    // correctly split per scope, would leave the one endpoint most worth
+    // brute-forcing with no dedicated ceiling at all.
+    //
+    // 20 in 15 minutes: comfortably above a person mistyping a password
+    // several times, well below anything useful for guessing. Sliding, so a
+    // legitimate user recovers attempts continuously rather than waiting out
+    // a full window.
+    ipRateLimit(20, 15 * 60, 'auth:login'),
     validate(LoginSchema),
     controller.login,
   );
@@ -78,21 +90,23 @@ export const register = (app: Express): void => {
   // ── Forgot password ────────────────────────────────────────────────────────
   authRouter.post(
     '/forgot-password/initiate',
-    ipRateLimit(10, 15 * 60),
+    // All three steps share one scope on purpose — otherwise a caller gets 10
+    // fresh attempts at each stage of a single reset.
+    ipRateLimit(10, 15 * 60, 'auth:forgot-password'),
     validate(ForgotPasswordInitiateSchema),
     controller.forgotPasswordInitiate,
   );
 
   authRouter.post(
     '/forgot-password/verify-otp',
-    ipRateLimit(10, 15 * 60),
+    ipRateLimit(10, 15 * 60, 'auth:forgot-password'),
     validate(ForgotPasswordVerifyOtpSchema),
     controller.forgotPasswordVerifyOtp,
   );
 
   authRouter.post(
     '/forgot-password/reset',
-    ipRateLimit(10, 15 * 60),
+    ipRateLimit(10, 15 * 60, 'auth:forgot-password'),
     validate(ForgotPasswordResetSchema),
     controller.forgotPasswordReset,
   );
@@ -105,7 +119,7 @@ export const register = (app: Express): void => {
     '/password',
     requireAuth,
     requireActiveUser,
-    ipRateLimit(5, 60 * 60),
+    ipRateLimit(5, 60 * 60, 'auth:change-password'),
     validate(ChangePasswordSchema),
     controller.changePassword,
   );

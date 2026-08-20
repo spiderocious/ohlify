@@ -39,6 +39,7 @@ import { register as registerWallet } from '@features/wallet/index.js';
 import { ResponseUtil } from '@lib/response.js';
 import { errorHandler } from '@middlewares/errorHandler.middleware.js';
 import { globalRateLimit } from '@middlewares/rateLimit.middleware.js';
+import { registerQueueDashboard } from '@features/dev/queue-dashboard.js';
 import { requestIdMiddleware } from '@middlewares/requestId.middleware.js';
 import { requestLogMiddleware } from '@middlewares/requestLog.middleware.js';
 import { ERROR_CODES, severityFor } from '@shared/constants/error-codes.js';
@@ -151,6 +152,10 @@ export const buildApp = (): express.Express => {
 
   // Global rate limit
   app.use(globalRateLimit);
+
+  // Queue dashboard — non-production only, no-ops in prod. Mounted before the
+  // feature routes so its own router owns `/admin/queues` unambiguously.
+  registerQueueDashboard(app);
 
   // Feature routes
   features.forEach((register) => register(app));
