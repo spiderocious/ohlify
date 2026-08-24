@@ -1,39 +1,64 @@
 import { useState } from 'react';
 
-import { AppDropdownInput, AppText, AppTextInput } from '@ohlify/ui';
 import {
   AdminTransactionSource,
   type AdminTransactionListItem,
 } from '@ohlify/api';
+import {
+  HawkAdminPanel,
+  HawkBadge,
+  HawkCallout,
+  HawkCaption,
+  HawkDetailDrawer,
+  HawkDropdown,
+  HawkKeyValue,
+  HawkLedgerRow,
+  HawkSearchInput,
+  HawkSemantic,
+  HawkStatusBadge,
+  HawkText,
+  IconLedger,
+  IconReceipt,
+  formatKobo,
+  formatKoboCompact,
+  type HawkColumn,
+  type HawkKpi,
+} from '@ohlify/hawk-ui';
 
-import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
-import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
-import { DetailDrawer } from '../../../shared/parts/detail-drawer.js';
-import { DetailRow, DetailSection } from '../../../shared/parts/detail-row.js';
-import { FilterBar } from '../../../shared/parts/filter-bar.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
-import { QueryView } from '../../../shared/parts/empty-or-error.js';
-import { StatusPill } from '../../../shared/parts/status-pill.js';
-import { formatDateTime, formatRelative } from '../../../shared/format/datetime.js';
-import { formatKobo } from '../../../shared/format/kobo.js';
+import { BoardScreen } from '../../../shared/parts/board-screen.js';
+import { statusFor } from '../../../shared/parts/board-status.js';
+import { RowsSkeleton } from '../../../shared/parts/board-skeletons.js';
 import { UserLink } from '../../../shared/parts/user-link.js';
+import { formatDateTime, formatRelative } from '../../../shared/format/datetime.js';
 import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
 import { useTransaction, useTransactions } from '../api/use-transactions.js';
 
 const SOURCE_OPTIONS = [
-  { label: 'Any source', value: '' },
-  ...Object.values(AdminTransactionSource).map((v) => ({ label: humanizeStatus(v), value: v })),
+  { value: '', label: 'Any source' },
+  ...Object.values(AdminTransactionSource).map((v) => ({
+    value: v,
+    label: humanizeStatus(v),
+  })),
 ];
 
 const STATUS_OPTIONS = [
-  { label: 'Any', value: '' },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Success', value: 'success' },
-  { label: 'Failed', value: 'failed' },
-  { label: 'Abandoned', value: 'abandoned' },
-  { label: 'Reversed', value: 'reversed' },
+  { value: '', label: 'Any status' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'success', label: 'Success' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'abandoned', label: 'Abandoned' },
+  { value: 'reversed', label: 'Reversed' },
 ];
 
+/**
+ * The transactions board — scale and precision at once (A23).
+ *
+ * Two different things share this table: Paystack **payments** and ledger
+ * **journals**. They are not normalised into one shape, because they are not
+ * one thing — a payment is money arriving from outside, a journal is money
+ * moving inside. The `source` column says which, and the drawer renders the
+ * matching view rather than a lowest common denominator of both.
+ */
 export function TransactionsListScreen() {
   const [source, setSource] = useState('');
   const [status, setStatus] = useState('');
@@ -42,254 +67,293 @@ export function TransactionsListScreen() {
 
   const list = useTransactions({ source, status, user_id: userId });
 
-  const columns: ColumnDef<AdminTransactionListItem>[] = [
+  const pageTotal = list.items.reduce((sum, row) => sum + Number(row.amount_kobo), 0);
+  const payments = list.items.filter(
+    (row) => row.source === AdminTransactionSource.PAYMENT,
+  ).length;
+
+  const kpis: HawkKpi[] = [
+    {
+      key: 'value',
+      label: 'Value on this page',
+      valueKobo: pageTotal,
+      icon: IconReceipt,
+      basis: 'gross',
+    },
+    {
+      key: 'payments',
+      label: 'Payments',
+      value: payments.toLocaleString(),
+      icon: IconReceipt,
+    },
+    {
+      key: 'journals',
+      label: 'Journal entries',
+      value: (list.items.length - payments).toLocaleString(),
+      icon: IconLedger,
+    },
+    {
+      key: 'shown',
+      label: 'Rows shown',
+      value: list.items.length.toLocaleString(),
+    },
+  ];
+
+  const columns: ReadonlyArray<HawkColumn<AdminTransactionListItem>> = [
     {
       key: 'ref',
       header: 'Reference',
       width: '22%',
-      render: (t) => (
-        <code className="text-text-primary text-xs">{t.reference ?? shortId(t.id, 12)}</code>
+      render: (row) => (
+        <span className="hawk-record">{row.reference ?? shortId(row.id, 14)}</span>
       ),
     },
     {
       key: 'source',
       header: 'Source',
       width: '12%',
-      render: (t) => humanizeStatus(t.source),
+      render: (row) => (
+        <HawkBadge
+          label={humanizeStatus(row.source)}
+          semantic={
+            row.source === AdminTransactionSource.PAYMENT
+              ? HawkSemantic.INFO
+              : HawkSemantic.NEUTRAL
+          }
+          size="sm"
+        />
+      ),
     },
-    { key: 'type', header: 'Type', width: '14%', render: (t) => humanizeStatus(t.type ?? '') },
+    {
+      key: 'type',
+      header: 'Type',
+      width: '16%',
+      render: (row) => <HawkCaption>{humanizeStatus(row.type ?? '')}</HawkCaption>,
+    },
     {
       key: 'user',
       header: 'User',
       width: '14%',
-      render: (t) => <UserLink userId={t.user_id} idLen={12} />,
+      render: (row) => <UserLink userId={row.user_id} idLen={12} />,
     },
     {
       key: 'amount',
       header: 'Amount',
-      width: '14%',
       align: 'right',
-      render: (t) => (
-        <span className="font-semibold tabular-nums">{formatKobo(t.amount_kobo)}</span>
+      width: '14%',
+      render: (row) => (
+        <span className="hawk-record font-semibold">{formatKobo(row.amount_kobo)}</span>
       ),
     },
     {
       key: 'status',
       header: 'Status',
       width: '12%',
-      render: (t) => <StatusPill label={humanizeStatus(t.status)} tone="muted" />,
+      render: (row) => <HawkStatusBadge status={statusFor('transaction', row.status)} size="sm" />,
     },
     {
       key: 'when',
       header: 'When',
-      width: '12%',
-      render: (t) => <span className="text-text-muted">{formatRelative(t.created_at)}</span>,
+      align: 'right',
+      render: (row) => (
+        <span className="hawk-record text-hawk-ink-muted">{formatRelative(row.created_at)}</span>
+      ),
     },
   ];
 
   return (
     <>
-      <PageHeader title="Transactions" subtitle="Payments + journal entries across the platform." />
-
-      <FilterBar>
-        <div className="w-44">
-          <AppDropdownInput
-            label="Source"
-            options={SOURCE_OPTIONS}
-            value={source}
-            onChange={setSource}
-          />
-        </div>
-        <div className="w-44">
-          <AppDropdownInput
-            label="Status"
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={setStatus}
-          />
-        </div>
-        <div className="w-72">
-          <AppTextInput label="User ID" placeholder="user uuid" value={userId} onChange={setUserId} />
-        </div>
-      </FilterBar>
-
-      <DataTable
-        columns={columns}
-        rows={list.items}
-        rowKey={(t) => t.id}
-        isLoading={list.isLoading}
-        error={list.error}
-        emptyTitle="No transactions"
-        onRowClick={(t) => setOpenId(t.id)}
-        footer={
-          <CursorPagination
-            hasPrev={list.hasPrev}
-            hasNext={list.hasNext}
-            onPrev={list.goPrev}
-            onNext={list.goNext}
-            itemCount={list.items.length}
-          />
+      <BoardScreen
+        title="Transactions"
+        subtitle={`Payments and journal entries · ${formatKoboCompact(pageTotal)} on this page`}
+        kpis={kpis}
+        filters={
+          <>
+            <HawkDropdown
+              options={SOURCE_OPTIONS}
+              value={source}
+              onChange={setSource}
+              placeholder="Any source"
+            />
+            <HawkDropdown
+              options={STATUS_OPTIONS}
+              value={status}
+              onChange={setStatus}
+              placeholder="Any status"
+            />
+            <div className="w-56">
+              <HawkSearchInput
+                value={userId}
+                onChange={setUserId}
+                placeholder="Filter by user ID"
+              />
+            </div>
+          </>
         }
+        columns={columns}
+        list={list}
+        rowKey={(row) => row.id}
+        onRowClick={(row) => setOpenId(row.id)}
+        emptyTitle="No transactions"
+        emptyDescription="Nothing matches these filters."
       />
 
-      <TxDrawer id={openId} onClose={() => setOpenId(null)} />
+      <TransactionDrawer id={openId} onClose={() => setOpenId(null)} />
     </>
   );
 }
 
-function TxDrawer({ id, onClose }: { id: string | null; onClose: () => void }) {
+function TransactionDrawer({ id, onClose }: { id: string | null; onClose: () => void }) {
   const detail = useTransaction(id);
+  const data = detail.data;
+
   return (
-    <DetailDrawer
-      open={Boolean(id)}
+    <HawkDetailDrawer.Root
+      open={id !== null}
       onClose={onClose}
-      title={id ? `Transaction ${shortId(id, 12)}` : 'Transaction'}
-      width={600}
+      title={data?.source === 'payment' ? 'Payment' : 'Journal entry'}
+      subtitle={id ? shortId(id, 20) : undefined}
     >
-      <QueryView isLoading={detail.isLoading} error={detail.error}>
-        {detail.data && detail.data.source === 'payment' && (
-          <PaymentDetailView data={detail.data} />
-        )}
-        {detail.data && detail.data.source === 'journal' && (
-          <JournalDetailView data={detail.data} />
-        )}
-      </QueryView>
-    </DetailDrawer>
+      {detail.isLoading && <RowsSkeleton rows={8} />}
+
+      {!detail.isLoading && detail.error && (
+        <HawkCallout
+          semantic={HawkSemantic.CRITICAL}
+          title="Could not load"
+          message={detail.error.errorMessage ?? 'The request failed.'}
+        />
+      )}
+
+      {data?.source === 'payment' && <PaymentView data={data} />}
+      {data?.source === 'journal' && <JournalView data={data} />}
+    </HawkDetailDrawer.Root>
   );
 }
 
-function PaymentDetailView({
+function PaymentView({
   data,
 }: {
-  data: Extract<ReturnType<typeof useTransaction>['data'], { source: 'payment' }>;
+  data: Extract<NonNullable<ReturnType<typeof useTransaction>['data']>, { source: 'payment' }>;
 }) {
-  if (!data) return null;
   const p = data.payment;
+
   return (
-    <>
-      <DetailSection title="Payment">
-        <DetailRow label="ID">{shortId(p.id, 18)}</DetailRow>
-        <DetailRow label="Status">
-          <StatusPill label={humanizeStatus(p.status)} tone="muted" />
-        </DetailRow>
-        <DetailRow label="Reference">
-          <code>{p.reference ?? '—'}</code>
-        </DetailRow>
-        <DetailRow label="Paystack ref">
-          <code>{p.paystack_reference ?? '—'}</code>
-        </DetailRow>
-        <DetailRow label="User">
-          <UserLink userId={p.user_id} idLen={18} />
-        </DetailRow>
-        <DetailRow label="Purpose">{humanizeStatus(p.purpose ?? '')}</DetailRow>
-        <DetailRow label="Amount">
-          <AppText variant="bodyTitle">{formatKobo(p.amount_kobo)}</AppText>
-        </DetailRow>
-        <DetailRow label="Paystack fees">
-          {p.paystack_fees_kobo !== null ? formatKobo(p.paystack_fees_kobo) : '—'}
-        </DetailRow>
-        <DetailRow label="Currency">{p.currency ?? '—'}</DetailRow>
-        <DetailRow label="Paid at">{formatDateTime(p.paid_at)}</DetailRow>
-        <DetailRow label="Created">{formatDateTime(p.created_at)}</DetailRow>
-        <DetailRow label="Updated">{formatDateTime(p.updated_at)}</DetailRow>
-      </DetailSection>
+    <div className="flex flex-col gap-hawk-6">
+      <div className="grid gap-x-hawk-6 gap-y-hawk-4 sm:grid-cols-2">
+        <HawkKeyValue label="Payment" value={shortId(p.id, 20)} record />
+        <HawkKeyValue
+          label="Status"
+          value={<HawkStatusBadge status={statusFor('transaction', p.status)} size="sm" />}
+        />
+        <HawkKeyValue label="Reference" value={p.reference ?? '—'} record />
+        <HawkKeyValue label="Paystack ref" value={p.paystack_reference ?? '—'} record />
+        <HawkKeyValue label="User" value={<UserLink userId={p.user_id} idLen={20} />} />
+        <HawkKeyValue label="Purpose" value={humanizeStatus(p.purpose ?? '')} />
+        <HawkKeyValue label="Amount" value={formatKobo(p.amount_kobo)} record />
+        <HawkKeyValue
+          label="Processor fees"
+          value={p.paystack_fees_kobo !== null ? formatKobo(p.paystack_fees_kobo) : '—'}
+          record
+        />
+        <HawkKeyValue label="Currency" value={p.currency ?? 'NGN'} record />
+        <HawkKeyValue label="Paid" value={formatDateTime(p.paid_at)} record />
+        <HawkKeyValue label="Created" value={formatDateTime(p.created_at)} record />
+      </div>
 
       {data.related_webhooks && data.related_webhooks.length > 0 && (
-        <DetailSection title={`Related webhooks (${data.related_webhooks.length})`}>
-          <ul className="flex flex-col gap-2">
-            {data.related_webhooks.map((w) => (
-              <li
-                key={w.id}
-                className="rounded-md border border-border bg-surface-light px-3 py-2 text-xs"
-              >
-                <div className="flex items-baseline justify-between">
-                  <code className="font-semibold text-text-primary">{w.event_type}</code>
-                  <span className="text-text-muted">{formatDateTime(w.received_at)}</span>
+        <HawkAdminPanel title={`Webhooks (${data.related_webhooks.length})`}>
+          <div className="flex flex-col gap-hawk-4">
+            {data.related_webhooks.map((hook) => (
+              <div key={hook.id} className="flex flex-col gap-hawk-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-hawk-3">
+                  <HawkText variant="label" record ink="strong" className="font-medium">
+                    {hook.event_type}
+                  </HawkText>
+                  <HawkCaption ink="muted" className="hawk-record">
+                    {formatDateTime(hook.received_at)}
+                  </HawkCaption>
                 </div>
-                <div className="mt-0.5 text-text-muted">
-                  Event {shortId(w.event_id, 18)} ·{' '}
-                  {w.processing_error ? (
-                    <span className="text-red-700">{w.processing_error}</span>
-                  ) : w.processed_at ? (
-                    'processed'
-                  ) : (
-                    'pending'
-                  )}
-                </div>
-              </li>
+                {/*
+                  An errored webhook on a successful payment is the shape of
+                  "the user paid and was never credited" — the single most
+                  expensive failure this console reports.
+                */}
+                {hook.processing_error ? (
+                  <HawkCaption className="text-hawk-critical">
+                    {hook.processing_error}
+                  </HawkCaption>
+                ) : (
+                  <HawkCaption ink="muted">
+                    {hook.processed_at ? 'Processed' : 'Awaiting processing'}
+                  </HawkCaption>
+                )}
+              </div>
             ))}
-          </ul>
-        </DetailSection>
+          </div>
+        </HawkAdminPanel>
       )}
-    </>
+    </div>
   );
 }
 
-function JournalDetailView({
+function JournalView({
   data,
 }: {
-  data: Extract<ReturnType<typeof useTransaction>['data'], { source: 'journal' }>;
+  data: Extract<NonNullable<ReturnType<typeof useTransaction>['data']>, { source: 'journal' }>;
 }) {
-  if (!data) return null;
   const j = data.journal;
-  return (
-    <>
-      <DetailSection title="Journal">
-        <DetailRow label="ID">{shortId(j.id, 18)}</DetailRow>
-        <DetailRow label="Kind">{humanizeStatus(j.kind)}</DetailRow>
-        <DetailRow label="Idempotency">
-          <code className="text-xs">{j.idempotency_key}</code>
-        </DetailRow>
-        <DetailRow label="Memo">{j.memo ?? '—'}</DetailRow>
-        <DetailRow label="Related call">{shortId(j.related_call_id, 18)}</DetailRow>
-        <DetailRow label="Related payment">{shortId(j.related_payment_id, 18)}</DetailRow>
-        <DetailRow label="Related withdrawal">
-          {shortId(j.related_withdrawal_id, 18)}
-        </DetailRow>
-        <DetailRow label="Created">{formatDateTime(j.created_at)}</DetailRow>
-        <DetailRow label="Created by">{shortId(j.created_by_admin_id, 18)}</DetailRow>
-      </DetailSection>
+  const lines = data.lines;
+  const sum = lines.reduce((total, line) => total + Number(line.signed_amount_kobo), 0);
 
-      <DetailSection title={`Lines (${data.lines.length})`}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase text-text-muted">
-              <th className="py-1 font-bold">Account</th>
-              <th className="py-1 text-right font-bold">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.lines.map((line) => {
-              const num =
-                typeof line.signed_amount_kobo === 'string'
-                  ? Number(line.signed_amount_kobo)
-                  : line.signed_amount_kobo;
-              return (
-                <tr key={line.id} className="border-t border-border/60">
-                  <td className="py-1.5">
-                    <div className="flex flex-col">
-                      <span className="text-text-primary">
-                        {line.account_label ?? humanizeStatus(line.account_kind)}
-                      </span>
-                      <code className="text-[10px] text-text-muted">
-                        {shortId(line.account_id, 14)}
-                      </code>
-                    </div>
-                  </td>
-                  <td
-                    className={
-                      'py-1.5 text-right font-semibold tabular-nums ' +
-                      (num >= 0 ? 'text-emerald-700' : 'text-red-700')
-                    }
-                  >
-                    {formatKobo(line.signed_amount_kobo, { signed: true })}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </DetailSection>
-    </>
+  return (
+    <div className="flex flex-col gap-hawk-6">
+      <div className="grid gap-x-hawk-6 gap-y-hawk-4 sm:grid-cols-2">
+        <HawkKeyValue label="Journal" value={shortId(j.id, 20)} record />
+        <HawkKeyValue label="Kind" value={humanizeStatus(j.kind)} />
+        <HawkKeyValue label="Idempotency" value={j.idempotency_key} record />
+        <HawkKeyValue label="Memo" value={j.memo ?? '—'} />
+        <HawkKeyValue label="Related call" value={shortId(j.related_call_id, 18)} record />
+        <HawkKeyValue label="Related payment" value={shortId(j.related_payment_id, 18)} record />
+        <HawkKeyValue
+          label="Related withdrawal"
+          value={shortId(j.related_withdrawal_id, 18)}
+          record
+        />
+        <HawkKeyValue label="Created" value={formatDateTime(j.created_at)} record />
+      </div>
+
+      <HawkAdminPanel title={`Lines (${lines.length})`} flush>
+        <div className="flex flex-col">
+          {lines.map((line) => {
+            const amount = Number(line.signed_amount_kobo);
+            return (
+              <HawkLedgerRow
+                key={line.id}
+                account={shortId(line.account_id, 14)}
+                accountName={line.account_label ?? humanizeStatus(line.account_kind)}
+                // Separate columns rather than one signed figure: a ledger
+                // where debits and credits share a column is one you have to
+                // read twice to balance.
+                {...(amount < 0 ? { debitKobo: Math.abs(amount) } : { creditKobo: amount })}
+              />
+            );
+          })}
+        </div>
+      </HawkAdminPanel>
+
+      {/*
+        Every journal's lines sum to zero by construction — a deferred
+        constraint trigger enforces it at COMMIT. Showing the sum is a free
+        assertion that the row in front of you is intact.
+      */}
+      <HawkCallout
+        semantic={sum === 0 ? HawkSemantic.SUCCESS : HawkSemantic.CRITICAL}
+        message={
+          sum === 0
+            ? 'Lines balance to zero, as double-entry requires.'
+            : `Lines sum to ${formatKobo(sum)} rather than zero — this journal is malformed.`
+        }
+      />
+    </div>
   );
 }

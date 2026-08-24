@@ -64,7 +64,7 @@ export const listParticipants = async (callId: string, viewerUserId: string) => 
  * professional — the inviter's balance funds the whole call, which is why the
  * settlement math needs no change at all.
  */
-export const invite = async (input: { callId: string; inviterUserId: string; handle: string }) => {
+export const invite = async (input: { callId: string; inviterUserId: string; email: string }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -83,23 +83,33 @@ export const invite = async (input: { callId: string; inviterUserId: string; han
       return new ServiceError('forbidden', CALL_INVITE_MESSAGES.FORBIDDEN, 403);
     }
 
-    const target = await findUserByHandle(client, input.handle);
+    const target = await findUserByEmail(client, input.email);
     if (!target) {
+      // Succeeds even though nothing happened.
+      //
+      // A 404 here tells the caller whether an email has an Ohlify account —
+      // an enumeration oracle anyone can query. Returning the same shape
+      // whether or not the address exists removes the oracle entirely, rather
+      // than leaving the rate limit as the only defence.
+      //
+      // The inviter is told an invite was sent "if an account exists", which
+      // is true and gives them nothing to probe with.
       await client.query('ROLLBACK');
-      return new ServiceError('not_found', CALL_INVITE_MESSAGES.INVALID_TARGET, 404, {
-        handle: ['No user with that handle'],
-      });
+      return new ServiceSuccess(
+        { participant_id: null, user_id: null, status: 'invited_if_exists' as const },
+        CALL_INVITE_MESSAGES.CREATED,
+      );
     }
     if (target.role === InviteUserRole.PROFESSIONAL) {
       await client.query('ROLLBACK');
       return new ServiceError('validation_error', CALL_INVITE_MESSAGES.INVALID_TARGET, 400, {
-        handle: ['Professionals cannot be invited to a call'],
+        email: ['Professionals cannot be invited to a call'],
       });
     }
     if (target.id === call.caller_user_id || target.id === call.callee_user_id) {
       await client.query('ROLLBACK');
       return new ServiceError('validation_error', CALL_INVITE_MESSAGES.INVALID_TARGET, 400, {
-        handle: ['That person is already in this call'],
+        email: ['That person is already in this call'],
       });
     }
 
@@ -112,7 +122,7 @@ export const invite = async (input: { callId: string; inviterUserId: string; han
     if (await participantsRepo.isUserBusyElsewhere(client, target.id, call.id)) {
       await client.query('ROLLBACK');
       return new ServiceError('conflict', CALL_INVITE_MESSAGES.INVALID_TARGET, 409, {
-        handle: ['That person is already on another call'],
+        email: ['That person is already on another call'],
       });
     }
 
@@ -122,6 +132,31 @@ export const invite = async (input: { callId: string; inviterUserId: string; han
       role: CallParticipantRole.INVITEE,
       status: CallParticipantStatus.PENDING_APPROVAL,
       invitedBy: input.inviterUserId,
+    });
+
+    // Same transaction as the participant row: the professional is only asked
+    // to approve something that actually exists. SSE alone reaches them only
+    // while the app is foregrounded — a decision this call is blocked on has
+    // to survive a locked phone.
+    // `findUserByEmail` returns only { id, role }; the push needs display
+    // names, so both parties are re-read in full.
+    const [inviter, invitee] = await Promise.all([
+      authRepo.findUserById(input.inviterUserId),
+      authRepo.findUserById(target.id),
+    ]);
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.CALL,
+      aggregateId: call.id,
+      eventType: OutboxEventType.PUSH_CALL_INVITE_REQUESTED,
+      payload: {
+        call_id: call.id,
+        target_user_id: call.callee_user_id,
+        participant_id: participant.id,
+        inviter_user_id: input.inviterUserId,
+        inviter_full_name: inviter?.full_name ?? 'Someone',
+        invitee_user_id: target.id,
+        invitee_full_name: invitee?.full_name ?? 'someone',
+      },
     });
 
     await client.query('COMMIT');
@@ -211,6 +246,25 @@ export const resolveInvite = async (input: {
       });
     }
 
+    // Tell the INVITER either way. They asked for this and are waiting on it;
+    // leaving them to infer the answer from whether a third tile appears is
+    // how a declined invite reads as a broken app.
+    const invitee = await authRepo.findUserById(participant.user_id);
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.CALL,
+      aggregateId: call.id,
+      eventType: input.approve
+        ? OutboxEventType.PUSH_CALL_INVITE_APPROVED
+        : OutboxEventType.PUSH_CALL_INVITE_REJECTED,
+      payload: {
+        call_id: call.id,
+        participant_id: participant.id,
+        target_user_id: call.caller_user_id,
+        invitee_user_id: participant.user_id,
+        invitee_full_name: invitee?.full_name ?? 'They',
+      },
+    });
+
     await client.query('COMMIT');
 
     publish(call.caller_user_id, {
@@ -299,15 +353,29 @@ export const respondToRing = async (input: { callId: string; userId: string; acc
   }
 };
 
-const findUserByHandle = async (
+/**
+ * Finds the person being invited, by email.
+ *
+ * Email rather than handle because **clients never set one**: `handle` is a
+ * professional KYC item only, so most client accounts have none — and clients
+ * are the only people who can be invited. Handle lookup was unusable for its
+ * own target audience.
+ *
+ * Case-insensitive: registration does not normalise email, so `Bode@x.com` and
+ * `bode@x.com` are both stored as typed and either must resolve.
+ *
+ * This endpoint reveals whether an address has an account, which is why the
+ * route carries a tight per-user rate limit. Do not remove it.
+ */
+const findUserByEmail = async (
   runner: { query: typeof pool.query },
-  handle: string,
+  email: string,
 ): Promise<{ id: string; role: string } | null> => {
   const res = await runner.query<{ id: string; role: string }>(
     `SELECT id, role FROM users
-      WHERE lower(handle) = lower($1) AND deleted_at IS NULL
+      WHERE lower(email) = lower($1) AND deleted_at IS NULL
       LIMIT 1`,
-    [handle.replace(/^@/, '')],
+    [email.trim()],
   );
   return res.rows[0] ?? null;
 };

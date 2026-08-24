@@ -14,6 +14,8 @@ import {
   RescheduleSchema,
   ScheduleActionSchema,
   SendMessageSchema,
+  InviteParticipantSchema,
+  RespondToChatInviteSchema,
 } from './chat.schema.js';
 
 export const register = (app: Express): void => {
@@ -59,6 +61,27 @@ export const register = (app: Express): void => {
     validate(RescheduleSchema),
     controller.reschedule,
   );
+
+  // ── Group chat participants ───────────────────────────────────────────────
+  // Only the owner may invite; only the professional may approve. Both rules
+  // live in the service, not the route, so they hold for every caller.
+  router.get('/conversations/:id/participants', controller.listParticipants);
+  router.post(
+    '/conversations/:id/participants',
+    // Deliberately tighter than the ordinary write limit: looking someone up
+    // by email makes this an account-existence oracle, and 10 attempts per
+    // 30 minutes makes enumerating a list impractical while leaving genuine
+    // use — inviting one or two people to a call — comfortably unaffected.
+    rateLimitMiddleware((req) => `chat-invite:${req.userId ?? 'anon'}`, 10, 1800),
+    validate(InviteParticipantSchema),
+    controller.inviteParticipant,
+  );
+  router.post(
+    '/conversations/:id/participants/:participantId/respond',
+    validate(RespondToChatInviteSchema),
+    controller.respondToInvite,
+  );
+  router.delete('/conversations/:id/participants/:participantId', controller.removeParticipant);
 
   app.use('/api/v1/chat', router);
 };

@@ -44,3 +44,21 @@ export type SendMessageDto = z.infer<typeof SendMessageSchema>;
 export type ProposeScheduleDto = z.infer<typeof ProposeScheduleSchema>;
 export type ScheduleActionDto = z.infer<typeof ScheduleActionSchema>;
 export type RescheduleDto = z.infer<typeof RescheduleSchema>;
+
+/** Group chat: invite by handle, and the professional's ruling. */
+export const InviteParticipantSchema = z
+  .object({
+    // Email, not handle: `handle` is a professional KYC item, so most client
+    // accounts have none — and clients are the only people who can be invited.
+    email: z.string().email('Enter a valid email address').max(254),
+  })
+  .strict();
+
+export const RespondToChatInviteSchema = z
+  .object({
+    approve: z.boolean(),
+  })
+  .strict();
+
+export type InviteParticipantDto = z.infer<typeof InviteParticipantSchema>;
+export type RespondToChatInviteDto = z.infer<typeof RespondToChatInviteSchema>;

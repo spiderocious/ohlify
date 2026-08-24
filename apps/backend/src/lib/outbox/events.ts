@@ -34,6 +34,27 @@ export const OutboxEventType = {
   PUSH_CALL_CANCELLED: 'push.call_cancelled',
   // Push: visible "you missed a call from X" for `target_user_id`.
   PUSH_CALL_MISSED: 'push.call_missed',
+  // ── Invite lifecycle ─────────────────────────────────────────────────────
+  // Every hop in an invite is announced, so nobody sits on a screen waiting
+  // for something that already resolved.
+  //
+  // Call invites: the professional is asked, then BOTH the inviter and the
+  // invitee hear the outcome. The invitee's approval push is what makes their
+  // phone ring — it reuses the incoming-call treatment, not a quiet banner.
+  // Asks the professional to approve. Distinct from PUSH_CALL_INVITE, which
+  // rings the already-approved invitee — this one only needs a decision.
+  PUSH_CALL_INVITE_REQUESTED: 'push.call_invite.requested',
+  PUSH_CALL_INVITE_APPROVED: 'push.call_invite.approved',
+  PUSH_CALL_INVITE_REJECTED: 'push.call_invite.rejected',
+  // Chat invites mirror calls exactly, minus the ringing: the professional
+  // approves a guest before they can read the thread.
+  PUSH_CHAT_INVITE: 'push.chat_invite',
+  PUSH_CHAT_INVITE_APPROVED: 'push.chat_invite.approved',
+  PUSH_CHAT_INVITE_REJECTED: 'push.chat_invite.rejected',
+  // Admin campaign broadcast. One event per recipient — the outbox fans out by
+  // `target_user_id`, and this is what actually reaches a phone: writing the
+  // notification row alone left the campaign "sent" with nothing delivered.
+  PUSH_CAMPAIGN: 'push.campaign',
   // Push: visible chat-message notification for `target_user_id`.
   PUSH_CHAT_MESSAGE: 'push.chat_message',
 } as const;
@@ -46,6 +67,7 @@ export const OutboxAggregateType = {
   WITHDRAWAL: 'withdrawal',
   USER: 'user',
   CHAT: 'chat',
+  CAMPAIGN: 'campaign',
 } as const;
 
 export type OutboxAggregateType = (typeof OutboxAggregateType)[keyof typeof OutboxAggregateType];

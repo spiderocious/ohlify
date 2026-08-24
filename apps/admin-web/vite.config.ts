@@ -22,6 +22,14 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/ui/src/index.ts'),
       },
       {
+        find: '@ohlify/hawk-ui/styles.css',
+        replacement: path.resolve(__dirname, '../../packages/hawk-ui/src/styles.css'),
+      },
+      {
+        find: /^@ohlify\/hawk-ui$/,
+        replacement: path.resolve(__dirname, '../../packages/hawk-ui/src/index.ts'),
+      },
+      {
         find: /^@ohlify\/core$/,
         replacement: path.resolve(__dirname, '../../packages/core/src/index.ts'),
       },

@@ -1,7 +1,10 @@
 import type { PoolClient } from 'pg';
 
+import { queueProDashboardInvalidation } from '@features/professionals/pro-dashboard.cache.js';
 import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
+
+import * as participantsRepo from './conversation-participants.repo.js';
 
 import type {
   CallEventPayload,
@@ -49,11 +52,39 @@ export const ensureConversation = async (
      RETURNING *`,
     [makeId('conv'), clientUserId, professionalId],
   );
-  return res.rows[0]!;
+  const conversation = res.rows[0]!;
+
+  // Both original sides become participant rows in the same statement path as
+  // the conversation. Membership is read from here, so a thread without them
+  // would be invisible to the two people in it. Idempotent, because
+  // ensureConversation is called on every open, not just the first.
+  await runner.query(
+    `INSERT INTO conversation_participants
+       (id, conversation_id, user_id, role, status)
+     VALUES ($1, $2, $3, 'owner', 'active'),
+            ($4, $2, $5, 'professional', 'active')
+     ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+    [makeId('cp'), conversation.id, clientUserId, makeId('cp'), professionalId],
+  );
+
+  return conversation;
 };
 
-// Lists a user's conversations (as client OR professional), newest activity
-// first, with the other participant's display fields + the viewer's unread.
+/**
+ * A user's conversations, newest activity first.
+ *
+ * Membership comes from `conversation_participants`, not the two columns on
+ * `conversations` — a guest is in neither of them and would otherwise see no
+ * threads at all.
+ *
+ * `peer_*` still describes ONE counterpart, chosen as the professional (or,
+ * when the viewer is the professional, the owner). In a 3-person thread the
+ * list row keeps showing that person while the full roster travels separately
+ * on the thread view, so a two-person list UI needs no changes to keep working.
+ *
+ * `unread_count` comes from the viewer's own participant row, which is what
+ * makes a third badge possible.
+ */
 export const listConversationsForUser = async (
   userId: string,
   limit: number,
@@ -68,14 +99,34 @@ export const listConversationsForUser = async (
   params.push(limit);
   const res = await pool.query<ConversationListRow>(
     `SELECT c.*,
-            CASE WHEN c.client_user_id = $1 THEN c.professional_id ELSE c.client_user_id END AS peer_user_id,
-            u.full_name  AS peer_name,
-            u.avatar_url AS peer_avatar_url
+            me.unread_count AS viewer_unread,
+            peer.user_id    AS peer_user_id,
+            u.full_name     AS peer_name,
+            u.avatar_url    AS peer_avatar_url,
+            -- Presence, so a thread row can show whether the peer is
+            -- reachable. The users table is already joined for the name and
+            -- avatar, so this costs nothing extra — and PRD 4.2 requires list
+            -- rows to carry enough that opening one never shows a spinner.
+            u.is_available  AS peer_is_available
        FROM conversations c
-       JOIN users u
-         ON u.id = CASE WHEN c.client_user_id = $1 THEN c.professional_id ELSE c.client_user_id END
-      WHERE (c.client_user_id = $1 OR c.professional_id = $1)
-        AND c.last_message_at IS NOT NULL
+       JOIN conversation_participants me
+         ON me.conversation_id = c.id
+        AND me.user_id = $1
+        AND me.status = 'active'
+       -- The counterpart to show in the list: the professional, unless the
+       -- viewer IS the professional, in which case the thread's owner.
+       JOIN LATERAL (
+         SELECT p.user_id
+           FROM conversation_participants p
+          WHERE p.conversation_id = c.id
+            AND p.user_id <> $1
+            AND p.status = 'active'
+          ORDER BY CASE p.role WHEN 'professional' THEN 0 WHEN 'owner' THEN 1 ELSE 2 END,
+                   p.joined_at ASC
+          LIMIT 1
+       ) peer ON TRUE
+       JOIN users u ON u.id = peer.user_id
+      WHERE c.last_message_at IS NOT NULL
         ${cursorClause}
       ORDER BY c.last_message_at DESC
       LIMIT $${params.length}`,
@@ -205,7 +256,19 @@ export const updateScheduleStatus = async (
       RETURNING *`,
     [messageId, status],
   );
-  return res.rows[0]!;
+  const updated = res.rows[0]!;
+  // A proposal leaving `pending` changes the dashboard's scheduled-call count.
+  // The conversation is read back rather than passed in because every caller
+  // already holds the message id and not all of them hold the conversation.
+  const convo = await runner.query<{ professional_id: string }>(
+    `SELECT professional_id FROM conversations WHERE id = $1`,
+    [updated.conversation_id],
+  );
+  const professionalId = convo.rows[0]?.professional_id;
+  if (professionalId !== undefined) {
+    queueProDashboardInvalidation(runner, professionalId);
+  }
+  return updated;
 };
 
 /** The conversation's live (pending/accepted) schedule, if any — for the list hint. */
@@ -222,49 +285,61 @@ export const findActiveSchedule = async (conversationId: string): Promise<Messag
   return res.rows[0] ?? null;
 };
 
-// Bumps last-message metadata + increments the RECIPIENT's unread counter.
+/**
+ * Bumps last-message metadata and every recipient's unread counter.
+ *
+ * The counter moved to `conversation_participants`: with three people there is
+ * no single "other side" to increment, so the write is "everyone but the
+ * sender". The two legacy columns are left untouched and unread — they exist
+ * only so a rollback still has its data.
+ */
 export const bumpAfterMessage = async (
   runner: QueryRunner,
   conversation: ConversationRow,
   senderUserId: string,
   preview: string,
 ): Promise<void> => {
-  const senderIsClient = conversation.client_user_id === senderUserId;
-  // Recipient's unread goes up; sender's own count is untouched.
-  const unreadColumn = senderIsClient ? 'professional_unread' : 'client_unread';
   await runner.query(
     `UPDATE conversations
         SET last_message_at = now(),
             last_message_preview = $2,
-            ${unreadColumn} = ${unreadColumn} + 1,
             updated_at = now()
       WHERE id = $1`,
     [conversation.id, preview.slice(0, 140)],
   );
+  await participantsRepo.bumpUnreadForOthers(runner, conversation.id, senderUserId);
+  // `unread_messages` on the professional's dashboard just changed. Only the
+  // professional's own dashboard exists, so only theirs is busted — and only
+  // when someone else sent the message, since a pro's own message does not
+  // raise their unread count.
+  if (conversation.professional_id !== senderUserId) {
+    queueProDashboardInvalidation(runner, conversation.professional_id);
+  }
 };
 
-// Clears the viewer's unread counter for a conversation.
+/** Clears the viewer's own unread counter for a conversation. */
 export const markRead = async (
   runner: QueryRunner,
   conversation: ConversationRow,
   viewerUserId: string,
 ): Promise<void> => {
-  const viewerIsClient = conversation.client_user_id === viewerUserId;
-  const column = viewerIsClient ? 'client_unread' : 'professional_unread';
-  await runner.query(`UPDATE conversations SET ${column} = 0, updated_at = now() WHERE id = $1`, [
+  await participantsRepo.clearUnread(runner, conversation.id, viewerUserId);
+  await runner.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [
     conversation.id,
   ]);
+  // Reading clears the count, which is the same figure rising did. Without
+  // this the dashboard keeps advertising messages the professional has just
+  // read — the exact bug the pre-Hawk badge shipped with.
+  if (conversation.professional_id === viewerUserId) {
+    queueProDashboardInvalidation(runner, viewerUserId);
+  }
 };
 
-export const totalUnreadForUser = async (userId: string): Promise<number> => {
-  const res = await pool.query<{ total: string }>(
-    `SELECT COALESCE(SUM(
-              CASE WHEN client_user_id = $1 THEN client_unread
-                   WHEN professional_id = $1 THEN professional_unread
-                   ELSE 0 END), 0)::text AS total
-       FROM conversations
-      WHERE client_user_id = $1 OR professional_id = $1`,
-    [userId],
-  );
-  return Number(res.rows[0]?.total ?? '0');
-};
+/**
+ * Total unread across every thread this user is still in.
+ *
+ * Reads participant rows rather than the two legacy columns, so a guest's
+ * unread counts toward their badge like anyone else's.
+ */
+export const totalUnreadForUser = (userId: string): Promise<number> =>
+  participantsRepo.totalUnreadForUser(userId);

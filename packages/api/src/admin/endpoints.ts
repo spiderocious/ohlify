@@ -14,6 +14,10 @@ export const ADMIN_EP = {
   AUTH_TOTP_SETUP: `${BASE}/admin/auth/totp/setup`,
   AUTH_TOTP_CONFIRM: `${BASE}/admin/auth/totp/confirm`,
 
+  // Dashboards — one composed read per board.
+  DASHBOARD: `${ADMIN}/dashboard`,
+  DASHBOARD_TECHNICAL: `${ADMIN}/dashboard/technical`,
+
   // Metrics
   METRICS_OVERVIEW: `${ADMIN}/metrics/overview`,
   METRICS_REVENUE: `${ADMIN}/metrics/revenue`,

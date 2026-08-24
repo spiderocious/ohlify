@@ -99,6 +99,16 @@ const EnvSchema = z.object({
   WORKER_INVITE_EXPIRY_ENABLED: z.string().optional(),
   WORKER_EMAIL_ENABLED: z.string().optional(),
 
+  // Object storage for the files feature (ported from the Go file-service).
+  // Any S3-compatible provider: Tigris/t3.dev today, Cloudflare R2 by changing
+  // only these values — endpoint + path-style addressing is all either needs.
+  // Region is `auto` for both.
+  S3_ENDPOINT: z.string().url(),
+  S3_REGION: z.string().min(1).default('auto'),
+  S3_BUCKET: z.string().min(1),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 

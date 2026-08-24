@@ -1,6 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import { ADMIN_EP, type AdminUserDetail, type AdminUserListItem } from '@ohlify/api';
+import {
+  ADMIN_EP,
+  type AdminUserCounts,
+  type AdminUserDetail,
+  type AdminUserListItem,
+} from '@ohlify/api';
 
 import { useAdminMutation } from '../../../shared/api/use-admin-mutation.js';
 import { useAdminQuery } from '../../../shared/api/use-admin-query.js';
@@ -19,6 +24,28 @@ export function useAdminUsers(filters: UsersFilters) {
     key: ['admin', 'users'],
     url: ADMIN_EP.USERS,
     filters,
+  });
+}
+
+const EMPTY_COUNTS: AdminUserCounts = { all: 0, active: 0, suspended: 0, blocked: 0 };
+
+/**
+ * Status-tab totals.
+ *
+ * A second, unfiltered request rather than reading them off the list response:
+ * the counts must not move as the operator types, or the tab can no longer say
+ * how many suspended accounts exist — which is the only thing it is for. The
+ * backend returns them in `meta` on every list call, so this is the same query
+ * with no filters, and React Query dedupes it across the page.
+ */
+export function useAdminUserCounts() {
+  return useAdminQuery<AdminUserCounts>({
+    key: ['admin', 'users', 'counts'],
+    url: ADMIN_EP.USERS,
+    searchParams: { limit: 1 },
+    select: (_data, meta) =>
+      (meta as { counts?: AdminUserCounts } | undefined)?.counts ?? EMPTY_COUNTS,
+    staleTime: 30_000,
   });
 }
 

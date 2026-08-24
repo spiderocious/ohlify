@@ -18,6 +18,7 @@ import { register as registerChat } from '@features/chat/index.js';
 import { register as registerCallSessionEvents } from '@features/call-session-events/index.js';
 import { register as registerDev } from '@features/dev/index.js';
 import { register as registerEvents } from '@features/events/index.js';
+import { register as registerFiles } from '@features/files/index.js';
 import { register as registerHealth } from '@features/health/index.js';
 import { register as registerInstantCalls } from '@features/instant-calls/index.js';
 import { register as registerIntents } from '@features/intents/index.js';
@@ -116,6 +117,13 @@ const features = [
   registerDev, // dev-only; no-op in production. Demo Agora token mint at /api/v1/dev/agora-token.
   registerBanners,
   registerCampaigns, // /api/v1/admin/campaigns — scheduled sends (revamp-2 P5)
+  // Last on purpose. It mounts on `/` to keep the Go file-service's legacy
+  // paths, and an Express router mounted at the root is consulted for every
+  // request — registering it earlier would put it ahead of every feature above
+  // in the matching order. Its routes are two exact literal paths, so it still
+  // cannot shadow anything, but keeping it last means that stays true even if
+  // a path is added to it later.
+  registerFiles, // /get-upload-uri + /get-file-uri (+ /api/v1/files aliases)
 ];
 
 export const buildApp = (): express.Express => {

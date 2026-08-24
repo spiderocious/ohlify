@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 
+import { queueProDashboardInvalidation } from '@features/professionals/pro-dashboard.cache.js';
 import { pool } from '@lib/db/pool.js';
 import { id as makeId } from '@lib/ids.js';
 
@@ -47,6 +48,48 @@ export const create = async (
   return res.rows[0]!;
 };
 
+/**
+ * Records a call that never rang — the professional was offline, not
+ * accepting, or in a DnD block when someone tried to reach them.
+ *
+ * Written terminal: `rejected` never transitions, is never billed, and
+ * settles nothing. It exists so the attempt appears in both parties' history
+ * and the professional can be told someone tried.
+ *
+ * No participant rows and no `agora_channel_name` use: nothing ever joins.
+ * `seconds_allotted` is 0 and `per_minute_kobo` records the rate that WOULD
+ * have applied, which is what makes the row readable later.
+ */
+export const createRejectedAttempt = async (
+  runner: QueryRunner,
+  input: {
+    callerUserId: string;
+    calleeUserId: string;
+    callType: CallType;
+    perMinuteKobo: bigint;
+    rejectionReason: string;
+  },
+): Promise<InstantCallRow> => {
+  const callId = makeId('ic');
+  const res = await runner.query<InstantCallRow>(
+    `INSERT INTO instant_calls
+       (id, caller_user_id, callee_user_id, call_type, agora_channel_name,
+        per_minute_kobo, seconds_allotted, status, rejection_reason, ended_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 0, 'rejected', $7, now())
+     RETURNING *`,
+    [
+      callId,
+      input.callerUserId,
+      input.calleeUserId,
+      input.callType,
+      `ic_${callId}`,
+      input.perMinuteKobo.toString(),
+      input.rejectionReason,
+    ],
+  );
+  return res.rows[0]!;
+};
+
 export const findById = async (callId: string): Promise<InstantCallRow | null> => {
   const res = await pool.query<InstantCallRow>(
     `SELECT * FROM instant_calls WHERE id = $1 LIMIT 1`,
@@ -64,6 +107,39 @@ export const findByIdForUpdate = async (
     [callId],
   );
   return res.rows[0] ?? null;
+};
+
+/**
+ * A user's instant-call history, either side of the call.
+ *
+ * `/calls/history` cannot serve these: it INNER JOINs `bookings`, so it only
+ * ever returns scheduled calls. Instant calls — including `rejected` attempts
+ * that never rang — have no booking and were invisible everywhere.
+ *
+ * Keyset on `(created_at, id)` rather than an offset so a call arriving
+ * mid-scroll cannot shift rows out from under the reader.
+ */
+export const listHistoryForUser = async (input: {
+  userId: string;
+  limit: number;
+  cursor?: { last_id: string; last_sort_key: string };
+}): Promise<InstantCallRow[]> => {
+  const params: unknown[] = [input.userId];
+  let keyset = '';
+  if (input.cursor) {
+    params.push(input.cursor.last_sort_key, input.cursor.last_id);
+    keyset = `AND (created_at, id) < ($${params.length - 1}::timestamptz, $${params.length})`;
+  }
+  params.push(input.limit);
+  const res = await pool.query<InstantCallRow>(
+    `SELECT * FROM instant_calls
+      WHERE (caller_user_id = $1 OR callee_user_id = $1)
+        ${keyset}
+      ORDER BY created_at DESC, id DESC
+      LIMIT $${params.length}`,
+    params,
+  );
+  return res.rows;
 };
 
 // The callee's currently-live (ringing/active) instant call, if any. Powers the
@@ -122,6 +198,45 @@ export const findStaleActive = async (
   return res.rows;
 };
 
+/**
+ * Every live call this user is the callee of, locked.
+ *
+ * Returns a LIST, not one row: the one-live-call unique index was dropped
+ * (migration 0104), so nothing structurally prevents more than one any more.
+ * `FOR UPDATE` because the caller is about to settle them.
+ */
+export const findLiveForCalleeAll = async (
+  runner: QueryRunner,
+  calleeUserId: string,
+): Promise<InstantCallRow[]> => {
+  const res = await runner.query<InstantCallRow>(
+    `SELECT * FROM instant_calls
+      WHERE callee_user_id = $1 AND status = ANY($2::instant_call_status[])
+      ORDER BY created_at ASC
+      FOR UPDATE`,
+    [calleeUserId, LIVE_INSTANT_CALL_STATUSES],
+  );
+  return res.rows;
+};
+
+/**
+ * Closes a call that never connected. Nothing was talked, so nothing is
+ * billed and no settlement journal is written.
+ */
+export const markCancelled = async (
+  runner: QueryRunner,
+  callId: string,
+): Promise<void> => {
+  await runner.query(
+    `UPDATE instant_calls
+        SET status = '${InstantCallStatus.CANCELLED}',
+            ended_at = now(),
+            updated_at = now()
+      WHERE id = $1`,
+    [callId],
+  );
+};
+
 export const markActive = async (runner: QueryRunner, callId: string): Promise<void> => {
   await runner.query(
     `UPDATE instant_calls
@@ -178,4 +293,21 @@ export const finalize = async (
         AND status IN ('pending_approval', 'ringing', 'joined')`,
     [input.callId],
   );
+
+  // The professional's dashboard counts missed calls and lists recent ones, so
+  // every ending moves a figure on it.
+  //
+  // Hooked here rather than at each caller for the same reason the seats are
+  // released here: `finalize` is where hangup, decline, ring-timeout and the
+  // stale-resolver all converge. A missed call in particular posts no journal —
+  // nobody was charged — so the money-path invalidation would never see it.
+  const call = await runner.query<{ caller_user_id: string; callee_user_id: string }>(
+    `SELECT caller_user_id, callee_user_id FROM instant_calls WHERE id = $1`,
+    [input.callId],
+  );
+  const row = call.rows[0];
+  if (row) {
+    queueProDashboardInvalidation(runner, row.callee_user_id);
+    queueProDashboardInvalidation(runner, row.caller_user_id);
+  }
 };

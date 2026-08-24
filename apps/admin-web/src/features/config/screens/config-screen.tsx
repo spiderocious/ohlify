@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { AppButton, AppText, AppTextAreaInput, DrawerService } from '@ohlify/ui';
+import { AppTextAreaInput, DrawerService } from '@ohlify/ui';
 import type { AdminConfigItem } from '@ohlify/api';
+import {
+  HawkAdminPageHeader,
+  HawkButton,
+  HawkCaption,
+  HawkEmptyState,
+  HawkSearchInput,
+} from '@ohlify/hawk-ui';
 
-import { PageHeader } from '../../../shared/parts/page-header.js';
-import { QueryView } from '../../../shared/parts/empty-or-error.js';
-import { SearchInput } from '../../../shared/parts/search-input.js';
+import { RowsSkeleton } from '../../../shared/parts/board-skeletons.js';
 import { toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { useAdminConfig, usePatchConfig } from '../api/use-config.js';
 import { ConfigField } from '../parts/config-field.js';
@@ -186,50 +191,56 @@ export function ConfigScreen() {
 
   return (
     <>
-      <PageHeader
+      <HawkAdminPageHeader
         title="Platform config"
-        subtitle="Runtime knobs. Edits require a note and are audit-logged with before/after."
+        subtitle="Runtime knobs. Every edit takes a note and is audit-logged with before and after."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-hawk-4">
+            {/*
+              Invalid beats unsaved: a key that will not parse blocks the save
+              entirely, so it is the state worth reading first.
+            */}
             {erroredKeys.length > 0 && (
-              <AppText variant="bodySmall" className="text-red-700">
+              <HawkCaption className="text-hawk-critical">
                 {erroredKeys.length} invalid
-              </AppText>
+              </HawkCaption>
             )}
             {dirtyKeys.length > 0 && (
-              <AppText variant="bodySmall" className="text-amber-700">
+              <HawkCaption className="text-hawk-caution">
                 {dirtyKeys.length} unsaved
-              </AppText>
+              </HawkCaption>
             )}
-            <AppButton
+            <HawkButton
               label="Save changes"
-              variant="solid"
-              height={36}
-              isLoading={patch.isPending}
-              onPressed={dirtyKeys.length > 0 && erroredKeys.length === 0 ? onSave : undefined}
+              loading={patch.isPending}
+              disabled={dirtyKeys.length === 0 || erroredKeys.length > 0}
+              onClick={() => {
+                if (dirtyKeys.length > 0 && erroredKeys.length === 0) void onSave();
+              }}
             />
           </div>
         }
       />
 
-      <div className="border-b border-border bg-surface px-4 py-3 sm:px-6">
+      <div className="flex flex-col gap-hawk-6 px-hawk-pad pb-hawk-9">
         <div className="max-w-md">
-          <SearchInput
+          <HawkSearchInput
             value={search}
-            onDebouncedChange={setSearch}
+            onChange={setSearch}
             placeholder="Search keys, labels, help text…"
           />
         </div>
-      </div>
 
-      <div className="px-4 py-6 sm:px-6">
-        <QueryView isLoading={cfg.isLoading} error={cfg.error}>
-          {cfg.data && (
-            <div className="flex flex-col gap-4">
+        {cfg.isLoading ? (
+          <RowsSkeleton rows={10} />
+        ) : (
+          cfg.data && (
+            <div className="flex flex-col gap-hawk-6">
               {orderedGroupIds.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border bg-surface p-8 text-center text-text-muted">
-                  No keys match this search.
-                </div>
+                <HawkEmptyState
+                  title="No keys match"
+                  description="Try a different search term."
+                />
               )}
               {orderedGroupIds.map((groupId) => {
                 const rows = grouped.get(groupId) ?? [];
@@ -275,8 +286,8 @@ export function ConfigScreen() {
                 );
               })}
             </div>
-          )}
-        </QueryView>
+          )
+        )}
       </div>
     </>
   );

@@ -16,3 +16,16 @@ export function shortId(id: string | null | undefined, len = 8): string {
   if (!id) return '—';
   return id.length > len ? `${id.slice(0, len)}…` : id;
 }
+
+/**
+ * Admin role → the word operators actually use for it. `finance_ops` is the
+ * only one that is not just a capitalisation away from its enum value, which
+ * is exactly why this belongs here rather than inline at each call site.
+ */
+export function humanizeRole(role: string | null | undefined): string {
+  if (!role) return '—';
+  if (role === 'finance_ops') return 'Finance';
+  if (role === 'admin') return 'Admin';
+  if (role === 'support') return 'Support';
+  return humanizeStatus(role);
+}

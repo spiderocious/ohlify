@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { AppButton, AppDropdownInput, AppText, AppTextAreaInput, AppTextInput } from '@ohlify/ui';
 import { AdminLegalKind } from '@ohlify/api';
 
-import { PageHeader } from '../../../shared/parts/page-header.js';
+import { HawkAdminPageHeader } from '@ohlify/hawk-ui';
 import { QueryView } from '../../../shared/parts/empty-or-error.js';
 import { confirm, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { formatDateTime } from '../../../shared/format/datetime.js';
@@ -45,7 +45,7 @@ export function LegalScreen() {
 
   return (
     <>
-      <PageHeader title="Legal documents" subtitle="EULA, privacy, terms — version-controlled." />
+      <HawkAdminPageHeader title="Legal documents" subtitle="EULA, privacy, terms — version-controlled." />
 
       <div className="px-6 py-6">
         <div className="mb-4 max-w-xs">

@@ -90,9 +90,21 @@ const sumMeteredIntervals = (events: readonly CallSessionEventRow[]): number | n
  * the professional unpaid. So the event log wins, and the client's figure is
  * kept only to reconcile against.
  *
- * When the log is unusable we fall back to server wall-clock rather than the
- * client's claim, capped by it so a stalled `ended` event can't inflate the
- * charge beyond what the client itself believes it used.
+ * When the log is unusable we fall back to server wall-clock — the span the
+ * server itself observed between `connected_at` and the hangup.
+ *
+ * **The client's figure is deliberately NOT a cap.** It used to be, on the
+ * reasoning that a stalled `ended` event should not inflate the charge. In
+ * practice it did the opposite: the mobile ticker excludes time spent
+ * reconnecting, so a 119-second video call with two brief drops reported 63
+ * seconds and the professional was paid for 63 — the peer's bad network came
+ * out of their earnings. Worse, a call whose ticker never started reported
+ * zero and paid nothing for real talk time.
+ *
+ * Wall-clock is bounded already: `seconds_allotted` caps it at settlement, and
+ * the caller cannot be charged past the escrow they prepaid. Those are real
+ * limits. A number the client picks is not one — especially when the client
+ * has an incentive to under-report and the professional has no say in it.
  */
 export const deriveBillableSeconds = (
   events: readonly CallSessionEventRow[],
@@ -113,7 +125,7 @@ export const deriveBillableSeconds = (
     Math.floor((fallback.endedAt.getTime() - fallback.connectedAt.getTime()) / 1000),
   );
   return {
-    billableSeconds: Math.min(wallClockSeconds, clientReportedSeconds),
+    billableSeconds: wallClockSeconds,
     source: DurationSource.WALL_CLOCK,
   };
 };

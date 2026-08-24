@@ -587,7 +587,16 @@ export const revaluateKycStatus = async (userId: string): Promise<void> => {
  * services. For these, "the data exists on the spec" is good-enough
  * proof that the user addressed the flag.
  */
-const PASSIVELY_ACKNOWLEDGED: readonly KycItemKey[] = ['bank_account', 'rates'];
+const PASSIVELY_ACKNOWLEDGED: readonly KycItemKey[] = [
+  'bank_account',
+  'rates',
+  // Same rationale as `rates`, which these replace: they are written through
+  // /me/rates, so a flagged rate item could never be acknowledged via
+  // PATCH /onboarding/kyc/* and the user would be permanently unable to
+  // resubmit.
+  'audio_rate',
+  'video_rate',
+];
 
 export const completeKyc = async (userId: string) => {
   const user = await repo.findUserById(userId);

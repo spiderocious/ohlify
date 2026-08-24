@@ -40,8 +40,12 @@ const toView = (row: NotificationRow): NotificationView => ({
 export const notify = async (
   runner: QueryRunner,
   input: repo.CreateNotificationInput,
-): Promise<NotificationRow> => {
+): Promise<NotificationRow | null> => {
   const row = await repo.create(runner, input);
+  // Null means an outbox retry hit a row we already wrote. Re-publishing would
+  // flash a "new notification" badge for something the user has already seen,
+  // so a duplicate is silently dropped.
+  if (row === null) return null;
   publish(input.userId, { type: RealtimeEvent.NOTIFICATION_NEW, data: { id: row.id } });
   publish(input.userId, { type: RealtimeEvent.BADGES_CHANGED });
   return row;

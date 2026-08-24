@@ -1,6 +1,8 @@
 import * as auditRepo from '@features/admin/admin.audit.repo.js';
 import * as bookingsRepo from '@features/bookings/bookings.repo.js';
 import * as callsRepo from '@features/calls/calls.repo.js';
+import * as instantCallsRepo from '@features/instant-calls/instant-calls.repo.js';
+import { InstantCallStatus } from '@features/instant-calls/instant-calls.types.js';
 import { TERMINAL_CALL_STATUSES } from '@features/calls/calls.types.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
@@ -19,9 +21,20 @@ import type {
 } from './reviews.schema.js';
 import type { AdminReviewDetailView, AdminReviewView, ReviewView } from './reviews.types.js';
 
+/**
+ * The id of whichever call this review is attached to.
+ *
+ * Clients need one id, not two nullable ones — they post to
+ * `/calls/:id/rating` with either kind and expect the same shape back. The DB
+ * guarantees exactly one is set, so the fallback can never yield an empty
+ * string in practice; it exists only to keep the view type non-nullable.
+ */
+const callIdOf = (row: { call_id: string | null; instant_call_id: string | null }): string =>
+  row.call_id ?? row.instant_call_id ?? '';
+
 const toView = (row: repo.ListReviewsRow): ReviewView => ({
   id: row.id,
-  call_id: row.call_id,
+  call_id: callIdOf(row),
   rating: row.rating,
   feedback_text: row.feedback_text,
   is_public: row.is_public,
@@ -36,7 +49,7 @@ const toView = (row: repo.ListReviewsRow): ReviewView => ({
 
 const toAdminView = (row: repo.AdminReviewListRow): AdminReviewView => ({
   id: row.id,
-  call_id: row.call_id,
+  call_id: callIdOf(row),
   rating: row.rating,
   feedback_text: row.feedback_text,
   is_public: row.is_public,
@@ -68,7 +81,63 @@ const toAdminView = (row: repo.AdminReviewListRow): AdminReviewView => ({
 //   3. Authenticated user must BE the caller of the call
 //   4. No existing review for this call
 
+/**
+ * Resolves an instant call into the same shape the scheduled path checks.
+ *
+ * Instant calls are a separate table with no booking, so the scheduled
+ * eligibility walk (`calls` → `bookings` → caller) cannot reach them. Every
+ * instant call was therefore unreviewable: the mobile app posts its `ic_…` id
+ * here, `callsRepo.findById` found nothing, and the user was told they could
+ * not review the call.
+ */
+const eligibleInstantCall = async (
+  callId: string,
+  userId: string,
+): Promise<
+  | { ok: true; subjectUserId: string }
+  | { ok: false; error: ServiceError }
+> => {
+  const call = await instantCallsRepo.findById(callId);
+  if (!call) {
+    return { ok: false, error: new ServiceError('call_not_found', REVIEW_MESSAGES.INVALID, 404) };
+  }
+  // Only a call that actually happened. A cancelled ring or a missed one has
+  // nothing to rate, and `ended` is the only terminal state that connected.
+  if (call.status !== InstantCallStatus.ENDED) {
+    return {
+      ok: false,
+      error: new ServiceError('review_not_eligible', REVIEW_MESSAGES.INVALID, 409, {
+        call_id: ['Call is not in a terminal state — wait for it to end'],
+      }),
+    };
+  }
+  if (call.connected_seconds <= 0) {
+    return {
+      ok: false,
+      error: new ServiceError('review_not_eligible', REVIEW_MESSAGES.INVALID, 409, {
+        call_id: ['Cannot review a call you did not join'],
+      }),
+    };
+  }
+  // Attribution is one-direction: the client rates the professional. On an
+  // instant call the caller is always the client.
+  if (call.caller_user_id !== userId) {
+    return {
+      ok: false,
+      error: new ServiceError('review_not_eligible', REVIEW_MESSAGES.INVALID, 403, {
+        call_id: ['Only the caller can review the call'],
+      }),
+    };
+  }
+  return { ok: true, subjectUserId: call.callee_user_id };
+};
+
 export const postRating = async (callId: string, dto: PostRatingDto, userId: string) => {
+  // Instant calls carry their own id prefix and live in their own table.
+  if (callId.startsWith('ic_')) {
+    return postInstantRating(callId, dto, userId);
+  }
+
   const call = await callsRepo.findById(callId);
   if (!call) {
     return new ServiceError('call_not_found', REVIEW_MESSAGES.INVALID, 404);
@@ -126,7 +195,7 @@ export const postRating = async (callId: string, dto: PostRatingDto, userId: str
     return new ServiceSuccess(
       {
         id: review.id,
-        call_id: review.call_id,
+        call_id: callIdOf(review),
         rating: review.rating,
         feedback_text: review.feedback_text,
         is_public: review.is_public,
@@ -138,6 +207,72 @@ export const postRating = async (callId: string, dto: PostRatingDto, userId: str
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     logger.error({ err, callId }, 'postRating tx failed');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * The instant-call arm of [postRating].
+ *
+ * Same contract as the scheduled path — one review per call, client rates
+ * professional, outbox event for the aggregate recompute — differing only in
+ * which table the call and its uniqueness live in.
+ */
+const postInstantRating = async (callId: string, dto: PostRatingDto, userId: string) => {
+  const eligible = await eligibleInstantCall(callId, userId);
+  if (!eligible.ok) return eligible.error;
+
+  const existing = await repo.findByInstantCallId(callId);
+  if (existing) {
+    return new ServiceError('review_exists', REVIEW_MESSAGES.CONFLICT, 409);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const review = await repo.create(client, {
+      instantCallId: callId,
+      reviewerUserId: userId,
+      subjectUserId: eligible.subjectUserId,
+      rating: dto.rating,
+      feedbackText: dto.feedback_text ?? null,
+      isPublic: dto.is_public ?? true,
+    });
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.CALL,
+      aggregateId: callId,
+      eventType: OutboxEventType.REVIEW_POSTED,
+      payload: {
+        review_id: review.id,
+        call_id: callId,
+        reviewer_user_id: userId,
+        subject_user_id: eligible.subjectUserId,
+        rating: dto.rating,
+        is_public: review.is_public,
+      },
+    });
+    await client.query('COMMIT');
+    logger.info(
+      { reviewId: review.id, callId, rating: dto.rating, subject: eligible.subjectUserId },
+      'instant-call review posted',
+    );
+    return new ServiceSuccess(
+      {
+        id: review.id,
+        call_id: callId,
+        rating: review.rating,
+        feedback_text: review.feedback_text,
+        is_public: review.is_public,
+        subject_user_id: review.subject_user_id,
+        created_at: review.created_at.toISOString(),
+      },
+      REVIEW_MESSAGES.CREATED,
+    );
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err, callId }, 'postInstantRating tx failed');
     throw err;
   } finally {
     client.release();
@@ -361,7 +496,9 @@ export const adminGetReview = async (reviewId: string) => {
     return new ServiceError('review_not_found', REVIEW_MESSAGES.NOT_FOUND, 404);
   }
   const base = toAdminView(row);
-  const call = await callsRepo.findById(row.call_id);
+  // Only a scheduled review has a booking behind it to expand. An instant-call
+  // review carries no booking, so the detail panel simply omits that block.
+  const call = row.call_id ? await callsRepo.findById(row.call_id) : null;
   const booking = call ? await bookingsRepo.findById(call.booking_id) : null;
   const trail = await auditRepo.trailFor('review', row.id);
   const detail: AdminReviewDetailView = {

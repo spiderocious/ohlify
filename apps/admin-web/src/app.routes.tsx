@@ -136,6 +136,11 @@ const AppReleasesScreen = lazy(() =>
 const ConfigScreen = lazy(() =>
   import('./features/config/screens/config-screen.js').then((m) => ({ default: m.ConfigScreen })),
 );
+const TechnicalScreen = lazy(() =>
+  import('./features/technical/screens/technical-screen.js').then((m) => ({
+    default: m.TechnicalScreen,
+  })),
+);
 const AuditLogScreen = lazy(() =>
   import('./features/audit-log/screens/audit-log-screen.js').then((m) => ({
     default: m.AuditLogScreen,
@@ -146,6 +151,14 @@ const ReviewsListScreen = lazy(() =>
     default: m.ReviewsListScreen,
   })),
 );
+// The Hawk gallery. Unauthenticated, and deliberately NOT nested under
+// AppEntrypoint — see the route below.
+const HawkPreviewScreen = lazy(() =>
+  import('./features/hawk-preview/screens/hawk-preview-screen.js').then((m) => ({
+    default: m.HawkPreviewScreen,
+  })),
+);
+
 const StrikesListScreen = lazy(() =>
   import('./features/strikes/screens/strikes-list-screen.js').then((m) => ({
     default: m.StrikesListScreen,
@@ -159,6 +172,14 @@ function lazyRoute(element: ReactElement): ReactElement {
 }
 
 const routes: RouteObject[] = [
+  // The Hawk design-system gallery.
+  //
+  // A SIBLING of AppEntrypoint, not a child, and that is load-bearing. Nesting
+  // it would mount AppProvider — which throws at module scope when VITE_API_URL
+  // is unset — plus the pre-Hawk ModalHost and ToastHost, for a page that makes
+  // no API calls and brings its own overlay hosts.
+  { path: '/preview/*', element: lazyRoute(<HawkPreviewScreen />) },
+
   {
     path: '/',
     element: <AppEntrypoint />,
@@ -296,6 +317,10 @@ const routes: RouteObject[] = [
                   {
                     path: ADMIN_ROUTES.CAMPAIGNS.relativePath,
                     element: lazyRoute(<CampaignsScreen />),
+                  },
+                  {
+                    path: ADMIN_ROUTES.TECHNICAL.relativePath,
+                    element: lazyRoute(<TechnicalScreen />),
                   },
                   {
                     path: ADMIN_ROUTES.AUDIT_LOG.relativePath,

@@ -16,6 +16,8 @@
       "@shared/*": ["./src/shared/*"],
       "@ohlify/ui": ["../../packages/ui/src/index.ts"],
       "@ohlify/ui/*": ["../../packages/ui/src/*"],
+      "@ohlify/hawk-ui": ["../../packages/hawk-ui/src/index.ts"],
+      "@ohlify/hawk-ui/*": ["../../packages/hawk-ui/src/*"],
       "@ohlify/core": ["../../packages/core/src/index.ts"],
       "@ohlify/core/*": ["../../packages/core/src/*"],
       "@ohlify/api": ["../../packages/api/src/index.ts"],

@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 
+import { invalidateDashboardsForJournal } from '@features/professionals/pro-dashboard.cache.js';
 import { pool } from '@lib/db/pool.js';
 import { id } from '@lib/ids.js';
 
@@ -40,6 +41,42 @@ export interface PostJournalResult {
 interface QueryRunner {
   query: PoolClient['query'];
 }
+
+/**
+ * Journals posted inside a caller-owned transaction, awaiting that
+ * transaction's COMMIT before their caches are busted.
+ *
+ * Keyed by the runner object itself so concurrent transactions cannot see each
+ * other's pending work, and weak so a client that is released without ever
+ * reaching `flushJournalCacheInvalidations` is collected rather than leaked.
+ *
+ * The alternative was a cache-bust call at each of the fifteen `postJournal`
+ * sites, which is fifteen chances to forget one — and the one forgotten is
+ * always the flow that matters.
+ */
+const pendingInvalidations = new WeakMap<object, string[]>();
+
+/**
+ * Busts the dashboard caches for every journal posted on this runner.
+ *
+ * Called by the transaction wrapper after COMMIT. Before COMMIT the journal is
+ * not durable, and dropping a cache entry for a write that then rolls back
+ * would refill the cache from the *old* state and leave it wrong until TTL —
+ * strictly worse than not busting at all.
+ */
+export const flushJournalCacheInvalidations = async (runner: object): Promise<void> => {
+  const journalIds = pendingInvalidations.get(runner);
+  if (journalIds === undefined) return;
+  pendingInvalidations.delete(runner);
+  for (const journalId of journalIds) {
+    await invalidateDashboardsForJournal(journalId);
+  }
+};
+
+/** Discards pending busts for a transaction that rolled back. */
+export const discardJournalCacheInvalidations = (runner: object): void => {
+  pendingInvalidations.delete(runner);
+};
 
 // Posts a journal atomically: insert the header, then all lines, in one tx.
 // Idempotent: if `idempotency_key` already exists, returns the existing
@@ -117,7 +154,16 @@ export const postJournal = async (
   };
 
   if (runner) {
-    return exec(runner);
+    // Caller owns the transaction, so the bust is deferred to their COMMIT:
+    // the journal is not durable yet, and dropping a cache entry for a write
+    // that may still roll back would refill it from stale state.
+    const result = await exec(runner);
+    if (!result.alreadyPosted) {
+      const queued = pendingInvalidations.get(runner) ?? [];
+      queued.push(result.journalId);
+      pendingInvalidations.set(runner, queued);
+    }
+    return result;
   }
   // No external tx — wrap our own. The deferred constraint trigger validates
   // sum-to-zero at COMMIT.
@@ -126,6 +172,13 @@ export const postJournal = async (
     await client.query('BEGIN');
     const result = await exec(client);
     await client.query('COMMIT');
+    // After COMMIT, never before: money has moved, so every dashboard showing
+    // a balance or a period total is now wrong. Awaited but non-throwing —
+    // `invalidateDashboardsForJournal` swallows its own failures, because a
+    // Redis outage must not turn a completed payment into an error.
+    if (!result.alreadyPosted) {
+      await invalidateDashboardsForJournal(result.journalId);
+    }
     return result;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

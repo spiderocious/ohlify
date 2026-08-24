@@ -10,6 +10,7 @@ import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { readUserAvailableBalance, readUserPendingBalance } from '@lib/wallet/balance.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
 
+import * as detailService from './admin.user-detail.service.js';
 import * as repo from './admin.users.repo.js';
 import type {
   AdminBlockUserDto,
@@ -43,7 +44,33 @@ const toView = (row: repo.AdminUserRow) => ({
   updated_at: row.updated_at.toISOString(),
 });
 
-export const listUsers = async (dto: AdminListUsersQueryDto) => {
+const numeric = (raw: string | null | undefined): number => {
+  if (raw === null || raw === undefined) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/**
+ * The list row: the base view plus the aggregates that let an operator triage
+ * without opening each account.
+ */
+const MONEY_ROLES: readonly string[] = ['admin', 'finance_ops'];
+
+const toListView = (row: repo.AdminUserRow, canSeeMoney: boolean) => ({
+  ...toView(row),
+  // Null rather than 0 — an unrated user has no rating, which is a different
+  // fact from a rating of zero.
+  rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
+  review_count: numeric(row.review_count),
+  // Gated the same way the detail is: a balance on a list row is the same
+  // disclosure as a balance on a detail page.
+  wallet_kobo: canSeeMoney ? numeric(row.wallet_kobo) : null,
+  calls_total: numeric(row.calls_total),
+  active_strikes: numeric(row.active_strikes),
+});
+
+export const listUsers = async (dto: AdminListUsersQueryDto, adminRole?: string) => {
+  const canSeeMoney = adminRole === undefined || MONEY_ROLES.includes(adminRole);
   const limit = resolveLimit(dto.limit);
   let cursor: { last_id: string; last_sort_key: string } | undefined;
   if (dto.cursor !== undefined) {
@@ -55,14 +82,17 @@ export const listUsers = async (dto: AdminListUsersQueryDto) => {
       });
     }
   }
-  const rows = await repo.list({
-    limit,
-    ...(cursor ? { cursor } : {}),
-    ...(dto.role ? { role: dto.role } : {}),
-    ...(dto.status ? { status: dto.status } : {}),
-    ...(dto.kyc_status ? { kyc_status: dto.kyc_status } : {}),
-    ...(dto.q ? { q: dto.q } : {}),
-  });
+  const [rows, counts] = await Promise.all([
+    repo.list({
+      limit,
+      ...(cursor ? { cursor } : {}),
+      ...(dto.role ? { role: dto.role } : {}),
+      ...(dto.status ? { status: dto.status } : {}),
+      ...(dto.kyc_status ? { kyc_status: dto.kyc_status } : {}),
+      ...(dto.q ? { q: dto.q } : {}),
+    }),
+    repo.counts(),
+  ]);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];
@@ -72,8 +102,20 @@ export const listUsers = async (dto: AdminListUsersQueryDto) => {
       : null;
   return new ServiceSuccess(
     {
-      items: page.map(toView),
-      meta: { next_cursor: nextCursor, has_more: hasMore },
+      items: page.map((row) => toListView(row, canSeeMoney)),
+      meta: {
+        next_cursor: nextCursor,
+        has_more: hasMore,
+        // Unfiltered totals for the status tabs. They must NOT follow the
+        // caller's search, or the tab can no longer say how many suspended
+        // accounts exist — which is the only thing it is there for.
+        counts: {
+          all: numeric(counts.all),
+          active: numeric(counts.active),
+          suspended: numeric(counts.suspended),
+          blocked: numeric(counts.blocked),
+        },
+      },
     },
     MESSAGE_KEYS.ADMIN_USERS_LIST_FETCHED,
   );
@@ -90,7 +132,14 @@ export const listUsers = async (dto: AdminListUsersQueryDto) => {
 //   - flags (active reports targeting this user, recent failed payouts)
 //
 // All reads are independent — fan them out in parallel.
-export const getUser = async (userId: string) => {
+/**
+ * The user detail read.
+ *
+ * Everything the previous version returned is still returned — widening a
+ * response is safe, reshaping one breaks whatever was reading it. The five-tab
+ * console's extra blocks are assembled alongside by `admin.user-detail`.
+ */
+export const getUser = async (userId: string, adminRole?: string) => {
   const row = await repo.findById(userId);
   if (!row || row.deleted_at !== null) {
     return new ServiceError('not_found', MESSAGE_KEYS.ADMIN_USER_FETCHED, 404);
@@ -106,6 +155,7 @@ export const getUser = async (userId: string) => {
     transactions,
     flags,
     devices,
+    detail,
   ] = await Promise.all([
     pool.query<{
       id: string;
@@ -235,6 +285,7 @@ export const getUser = async (userId: string) => {
            LIMIT 10`,
       [userId],
     ),
+    detailService.assemble(userId, adminRole),
   ]);
 
   const kycRow = kyc.rows[0];
@@ -291,6 +342,7 @@ export const getUser = async (userId: string) => {
         connected_seconds: r.connected_seconds,
         ended_at: r.ended_at?.toISOString() ?? null,
       })),
+      ...detail,
       recent_calls_as_callee: callsAsCallee.rows.map((r) => ({
         id: r.id,
         status: r.status,

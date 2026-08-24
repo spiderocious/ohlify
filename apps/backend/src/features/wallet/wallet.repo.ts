@@ -332,3 +332,84 @@ export const readUserWalletStats = async (userId: string): Promise<WalletStatsRo
   );
   return res.rows[0] ?? { this_week_kobo: '0', this_month_kobo: '0' };
 };
+
+/**
+ * One wallet entry, with the journal it belongs to. The detail endpoint's
+ * anchor read.
+ *
+ * Scoped by `owner_user_id` in the JOIN rather than filtered afterwards, so a
+ * caller asking for someone else's entry gets nothing rather than a row they
+ * are then trusted not to look at.
+ */
+export const findUserTransaction = async (
+  userId: string,
+  entryId: string,
+): Promise<TransactionRow | null> => {
+  const res = await pool.query<TransactionRow>(
+    `SELECT
+       we.id              AS entry_id,
+       we.journal_id      AS journal_id,
+       je.kind::text      AS journal_kind,
+       we.signed_amount_kobo::text AS signed_amount_kobo,
+       we.currency        AS currency,
+       we.created_at      AS occurred_at,
+       p.reference        AS reference,
+       je.related_call_id,
+       je.related_payment_id,
+       je.related_withdrawal_id,
+       je.memo
+     FROM wallet_entries we
+     JOIN journal_entries je ON je.id = we.journal_id
+     JOIN accounts a ON a.id = we.account_id AND a.kind = 'user' AND a.owner_user_id = $1
+     LEFT JOIN payments p ON p.id = je.related_payment_id
+    WHERE we.id = $2
+    LIMIT 1`,
+    [userId, entryId],
+  );
+  return res.rows[0] ?? null;
+};
+
+export interface LedgerStepRow {
+  journal_kind: string;
+  occurred_at: Date;
+  /** Positive magnitude — the direction is carried by the step's own label. */
+  amount_kobo: string;
+  /** True when this line credited or debited the requesting user's own wallet. */
+  is_own_wallet: boolean;
+}
+
+/**
+ * Every journal written for one call, in order — the escrow lifecycle.
+ *
+ * "Where did my money go for those four minutes" is the commonest support
+ * question a marketplace gets, and the answer is spread across several
+ * journals: the reserve, the settlement to the professional, the platform's
+ * cut, and any unused remainder returned. They share a `related_call_id`,
+ * which is what makes this reconstructable without storing a second copy of
+ * the story.
+ *
+ * Reads the *platform's* view, not just the caller's lines: a client who paid
+ * ₦37,500 needs to see the split, and their own wallet only ever shows the
+ * debit and the refund. System accounts have no `owner_user_id`, so nothing
+ * here leaks another user's identity.
+ */
+export const listCallLedger = async (
+  userId: string,
+  callId: string,
+): Promise<LedgerStepRow[]> => {
+  const res = await pool.query<LedgerStepRow>(
+    `SELECT
+       je.kind::text AS journal_kind,
+       we.created_at AS occurred_at,
+       ABS(we.signed_amount_kobo)::text AS amount_kobo,
+       (a.kind = 'user' AND a.owner_user_id = $1) AS is_own_wallet
+     FROM journal_entries je
+     JOIN wallet_entries we ON we.journal_id = je.id
+     JOIN accounts a ON a.id = we.account_id
+    WHERE je.related_call_id = $2
+      AND we.signed_amount_kobo > 0
+    ORDER BY we.created_at ASC, we.id ASC`,
+    [userId, callId],
+  );
+  return res.rows;
+};

@@ -141,7 +141,11 @@ export type KycItemKey =
   | 'identity'
   | 'selfie'
   | 'client_selfie'
-  | 'rates';
+  /** @deprecated Superseded by `audio_rate` + `video_rate`. Still accepted on
+   * historical `reject_item_keys` rows. */
+  | 'rates'
+  | 'audio_rate'
+  | 'video_rate';
 
 export type KycItemKind =
   | 'text'
@@ -151,7 +155,10 @@ export type KycItemKind =
   | 'bank'
   | 'identity'
   | 'selfie'
+  /** @deprecated Superseded by `call_rate`. */
   | 'rates'
+  /** Single-channel rate editor — duration + price for one fixed call_type. */
+  | 'call_rate'
   | 'image_upload';
 
 export type KycValidationRule =
@@ -236,9 +243,26 @@ export interface KycSelfieValue {
   upload_key: string;
 }
 
+/** @deprecated Value shape of the legacy `rates` item (an array of these). */
 export interface KycRateValue {
   id: string;
   call_type: 'audio' | 'video';
   duration_minutes: number;
   price_kobo: number;
+}
+
+/**
+ * Value shape of the `audio_rate` / `video_rate` items — a single object or
+ * null, never a list, because at most one rate per channel is active.
+ *
+ * `price_per_minute_kobo` is the floored per-minute the professional is paid,
+ * derived server-side so clients render the same number rather than
+ * recomputing (and rounding) it themselves.
+ */
+export interface KycCallRateValue {
+  id: string;
+  call_type: 'audio' | 'video';
+  duration_minutes: number;
+  price_kobo: number;
+  price_per_minute_kobo: number;
 }

@@ -376,3 +376,98 @@ Discovery-specific codes:
 | `not_found` | 404 | Pro fails the visibility predicate (gone, soft-deleted, not pro, or kyc not approved) |
 | `validation_error` | 400 | Bad query/param shape (Zod), includes `field_errors` |
 | `value_out_of_range` | 422 | Availability window exceeds the max |
+
+---
+
+## 9. `GET /api/v1/me/dashboard` — the professional's home
+
+Auth required. 403 `forbidden` for any caller whose role is not `professional`.
+
+**One endpoint serves the whole screen.** The dashboard previously issued
+several reads; every figure on it now arrives in a single response, cached per
+user and busted by the writes that move it (see §9.3).
+
+`?days=` is still accepted and **ignored**. It selected the sparkline window,
+and the sparkline is gone — but shipped builds still send it, and rejecting a
+parameter that used to be valid would break them.
+
+### 9.1 Response
+
+```json
+{
+  "data": {
+    "is_available": true,
+    "kyc_status": "approved",
+    "kyc_reject_reason": null,
+    "earnings": {
+      "today_kobo": 4200000,
+      "week_kobo": 18450000,
+      "withdrawable_kobo": 18450000,
+      "today_delta": { "percent": 12.4, "label": null },
+      "week_delta":  { "percent": null, "label": "first week" }
+    },
+    "attention": {
+      "unread_messages": 2,
+      "pending_schedules": 1,
+      "missed_calls_today": 0
+    },
+    "recent_calls": [ /* … */ ],
+    "transactions": [
+      {
+        "id": "we_…",
+        "type": "call_earning",
+        "amount_kobo": 250000,
+        "currency": "NGN",
+        "status": "completed",
+        "occurred_at": "2026-08-22T14:30:00.000Z",
+        "title": "Call earning",
+        "description": "Earnings from a completed call",
+        "icon": "call",
+        "direction": "credit",
+        "reference": null
+      }
+    ]
+  }
+}
+```
+
+### 9.2 The delta shape
+
+`today_delta` and `week_delta` are **either** a percentage **or** a reason there
+isn't one — never both, and never a fabricated zero:
+
+| Case | `percent` | `label` |
+|---|---|---|
+| Normal comparison | signed number, 1dp | `null` |
+| Baseline period was ₦0 | `null` | `"first earnings"` |
+| Both periods ₦0 | `null` | `"no change"` |
+| First credit landed inside this window | `null` | `"first day"` / `"first week"` |
+| Never earned anything | `null` | `"no earnings yet"` |
+
+A percentage needs a baseline period that actually existed. Sending `0` for a
+professional in their first week would read as "flat" when the truth is "there
+is nothing to compare to yet" — so the client branches on `percent === null`
+and renders `label` verbatim.
+
+`transactions` uses the **same field names and vocabulary** as
+`GET /wallet/transactions`, built from the same `lookupWalletTxVocabulary`
+lookup. Two surfaces showing a person their own money must not disagree about
+what a row is called.
+
+### 9.3 Caching
+
+Cached per user at `pro:dashboard:<userId>` for 60s. The TTL is a backstop, not
+the mechanism — it catches the things no request mutates (a call ageing out of
+"today", the 7-day window sliding). Writes bust the key directly:
+
+| Write | Hook |
+|---|---|
+| Any money movement | `postJournal` → busts **every** user with a line on the journal, so a settlement clears both sides |
+| Call ends (missed, declined, ring-timeout, hangup, stale-resolver) | `instantCallsRepo.finalize` — the one point every ending converges on. A missed call posts no journal, so the money path would never see it |
+| Message sent / read | `chatRepo.bumpAfterMessage`, `chatRepo.markRead` |
+| Schedule proposal answered | `chatRepo.updateScheduleStatus` |
+
+Busts are **deferred to after COMMIT** and dropped on rollback: invalidating
+before the write is durable would refill the cache from the state the caller
+then abandoned, leaving it wrong for a full TTL — strictly worse than not
+busting at all. Every bust is best-effort and cannot fail the write it follows.

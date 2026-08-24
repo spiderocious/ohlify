@@ -2,25 +2,30 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { adminApiClient, adminSession, ADMIN_EP } from '@ohlify/api';
-import { AppText, cn } from '@ohlify/ui';
-import { IconLogout, IconMenu } from '@icons';
+import { HawkIconButton, IconLogOut, IconMenu } from '@ohlify/hawk-ui';
 
 import { useCurrentAdmin } from '../auth/use-current-admin.js';
 import { ADMIN_ROUTES } from '../routes/admin-routes.js';
 
-interface AdminTopbarProps {
-  /** Called when the mobile hamburger is tapped (parent owns sidebar state). */
-  onOpenMenu?: () => void;
+interface AdminTopbarActionsProps {
+  /** Opens the mobile rail. The shell owns that state. */
+  onOpenMenu: () => void;
 }
 
 /**
- * Top bar shown above every protected page. Renders a hamburger on mobile,
- * the admin's email + role badge, and a logout button. Logout fires the
- * backend revoke and clears local session whether or not the request
- * succeeds — a network failure shouldn't trap an admin in a logged-in
- * state on a shared machine.
+ * The trailing controls in the shell's topbar slot.
+ *
+ * This used to be a whole `<header>`. `HawkAdminShell` draws the bar itself
+ * now, and the operator's name and role moved to the rail's footer where A22
+ * puts them — so what is left here is the two controls the board has nowhere
+ * else to put: the mobile menu trigger and logout.
+ *
+ * Logout clears the local session whether or not the revoke call succeeds. A
+ * network failure must not trap an admin in a logged-in state on a shared
+ * machine — the local clear is the part that protects them, and the server
+ * call is best-effort cleanup.
  */
-export function AdminTopbar({ onOpenMenu }: AdminTopbarProps) {
+export function AdminTopbarActions({ onOpenMenu }: AdminTopbarActionsProps) {
   const admin = useCurrentAdmin();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -42,59 +47,28 @@ export function AdminTopbar({ onOpenMenu }: AdminTopbarProps) {
   };
 
   return (
-    <header className="flex h-16 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
-      {onOpenMenu && (
-        <button
-          type="button"
-          aria-label="Open menu"
+    <div className="flex items-center gap-hawk-3">
+      {/* Menu trigger — the rail is always on screen from lg up. */}
+      <div className="lg:hidden">
+        <HawkIconButton
+          icon={IconMenu}
+          label="Open menu"
+          variant="plain"
+          size="sm"
           onClick={onOpenMenu}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-text-primary lg:hidden"
-        >
-          <IconMenu size={18} />
-        </button>
-      )}
-
-      <span className="flex-1" />
+        />
+      </div>
 
       {admin && (
-        <div className="flex items-center gap-3">
-          <div className="hidden flex-col items-end sm:flex">
-            <AppText variant="body" className="font-semibold text-text-primary">
-              {admin.full_name ?? admin.email}
-            </AppText>
-            <span
-              className={cn(
-                'text-[11px] font-bold uppercase tracking-wider',
-                roleColor(admin.role),
-              )}
-            >
-              {humanizeRole(admin.role)}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            aria-label="Log out"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-primary hover:bg-secondary/70"
-          >
-            <IconLogout size={16} />
-          </button>
-        </div>
+        <HawkIconButton
+          icon={IconLogOut}
+          label="Log out"
+          variant="plain"
+          size="sm"
+          loading={busy}
+          onClick={() => void handleLogout()}
+        />
       )}
-    </header>
+    </div>
   );
-}
-
-function humanizeRole(role: string): string {
-  if (role === 'finance_ops') return 'Finance';
-  if (role === 'admin') return 'Admin';
-  if (role === 'support') return 'Support';
-  return role;
-}
-
-function roleColor(role: string): string {
-  if (role === 'admin') return 'text-primary';
-  if (role === 'finance_ops') return 'text-emerald-600';
-  return 'text-text-muted';
 }

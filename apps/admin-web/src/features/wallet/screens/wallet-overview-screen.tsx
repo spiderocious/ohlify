@@ -1,23 +1,38 @@
 import { useMemo } from 'react';
 
-import { AppText } from '@ohlify/ui';
-import { IconCreditCard, IconWallet } from '@icons';
+import {
+  HawkAdminPageHeader,
+  HawkAdminPanel,
+  HawkCaption,
+  HawkFigure,
+  HawkKpiStrip,
+  HawkText,
+  IconBank,
+  IconLedger,
+  IconWallet,
+  formatKobo,
+  type HawkKpi,
+} from '@ohlify/hawk-ui';
 
-import { PageHeader } from '../../../shared/parts/page-header.js';
-import { QueryView } from '../../../shared/parts/empty-or-error.js';
-import { formatKobo } from '../../../shared/format/kobo.js';
+import { RowsSkeleton } from '../../../shared/parts/board-skeletons.js';
 import { humanizeStatus } from '../../../shared/lib/labels.js';
-import { KpiCard } from '../../dashboard/parts/kpi-card.js';
 import {
   usePaystackFeesSummary,
   usePlatformRevenueSummary,
   useSystemAccounts,
 } from '../api/use-wallet.js';
 
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+function ymd(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Wallet overview (A11) — the shape of the platform's money.
+ *
+ * System accounts are shown by balance descending rather than by code, because
+ * the question this screen answers is "where is the money sitting?" and an
+ * alphabetical list buries the answer under whatever starts with A.
+ */
 export function WalletOverviewScreen() {
   const accounts = useSystemAccounts('system');
 
@@ -31,74 +46,84 @@ export function WalletOverviewScreen() {
   const fees = usePaystackFeesSummary(window);
   const revenue = usePlatformRevenueSummary(window);
 
+  const loading = accounts.isLoading || fees.isLoading || revenue.isLoading;
+
+  const ranked = [...(accounts.data ?? [])].sort(
+    (a, b) => Number(b.balance_kobo ?? 0) - Number(a.balance_kobo ?? 0),
+  );
+
+  const kpis: HawkKpi[] = [
+    {
+      key: 'revenue',
+      label: 'Platform revenue',
+      valueKobo: revenue.data?.total_kobo ?? 0,
+      icon: IconWallet,
+      basis: 'net',
+      semantic: 'success',
+    },
+    {
+      key: 'fees',
+      label: 'Processor fees',
+      valueKobo: fees.data?.total_kobo ?? 0,
+      icon: IconBank,
+      // Fees are a cost, so they read as caution even though the number is
+      // simply a fact — a growing one is bad news.
+      semantic: 'caution',
+    },
+    {
+      key: 'accounts',
+      label: 'System accounts',
+      value: (accounts.data?.length ?? 0).toLocaleString(),
+      icon: IconLedger,
+    },
+  ];
+
   return (
     <>
-      <PageHeader
+      <HawkAdminPageHeader
         title="Wallet overview"
-        subtitle="Top system accounts + 30-day fee/revenue summaries."
+        subtitle="System accounts and the last 30 days of fees and revenue · UTC"
       />
-      <div className="grid gap-4 px-6 py-6 lg:grid-cols-3">
-        <QueryView isLoading={revenue.isLoading} error={revenue.error}>
-          {revenue.data && (
-            <KpiCard
-              label="Platform revenue (30d)"
-              value={formatKobo(revenue.data.total_kobo)}
-              hint={`${revenue.data.currency ?? 'NGN'} · sum of platform_revenue`}
-              Icon={IconCreditCard}
-              tone="success"
-            />
-          )}
-        </QueryView>
 
-        <QueryView isLoading={fees.isLoading} error={fees.error}>
-          {fees.data && (
-            <KpiCard
-              label="Paystack fees (30d)"
-              value={formatKobo(fees.data.total_kobo)}
-              hint={`${fees.data.currency ?? 'NGN'} · sum of paystack_fees`}
-              Icon={IconCreditCard}
-              tone="warning"
-            />
-          )}
-        </QueryView>
+      <div className="flex flex-col gap-hawk-6 px-hawk-pad pb-hawk-9">
+        {loading ? <RowsSkeleton rows={3} /> : <HawkKpiStrip items={kpis} />}
 
-        <KpiCard
-          label="System accounts"
-          value={(accounts.data?.length ?? 0).toString()}
-          hint="Live ledger accounts"
-          Icon={IconWallet}
-        />
-      </div>
-
-      <div className="px-6 pb-6">
-        <AppText variant="bodyTitle" className="mb-3">
-          Top accounts by balance
-        </AppText>
-        <QueryView isLoading={accounts.isLoading} error={accounts.error}>
-          {accounts.data && (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {[...accounts.data]
-                .sort((a, b) => Number(b.balance_kobo ?? 0) - Number(a.balance_kobo ?? 0))
-                .slice(0, 9)
-                .map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex flex-col gap-1 rounded-md border border-border bg-surface px-4 py-3"
-                  >
-                    <AppText variant="body" className="font-semibold text-text-primary">
-                      {a.label ?? a.system_code ?? humanizeStatus(a.kind)}
-                    </AppText>
-                    <code className="text-[10px] text-text-muted">
-                      {a.system_code ?? `${a.kind} · ${a.id.slice(0, 10)}`}
-                    </code>
-                    <AppText variant="bodyTitle" className="mt-1 tabular-nums">
-                      {formatKobo(a.balance_kobo)}
-                    </AppText>
-                  </div>
-                ))}
+        <HawkAdminPanel
+          title="Accounts by balance"
+          actions={<HawkCaption ink="muted">largest first</HawkCaption>}
+        >
+          {accounts.isLoading ? (
+            <RowsSkeleton rows={6} />
+          ) : (
+            <div className="grid gap-hawk-4 md:grid-cols-2 xl:grid-cols-3">
+              {ranked.map((account) => (
+                <div
+                  key={account.id}
+                  className="flex flex-col gap-hawk-2 rounded-hawk-sm border border-hawk-line p-hawk-5"
+                >
+                  <HawkText variant="label" ink="strong" clamp={1} className="font-medium">
+                    {account.label ?? account.system_code ?? humanizeStatus(account.kind)}
+                  </HawkText>
+                  <HawkCaption ink="disabled" className="hawk-record">
+                    {account.system_code ?? `${account.kind} · ${account.id.slice(0, 10)}`}
+                  </HawkCaption>
+                  {/*
+                    HawkFigure rather than raw text: it respects the amount
+                    masking toggle and renders in the record face, so a column
+                    of balances lines up on the decimal.
+                  */}
+                  <HawkFigure value={account.balance_kobo ?? 0} size="sm" />
+                </div>
+              ))}
             </div>
           )}
-        </QueryView>
+        </HawkAdminPanel>
+
+        <HawkCaption ink="disabled">
+          Balances are the cached `account_balances` values, kept in step with the ledger by an
+          AFTER INSERT trigger under a per-account advisory lock. Run reconciliation to prove
+          they still agree — {formatKobo(0)} of drift is the only acceptable answer.
+        </HawkCaption>
       </div>
     </>
   );

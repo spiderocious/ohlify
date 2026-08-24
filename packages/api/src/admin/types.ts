@@ -103,6 +103,26 @@ export interface AdminUserListItem {
   suspended_until: string | null;
   created_at: string;
   updated_at: string;
+
+  // ── List aggregates ──────────────────────────────────────────────────────
+  // Present on the list, absent on nothing — the detail extends this type and
+  // computes them too. They exist so an operator can triage a page of users
+  // without opening each one.
+  /** Null when the user has never been rated — not the same as zero stars. */
+  rating?: number | null;
+  review_count?: number;
+  /** Null for roles that may not see money. */
+  wallet_kobo?: number | null;
+  calls_total?: number;
+  active_strikes?: number;
+}
+
+/** Unfiltered status totals for the list's tabs, returned in `meta`. */
+export interface AdminUserCounts {
+  all: number;
+  active: number;
+  suspended: number;
+  blocked: number;
 }
 
 export interface AdminUserKycInline {
@@ -147,7 +167,36 @@ export interface AdminUserRecentTxn {
   created_at: string;
 }
 
+/**
+ * The five-tab detail payload.
+ *
+ * Extends the list item, keeps every field the previous response carried
+ * (`kyc_submission`, `bank_account`, `wallet`, `recent_calls_*`, `flags`,
+ * `recent_devices`), and adds the blocks the console needs. Widening a
+ * response is safe; reshaping one breaks whatever was reading it.
+ */
 export interface AdminUserDetail extends AdminUserListItem {
+  vitals: AdminUserVitals;
+  profile: AdminUserProfileExtra;
+  kyc_extra: { submission_count: number; reject_item_keys: string[] };
+  calls: AdminUserCall[];
+  reviews: AdminUserReview[];
+  strikes: AdminUserStrike[];
+  reports: AdminUserReport[];
+  sessions: AdminUserSession[];
+  auth_events: AdminUserAuthEvent[];
+  devices: AdminUserDevice[];
+  notification_prefs: { sms_enabled: boolean; email_enabled: boolean; push_enabled: boolean };
+  tickets: AdminUserTicket[];
+  chat: { conversations: number; messages_sent: number; last_message_at: string | null };
+  admin_actions: AdminUserAction[];
+  /**
+   * **Null for roles that may not see money.** Gated in the service — the
+   * queries are skipped, not fetched then dropped, so the figures are absent
+   * from the payload rather than hidden after arrival.
+   */
+  money: AdminUserMoney | null;
+
   kyc_submission: AdminUserKycInline | null;
   bank_account: AdminUserBankAccount | null;
   wallet: {
@@ -803,4 +852,163 @@ export interface AdminCampaign {
   error: string | null;
   created_at: string;
   sent_at: string | null;
+}
+
+// ── User detail blocks ─────────────────────────────────────────────────────
+
+export interface AdminUserVitals {
+  /**
+   * Money vitals are **null for roles that may not see money**, matching the
+   * `money` block. Gating one and not the other would leave the balance a key
+   * away from the block that was supposed to hide it.
+   */
+  wallet_kobo: number | string | null;
+  lifetime_earned_kobo: number | string | null;
+  lifetime_spent_kobo: number | string | null;
+  /** Minutes clients hold with this professional — a liability, not an asset. */
+  escrow_kobo: number | string | null;
+  calls_total: number;
+  calls_completed: number;
+  calls_missed: number;
+  rating: number | null;
+  review_count: number;
+  active_strikes: number;
+}
+
+export interface AdminUserProfileExtra {
+  cover_photo_url: string | null;
+  selfie_upload_key: string | null;
+  interests: string[];
+  categories: string[];
+  is_available: boolean;
+  /** A handle renamed recently on an account under review is worth seeing. */
+  handle_changed_at: string | null;
+}
+
+export interface AdminUserCall {
+  id: string;
+  counterparty_id: string;
+  counterparty_name: string | null;
+  direction: 'incoming' | 'outgoing' | string;
+  call_type: string;
+  status: string;
+  connected_seconds: number;
+  settled_kobo: number | string;
+  created_at: string;
+}
+
+export interface AdminUserReview {
+  id: string;
+  reviewer_name: string | null;
+  rating: number;
+  feedback: string | null;
+  /** Hidden reviews are returned, not filtered — they are still evidence. */
+  hidden: boolean;
+  created_at: string;
+}
+
+export interface AdminUserStrike {
+  id: string;
+  reason_code: string;
+  description: string | null;
+  status: string;
+  related_call_id: string | null;
+  dispute_comment: string | null;
+  created_at: string;
+}
+
+export interface AdminUserReport {
+  id: string;
+  /** Filed-vs-received is the row's whole meaning. */
+  direction: 'filed' | 'received' | string;
+  reason_code: string;
+  status: string;
+  counterparty_name: string | null;
+  created_at: string;
+}
+
+export interface AdminUserSession {
+  id: string;
+  platform: string | null;
+  app_version: string | null;
+  device_model: string | null;
+  os_version: string | null;
+  ip: string | null;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface AdminUserAuthEvent {
+  id: string;
+  event: string;
+  outcome: 'success' | 'failure' | string;
+  reason: string | null;
+  ip: string | null;
+  platform: string | null;
+  created_at: string;
+}
+
+export interface AdminUserDevice {
+  /** Tail only — a push token is a credential. */
+  token_suffix: string;
+  platform: string;
+  app_version: string | null;
+  device_model: string | null;
+  last_seen_at: string;
+}
+
+export interface AdminUserTicket {
+  id: string;
+  subject: string;
+  status: string;
+  created_at: string;
+}
+
+export interface AdminUserAction {
+  id: string;
+  actor: string;
+  action: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface AdminUserRate {
+  id: string;
+  call_type: string;
+  duration_minutes: number;
+  price_kobo: number | string;
+}
+
+export interface AdminUserTransaction {
+  id: string;
+  kind: string;
+  direction: 'credit' | 'debit';
+  amount_kobo: number | string;
+  /** Derived by walking back from the current balance — the ledger stores movements. */
+  balance_after_kobo: number | string;
+  memo: string | null;
+  created_at: string;
+}
+
+export interface AdminUserWithdrawalRow {
+  id: string;
+  amount_kobo: number | string;
+  status: string;
+  failure_reason: string | null;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface AdminUserMinutesHeld {
+  counterparty_name: string | null;
+  call_type: string;
+  seconds_remaining: number;
+  escrow_kobo: number | string;
+}
+
+export interface AdminUserMoney {
+  rates: AdminUserRate[];
+  transactions: AdminUserTransaction[];
+  withdrawals: AdminUserWithdrawalRow[];
+  minutes_held: AdminUserMinutesHeld[];
 }

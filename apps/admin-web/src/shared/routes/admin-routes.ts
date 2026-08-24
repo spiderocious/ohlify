@@ -5,8 +5,8 @@ import { route } from '@ohlify/core';
  * are always type-safe (`ADMIN_ROUTES.USERS.DETAIL.build({ id })`). Each
  * top-level segment maps to a feature folder under `src/features/`.
  *
- * Keep in sync with `src/shared/config/nav-items.ts` — that file decides
- * which of these show up in the sidebar and to which roles.
+ * Keep in sync with `src/shared/config/hawk-nav-items.ts` — that file decides
+ * which of these show up in the sidebar, in which group, and to which roles.
  */
 export const ADMIN_ROUTES = route('', {
   ROOT: route(''),
@@ -67,6 +67,7 @@ export const ADMIN_ROUTES = route('', {
   }),
 
   CONFIG: route('config'),
+  TECHNICAL: route('technical'),
   APP_RELEASES: route('app-releases'),
   CAMPAIGNS: route('campaigns'),
 

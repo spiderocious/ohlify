@@ -20,6 +20,11 @@ export const RealtimeEvent = {
   MINUTES_CHANGED: 'minutes.changed',
   CHAT_MESSAGE: 'chat.message',
   CHAT_READ: 'chat.read',
+  // Group chat: the professional is asked, then both the inviter and the
+  // invitee learn the outcome.
+  CHAT_INVITE_REQUESTED: 'chat.invite.requested',
+  CHAT_INVITE_RESOLVED: 'chat.invite.resolved',
+  CHAT_PARTICIPANTS_CHANGED: 'chat.participants.changed',
   CALL_INCOMING: 'call.incoming',
   CALL_CANCELLED: 'call.cancelled',
   CALL_ENDED: 'call.ended',

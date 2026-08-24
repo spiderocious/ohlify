@@ -1,6 +1,7 @@
 import type { UserRole, UserRow } from '@features/auth/auth.types.js';
 import * as profileRepo from '@features/profile/profile.repo.js';
 import * as ratesRepo from '@features/rates/rates.repo.js';
+import { perMinuteKobo } from '@features/rates/rates.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 
@@ -11,6 +12,7 @@ import type {
   KycItemConfig,
   KycItemKey,
   KycItemSpec,
+  KycItemStatus,
   KycResubmission,
   KycSpecResponse,
   KycSubmissionRow,
@@ -81,6 +83,53 @@ interface RateValue {
   price_kobo: number;
 }
 
+/**
+ * Value shape for the per-channel rate items (`audio_rate` / `video_rate`).
+ * A single object or null — never a list — because at most one rate per
+ * channel is active (`rates.single_rate_per_channel`).
+ *
+ * `price_per_minute_kobo` is the floored per-minute the professional is paid;
+ * it ships here so the client renders the same number the server derives
+ * rather than recomputing (and rounding) it independently.
+ */
+interface CallRateValue {
+  id: string;
+  call_type: 'audio' | 'video';
+  duration_minutes: number;
+  price_kobo: number;
+  price_per_minute_kobo: number;
+}
+
+const buildCallRateValue = (
+  rates: KycAggregates['rates'],
+  callType: 'audio' | 'video',
+): { value: CallRateValue | null; complete: boolean } => {
+  // Newest wins. `findActiveByUser` can return more than one active row per
+  // channel for data created before single_rate_per_channel was switched on,
+  // so pick deterministically instead of trusting the query's ordering.
+  const matches = rates
+    .filter((r) => r.call_type === callType)
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+  const row = matches[0];
+  if (!row) return { value: null, complete: false };
+
+  const priceKobo = Number(row.price_kobo);
+  return {
+    value: {
+      id: row.id,
+      call_type: row.call_type,
+      duration_minutes: row.duration_minutes,
+      price_kobo: priceKobo,
+      // `perMinuteKobo` throws on a non-positive duration. The column is NOT
+      // NULL and the write path validates `.positive()`, so this can only be
+      // legacy data — but a service must never throw, so guard rather than bet.
+      price_per_minute_kobo:
+        row.duration_minutes > 0 ? perMinuteKobo(priceKobo, row.duration_minutes) : 0,
+    },
+    complete: true,
+  };
+};
+
 // ── Aggregator: load everything we might need in one go ──────────────────────
 
 interface KycAggregates {
@@ -101,7 +150,18 @@ const loadAggregates = async (userId: string): Promise<KycAggregates> => {
 // ── One spec entry per known kind ────────────────────────────────────────────
 
 const buildItemSpec = (config: KycItemConfig, user: UserRow, agg: KycAggregates): KycItemSpec => {
-  const base = { ...config, value: null as unknown, complete: false };
+  // `status`, `locked` and `lock_reason` are overwritten by `decorateItem`
+  // once the whole set is known — an item's lifecycle depends on the
+  // submission it belongs to, not on the item alone. These are placeholders
+  // so every return path below stays a complete `KycItemSpec`.
+  const base = {
+    ...config,
+    value: null as unknown,
+    complete: false,
+    status: 'not_started' as KycItemStatus,
+    locked: false,
+    lock_reason: null as string | null,
+  };
 
   switch (config.key) {
     case 'full_name': {
@@ -157,6 +217,9 @@ const buildItemSpec = (config: KycItemConfig, user: UserRow, agg: KycAggregates)
       const value: SelfieValue = { upload_key: user.selfie_upload_key };
       return { ...base, value, complete: true };
     }
+    // Deprecated, kept live so an operator whose platform_config row still
+    // holds the old single `rates` item keeps working until migration 0098
+    // has run in their environment.
     case 'rates': {
       if (agg.rates.length === 0) return base;
       const value: RateValue[] = agg.rates.map((r) => ({
@@ -167,11 +230,100 @@ const buildItemSpec = (config: KycItemConfig, user: UserRow, agg: KycAggregates)
       }));
       return { ...base, value, complete: true };
     }
+    case 'audio_rate': {
+      const { value, complete } = buildCallRateValue(agg.rates, 'audio');
+      return { ...base, value, complete };
+    }
+    case 'video_rate': {
+      const { value, complete } = buildCallRateValue(agg.rates, 'video');
+      return { ...base, value, complete };
+    }
     default:
       // Unknown key from a config row that ships ahead of code. Render as
       // disabled so the frontend hides it cleanly.
       return base;
   }
+};
+
+// ── Per-item lifecycle: status + locking ─────────────────────────────────────
+
+/**
+ * Copy for every reason an item can be locked. Inline strings would be a
+ * message-key violation; these are UI copy for a per-item affordance rather
+ * than a response message, but keeping them in one place still beats scattering
+ * them through the switch.
+ */
+const LOCK_REASONS = {
+  UNDER_REVIEW: 'Locked while we review your submission.',
+  NOT_FLAGGED: 'This one was fine — no changes needed.',
+} as const;
+
+interface DecorateContext {
+  /** The user's overall KYC status. */
+  kycStatus: UserRow['kyc_status'];
+  /**
+   * The active partial-rejection set, or null when no partial rejection is in
+   * force. Null covers both "nothing rejected" and "whole submission
+   * rejected" — in the latter every item is editable, so there is nothing to
+   * scope.
+   */
+  resubmitKeys: KycItemKey[] | null;
+}
+
+/**
+ * Layers `status`, `locked` and `lock_reason` onto an item once the whole
+ * submission's state is known.
+ *
+ * Separate from `buildItemSpec` on purpose: that function answers "what has
+ * this user filled in", which depends only on the item. This one answers "what
+ * may they do about it now", which depends on the submission around it. Folding
+ * them together is how the client ended up recombining three fields itself.
+ */
+const decorateItem = (item: KycItemSpec, ctx: DecorateContext): KycItemSpec => {
+  const flagged = ctx.resubmitKeys?.includes(item.key) ?? false;
+
+  // A flagged item outranks everything: the user's whole job right now is to
+  // fix it, and it stays editable even though the submission was rejected.
+  if (flagged) {
+    return { ...item, status: 'action_needed', locked: false, lock_reason: null };
+  }
+
+  // Partial rejection in force and this item was not flagged — it passed.
+  // Locked so the user cannot quietly change something admin already accepted,
+  // which is the same rule the PATCH handlers enforce server-side.
+  if (ctx.resubmitKeys !== null) {
+    return {
+      ...item,
+      status: item.complete ? 'verified' : 'not_started',
+      locked: true,
+      lock_reason: LOCK_REASONS.NOT_FLAGGED,
+    };
+  }
+
+  // Awaiting review: everything freezes. Not an error — the user simply cannot
+  // speed it up, so the tone is caution, never critical.
+  if (ctx.kycStatus === 'pending_review') {
+    return {
+      ...item,
+      status: 'under_review',
+      locked: true,
+      lock_reason: LOCK_REASONS.UNDER_REVIEW,
+    };
+  }
+
+  // `approved` reports verified only for items actually filled in. An approved
+  // user can still have an incomplete optional item, and calling that
+  // "verified" would be a lie the badge repeats on every render.
+  if (ctx.kycStatus === 'approved' && item.complete) {
+    return { ...item, status: 'verified', locked: false, lock_reason: null };
+  }
+
+  return {
+    ...item,
+    status: item.complete ? 'verified' : 'not_started',
+    locked: false,
+    lock_reason: null,
+  };
 };
 
 // ── Public: derive the list of required-and-incomplete keys ──────────────────
@@ -223,9 +375,24 @@ export const buildKycSpec = async (user: UserRow): Promise<KycSpecResponse> => {
     }
   }
 
+  // Decorate last: an item's status and lock depend on the resubmission block
+  // resolved just above, so this cannot run inside the map that built them.
+  //
+  // Counts are taken from `built`, before decoration, deliberately —
+  // `completed_count` means "filled in", and an item locked because admin
+  // already accepted it is still filled in. Deriving the counts from the
+  // decorated list would make the progress bar drop when a partial rejection
+  // arrives, which is the opposite of what happened.
+  const decorated = built.map((i) =>
+    decorateItem(i, {
+      kycStatus: user.kyc_status,
+      resubmitKeys: resubmission?.item_keys ?? null,
+    }),
+  );
+
   return {
     role: user.role,
-    items: built,
+    items: decorated,
     completed_count: completedRequired.length,
     total_required: requiredItems.length,
     all_complete: requiredItems.length > 0 && completedRequired.length === requiredItems.length,

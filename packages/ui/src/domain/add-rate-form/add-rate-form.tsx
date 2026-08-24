@@ -53,6 +53,21 @@ interface AddRateFormProps {
    * `rates.single_rate_per_channel`. Defaults to the legacy multi-duration flow.
    */
   singleRatePerChannel?: boolean;
+  /**
+   * Hides the call-type dropdown and pins the form to a single channel. Used by
+   * the per-channel KYC items (`audio_rate` / `video_rate`), where the tile the
+   * user tapped already names the channel — asking again is the click this
+   * split exists to remove.
+   *
+   * Pass alongside `callTypes={[type]}` so the emitted rate carries it.
+   */
+  fixedCallType?: CallType;
+  /** Prefills duration + price when editing an existing rate. */
+  initialDurationMinutes?: number;
+  initialPriceKobo?: number;
+  /** Skips the per-minute confirmation modal (used on the edit path, where the
+   * user has already accepted the per-minute model once). */
+  skipConfirm?: boolean;
 }
 
 /** 1:1 with mobile/lib/ui/widgets/add_rate_form/add_rate_form.dart. */
@@ -65,10 +80,16 @@ export function AddRateForm({
   minKobo = DEFAULT_MIN_KOBO,
   maxKobo = DEFAULT_MAX_KOBO,
   singleRatePerChannel = false,
+  fixedCallType,
+  initialDurationMinutes,
+  initialPriceKobo,
+  skipConfirm = false,
 }: AddRateFormProps) {
-  const [callType, setCallType] = useState<CallType | undefined>(undefined);
-  const [duration, setDuration] = useState<number | undefined>(undefined);
-  const [amount, setAmount] = useState('');
+  const [callType, setCallType] = useState<CallType | undefined>(fixedCallType);
+  const [duration, setDuration] = useState<number | undefined>(initialDurationMinutes);
+  const [amount, setAmount] = useState(
+    initialPriceKobo === undefined ? '' : formatNaira(initialPriceKobo),
+  );
 
   const callTypeOptions = useMemo<DropdownOption<CallType>[]>(
     () => callTypes.map((c) => ({ label: CALL_TYPE_LABELS[c], value: c })),
@@ -119,7 +140,7 @@ export function AddRateForm({
 
   const handleSubmit = () => {
     if (!isValid) return;
-    if (!singleRatePerChannel) {
+    if (!singleRatePerChannel || skipConfirm) {
       emit();
       return;
     }
@@ -143,14 +164,16 @@ export function AddRateForm({
       <AppText variant="body" align="start" color="var(--ohl-text-muted)">
         {description}
       </AppText>
-      <AppDropdownInput<CallType>
-        label="Call type"
-        options={callTypeOptions}
-        value={callType}
-        placeholder="Select"
-        bordered
-        onChange={setCallType}
-      />
+      {fixedCallType === undefined ? (
+        <AppDropdownInput<CallType>
+          label="Call type"
+          options={callTypeOptions}
+          value={callType}
+          placeholder="Select"
+          bordered
+          onChange={setCallType}
+        />
+      ) : null}
       <AppDropdownInput<number>
         label="Duration"
         options={durationOptions}

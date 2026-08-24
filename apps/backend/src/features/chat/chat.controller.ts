@@ -11,7 +11,10 @@ import type {
   RescheduleDto,
   ScheduleActionDto,
   SendMessageDto,
+  InviteParticipantDto,
+  RespondToChatInviteDto,
 } from './chat.schema.js';
+import * as inviteService from './chat-invites.service.js';
 import * as service from './chat.service.js';
 
 const readCursorSortKey = (raw: unknown): string | null => {
@@ -117,3 +120,50 @@ export const reschedule: RequestHandler = asyncHandler(async (req: Request, res:
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
 });
+
+// ── Participants / invites (group chat) ──────────────────────────────────────
+
+export const listParticipants: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await inviteService.listParticipants(String(req.params['id']), req.userId!);
+    if (!r.success) bail(r);
+    else ResponseUtil.ok(res, r.data);
+  },
+);
+
+export const inviteParticipant: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await inviteService.invite({
+      conversationId: String(req.params['id']),
+      inviterUserId: req.userId!,
+      email: (req.body as InviteParticipantDto).email,
+    });
+    if (!r.success) bail(r);
+    else ResponseUtil.created(res, r.data);
+  },
+);
+
+export const respondToInvite: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await inviteService.resolveInvite({
+      conversationId: String(req.params['id']),
+      participantId: String(req.params['participantId']),
+      professionalUserId: req.userId!,
+      approve: (req.body as RespondToChatInviteDto).approve,
+    });
+    if (!r.success) bail(r);
+    else ResponseUtil.ok(res, r.data);
+  },
+);
+
+export const removeParticipant: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await inviteService.removeParticipant({
+      conversationId: String(req.params['id']),
+      participantId: String(req.params['participantId']),
+      actorUserId: req.userId!,
+    });
+    if (!r.success) bail(r);
+    else ResponseUtil.ok(res, r.data);
+  },
+);

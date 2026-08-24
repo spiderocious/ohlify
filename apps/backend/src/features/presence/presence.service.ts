@@ -111,19 +111,16 @@ export const resolveReachability = async (
     };
   }
 
-  // Already ringing or talking. The unique live-call index would reject the
-  // insert anyway; catching it here turns a 23505 into a clear "busy".
-  if (await instantCallsRepo.findLiveForCallee(professionalId)) {
-    return {
-      view: {
-        ...unreachable(professionalId, row.last_seen_at),
-        online: true,
-        accepting_calls: true,
-      },
-      reason: ReachabilityReason.BUSY,
-      detail: ReachabilityDetail.BUSY,
-    };
-  }
+  // Being on another call no longer blocks a new one (migration 0104).
+  //
+  // The callee decides: a second call rings alongside the first and they
+  // choose to answer-and-end or decline, the way every phone has worked for
+  // twenty years. Refusing on their behalf meant a client with paid minutes
+  // simply could not reach them, and heard "unavailable" for what was really
+  // "busy for the next four minutes".
+  //
+  // `ReachabilityReason.BUSY` is kept in the enum for older clients that still
+  // branch on it; nothing emits it any more.
 
   return {
     view: {

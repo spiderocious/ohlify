@@ -28,6 +28,9 @@ export const register = (app: Express): void => {
     validate(TransactionsQuerySchema, 'query'),
     controller.listTransactions,
   );
+  // After the literal `/transactions` above: Express matches in registration
+  // order, and a `:id` mounted first would swallow the list route.
+  router.get('/transactions/:id', controller.getTransaction);
 
   // Funding — initialize and verify. The verify endpoint is a polling
   // fallback; webhook is the source of truth. Tighter rate limit on

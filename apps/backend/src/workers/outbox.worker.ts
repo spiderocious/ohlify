@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 
+import type { PoolClient } from 'pg';
+
 import * as authRepo from '@features/auth/auth.repo.js';
+import { notify } from '@features/notifications/notifications.service.js';
 import * as deviceTokensRepo from '@features/profile/device-tokens.repo.js';
 import { pool } from '@lib/db/pool.js';
 import { logger } from '@lib/logger.js';
@@ -8,6 +11,8 @@ import { publish, RealtimeEvent, type RealtimeMessage } from '@lib/realtime/inde
 import { notificationService } from '@lib/notifications/notification.service.js';
 import { OutboxEventType } from '@lib/outbox/events.js';
 import { getPushProvider, type PushNotification } from '@lib/push/index.js';
+
+import { inboxEntryFor } from './outbox.inbox-map.js';
 
 // Polls the outbox table and "publishes" events. In Slice A there are no real
 // consumers — the worker simply marks rows published and logs them. Slice B
@@ -21,6 +26,11 @@ import { getPushProvider, type PushNotification } from '@lib/push/index.js';
 const POLL_INTERVAL_MS = 500;
 const BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 8;
+
+/** Structural, so any pooled client or transaction handle satisfies it. */
+interface QueryRunner {
+  query: PoolClient['query'];
+}
 
 interface OutboxRow {
   id: string;
@@ -220,6 +230,121 @@ const buildPushNotification = (row: OutboxRow): PushNotification | null => {
         },
       };
     }
+
+    // ── Invite lifecycle ─────────────────────────────────────────────────────
+    // Actionable: the professional decides. `participant_id` rides along so the
+    // client can offer Approve / Reject without first opening the call or
+    // thread, and so an OS-level action button has something to POST against.
+    case OutboxEventType.PUSH_CALL_INVITE_REQUESTED: {
+      const inviterName = asString(payload['inviter_full_name']) ?? 'Someone';
+      const inviteeName = asString(payload['invitee_full_name']) ?? 'someone';
+      return {
+        title: 'Someone wants to join your call',
+        body: `${inviterName} wants to add ${inviteeName}.`,
+        category: 'call.invite.requested',
+        androidChannelId: 'calls',
+        data: {
+          type: 'call.invite.requested',
+          call_id: asString(payload['call_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+          inviter_full_name: inviterName,
+          invitee_full_name: inviteeName,
+          actionable: 'approve_reject',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CALL_INVITE_APPROVED: {
+      const inviteeName = asString(payload['invitee_full_name']) ?? 'They';
+      return {
+        title: 'Invite accepted',
+        body: `${inviteeName} is joining the call.`,
+        category: 'call.invite.resolved',
+        androidChannelId: 'calls',
+        data: {
+          type: 'call.invite.approved',
+          call_id: asString(payload['call_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CALL_INVITE_REJECTED: {
+      const inviteeName = asString(payload['invitee_full_name']) ?? 'that person';
+      return {
+        title: 'Invite declined',
+        body: `The professional declined to add ${inviteeName}.`,
+        category: 'call.invite.resolved',
+        androidChannelId: 'calls',
+        data: {
+          type: 'call.invite.rejected',
+          call_id: asString(payload['call_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CHAT_INVITE: {
+      const inviterName = asString(payload['inviter_full_name']) ?? 'Someone';
+      const inviteeName = asString(payload['invitee_full_name']) ?? 'someone';
+      return {
+        title: 'Someone wants to join your chat',
+        body: `${inviterName} wants to add ${inviteeName}.`,
+        category: 'chat.invite.requested',
+        androidChannelId: 'chat',
+        data: {
+          type: 'chat.invite.requested',
+          conversation_id: asString(payload['conversation_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+          inviter_full_name: inviterName,
+          invitee_full_name: inviteeName,
+          actionable: 'approve_reject',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CHAT_INVITE_APPROVED: {
+      // Sent to the inviter AND the invitee; the copy reads correctly for both
+      // because it names neither party's relationship to the reader.
+      return {
+        title: 'Added to the chat',
+        body: asString(payload['body']) ?? 'The chat now has a new participant.',
+        category: 'chat.invite.resolved',
+        androidChannelId: 'chat',
+        data: {
+          type: 'chat.invite.approved',
+          conversation_id: asString(payload['conversation_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CHAT_INVITE_REJECTED: {
+      const inviteeName = asString(payload['invitee_full_name']) ?? 'that person';
+      return {
+        title: 'Invite declined',
+        body: `The professional declined to add ${inviteeName}.`,
+        category: 'chat.invite.resolved',
+        androidChannelId: 'chat',
+        data: {
+          type: 'chat.invite.rejected',
+          conversation_id: asString(payload['conversation_id']) ?? '',
+          participant_id: asString(payload['participant_id']) ?? '',
+        },
+      };
+    }
+    case OutboxEventType.PUSH_CAMPAIGN: {
+      const title = asString(payload['title']);
+      if (title === null) return null;
+      return {
+        title,
+        body: asString(payload['body']) ?? '',
+        category: 'campaign',
+        androidChannelId: 'default',
+        data: {
+          type: 'campaign',
+          campaign_id: asString(payload['campaign_id']) ?? '',
+          // The tap target. Empty means "just open the app", which the client
+          // already handles.
+          deeplink: asString(payload['deeplink']) ?? '',
+        },
+      };
+    }
     default:
       return null;
   }
@@ -335,9 +460,26 @@ const dispatchToRealtime = (row: OutboxRow): void => {
   }
 };
 
-const publishOne = async (row: OutboxRow): Promise<void> => {
+/**
+ * Writes the notification-panel row for events that earn one.
+ *
+ * Runs on the same pooled client as the outbox claim, so the row commits with
+ * the `published_at` update: a crash between the two cannot leave a notice for
+ * an event we then retry. Idempotent on `outbox_id` besides, which covers the
+ * retry-after-partial-failure case.
+ *
+ * Selection lives in `inboxEntryFor` — see the rule documented there.
+ */
+const dispatchToInbox = async (runner: QueryRunner, row: OutboxRow): Promise<void> => {
+  const entry = inboxEntryFor({ eventType: row.event_type, payload: row.payload });
+  if (entry === null) return;
+  await notify(runner, { ...entry, outboxId: row.id });
+};
+
+const publishOne = async (runner: QueryRunner, row: OutboxRow): Promise<void> => {
   await dispatchToEmail(row);
   await dispatchToPush(row);
+  await dispatchToInbox(runner, row);
   dispatchToRealtime(row);
   logger.info(
     {
@@ -371,7 +513,7 @@ const tickOnce = async (): Promise<void> => {
 
     for (const row of claimed.rows) {
       try {
-        await publishOne(row);
+        await publishOne(client, row);
         await client.query(
           `UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1`,
           [row.id],

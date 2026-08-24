@@ -1,127 +1,163 @@
 import { useState } from 'react';
 
-import { AppButton, AppText, AppTextInput } from '@ohlify/ui';
 import { AdminReportStatus, type AdminReport } from '@ohlify/api';
+import {
+  HawkButton,
+  HawkCallout,
+  HawkCaption,
+  HawkDetailDrawer,
+  HawkKeyValue,
+  HawkSearchInput,
+  HawkSemantic,
+  HawkStatusBadge,
+  HawkText,
+  IconFlag,
+  type HawkColumn,
+  type HawkKpi,
+} from '@ohlify/hawk-ui';
 
-import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
-import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
-import { DetailDrawer } from '../../../shared/parts/detail-drawer.js';
-import { DetailRow, DetailSection } from '../../../shared/parts/detail-row.js';
-import { FilterBar } from '../../../shared/parts/filter-bar.js';
-import { FilterTabs, type FilterTabOption } from '../../../shared/parts/filter-tabs.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
-import { StatusPill, type StatusTone } from '../../../shared/parts/status-pill.js';
+import { BoardScreen } from '../../../shared/parts/board-screen.js';
+import { statusFor, statusTabs } from '../../../shared/parts/board-status.js';
 import { UserLink } from '../../../shared/parts/user-link.js';
 import { promptForReason, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { formatDateTime, formatRelative } from '../../../shared/format/datetime.js';
 import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
 import { useDismissReport, useReports, useResolveReport } from '../api/use-reports.js';
 
-const TONE: Record<string, StatusTone> = {
-  [AdminReportStatus.PENDING]: 'warning',
-  [AdminReportStatus.RESOLVED]: 'success',
-  [AdminReportStatus.DISMISSED]: 'muted',
-};
-const STATUS_TABS: FilterTabOption[] = [
-  { label: 'All', value: '' },
-  ...Object.values(AdminReportStatus).map((v) => ({ label: humanizeStatus(v), value: v })),
-];
-
-function isUserTarget(t: string): boolean {
-  return t === 'profile' || t === 'user';
+/** Targets that are a person rather than an artefact — those get a user link. */
+function isUserTarget(type: string): boolean {
+  return type === 'profile' || type === 'user';
 }
 
+/**
+ * The reports queue (A25).
+ *
+ * A report is a claim, not a fact, so the row is built to surface *what was
+ * claimed and against whom* rather than to imply a verdict. The reason and
+ * the target lead; the reporter follows, because who complained matters less
+ * than what they complained about — until it turns out one person files
+ * everything, which the reporter column makes visible over a page.
+ */
 export function ReportsListScreen() {
-  const [status, setStatus] = useState<string>('');
+  const [status, setStatus] = useState<string>(AdminReportStatus.PENDING);
   const [targetType, setTargetType] = useState('');
   const [open, setOpen] = useState<AdminReport | null>(null);
+
   const list = useReports({ status, target_type: targetType });
 
-  const columns: ColumnDef<AdminReport>[] = [
+  const pending = list.items.filter((row) => row.status === AdminReportStatus.PENDING);
+  const oldest = pending.reduce<string | null>(
+    (acc, row) => (acc === null || row.created_at < acc ? row.created_at : acc),
+    null,
+  );
+
+  const kpis: HawkKpi[] = [
     {
-      key: 'reporter',
-      header: 'Reporter',
+      key: 'pending',
+      label: 'Awaiting review',
+      value: pending.length.toLocaleString(),
+      icon: IconFlag,
+      semantic: pending.length > 0 ? 'caution' : 'success',
+    },
+    {
+      key: 'oldest',
+      label: 'Oldest waiting',
+      value: oldest ? formatRelative(oldest) : '—',
+      icon: IconFlag,
+      semantic: 'caution',
+    },
+    {
+      key: 'shown',
+      label: 'Rows shown',
+      value: list.items.length.toLocaleString(),
+    },
+  ];
+
+  const columns: ReadonlyArray<HawkColumn<AdminReport>> = [
+    {
+      key: 'reason',
+      header: 'Reason',
       width: '20%',
-      render: (r) => <UserLink userId={r.reporter_user_id} idLen={16} />,
+      render: (row) => (
+        <HawkText variant="label" ink="strong" className="font-medium">
+          {humanizeStatus(row.reason_code)}
+        </HawkText>
+      ),
     },
     {
       key: 'target',
       header: 'Target',
       width: '24%',
-      render: (r) => (
+      render: (row) => (
         <div className="flex flex-col">
-          <AppText variant="body" className="text-text-primary">
-            {humanizeStatus(r.target_type)}
-          </AppText>
-          {isUserTarget(r.target_type) ? (
-            <UserLink userId={r.target_id} idLen={16} />
+          <HawkCaption ink="muted">{humanizeStatus(row.target_type)}</HawkCaption>
+          {isUserTarget(row.target_type) ? (
+            <UserLink userId={row.target_id} idLen={16} />
           ) : (
-            <code className="text-[10px] text-text-muted">{shortId(r.target_id, 16)}</code>
+            <span className="hawk-record text-hawk-ink-muted">
+              {shortId(row.target_id, 16)}
+            </span>
           )}
         </div>
       ),
     },
     {
-      key: 'reason',
-      header: 'Reason',
+      key: 'reporter',
+      header: 'Reporter',
       width: '20%',
-      render: (r) => humanizeStatus(r.reason_code),
+      render: (row) => <UserLink userId={row.reporter_user_id} idLen={16} />,
     },
     {
       key: 'status',
       header: 'Status',
       width: '14%',
-      render: (r) => (
-        <StatusPill label={humanizeStatus(r.status)} tone={TONE[r.status] ?? 'neutral'} />
-      ),
+      render: (row) => <HawkStatusBadge status={statusFor('report', row.status)} size="sm" />,
     },
     {
       key: 'created',
-      header: 'Created',
-      width: '14%',
-      render: (r) => <span className="text-text-muted">{formatRelative(r.created_at)}</span>,
+      header: 'Filed',
+      align: 'right',
+      render: (row) => (
+        <span className="hawk-record text-hawk-ink-muted">{formatRelative(row.created_at)}</span>
+      ),
     },
   ];
 
   return (
     <>
-      <PageHeader
+      <BoardScreen
         title="Reports"
-        subtitle="User-submitted reports about other users, calls, or reviews."
-      />
-
-      <FilterBar>
-        <FilterTabs options={STATUS_TABS} value={status} onChange={setStatus} label="Report status" />
-        <div className="sm:w-48">
-          <AppTextInput
-            label="Target type"
-            placeholder="profile, call, review…"
-            value={targetType}
-            onChange={setTargetType}
-          />
-        </div>
-      </FilterBar>
-
-      <DataTable
-        columns={columns}
-        rows={list.items}
-        rowKey={(r) => r.id}
-        isLoading={list.isLoading}
-        error={list.error}
-        emptyTitle="No reports"
-        onRowClick={(r) => setOpen(r)}
-        footer={
-          <CursorPagination
-            hasPrev={list.hasPrev}
-            hasNext={list.hasNext}
-            onPrev={list.goPrev}
-            onNext={list.goNext}
-            itemCount={list.items.length}
-          />
+        subtitle={
+          pending.length > 0
+            ? `${pending.length} awaiting review · oldest ${oldest ? formatRelative(oldest) : '—'}`
+            : 'User-submitted reports about other users, calls, or reviews.'
         }
+        kpis={kpis}
+        tabs={statusTabs('report')}
+        activeTab={status}
+        onTabChange={setStatus}
+        filters={
+          <div className="w-56">
+            <HawkSearchInput
+              value={targetType}
+              onChange={setTargetType}
+              placeholder="Target type — profile, call, review"
+            />
+          </div>
+        }
+        columns={columns}
+        list={list}
+        rowKey={(row) => row.id}
+        onRowClick={setOpen}
+        emptyTitle="Queue clear"
+        emptyDescription="No reports match this filter."
       />
 
-      <ReportDrawer item={open} onClose={() => setOpen(null)} onSettled={() => list.refetch()} />
+      <ReportDrawer
+        item={open}
+        onClose={() => setOpen(null)}
+        onSettled={() => list.refetch()}
+      />
     </>
   );
 }
@@ -137,19 +173,20 @@ function ReportDrawer({
 }) {
   const resolve = useResolveReport(item?.id ?? '');
   const dismiss = useDismissReport(item?.id ?? '');
+  const isPending = item?.status === AdminReportStatus.PENDING;
 
-  const onResolve = async () => {
-    if (!item) return;
-    const note = await promptForReason({
-      title: 'Resolve report',
-      message: 'Describe the action you took (will be logged).',
-    });
+  const act = (
+    kind: 'resolve' | 'dismiss',
+    mutation: typeof resolve,
+    prompt: { title: string; message: string },
+  ) => async () => {
+    const note = await promptForReason(prompt);
     if (!note) return;
-    resolve.mutate(
+    mutation.mutate(
       { note },
       {
         onSuccess: () => {
-          toastSuccess('Report resolved');
+          toastSuccess(kind === 'resolve' ? 'Report resolved' : 'Report dismissed');
           onSettled();
           onClose();
         },
@@ -158,82 +195,90 @@ function ReportDrawer({
     );
   };
 
-  const onDismiss = async () => {
-    if (!item) return;
-    const note = await promptForReason({
-      title: 'Dismiss report',
-      message: 'Why is this report not actionable?',
-    });
-    if (!note) return;
-    dismiss.mutate(
-      { note },
-      {
-        onSuccess: () => {
-          toastSuccess('Report dismissed');
-          onSettled();
-          onClose();
-        },
-        onError: (err) => toastError(err),
-      },
-    );
-  };
+  const onResolve = act('resolve', resolve, {
+    title: 'Resolve report',
+    message: 'Describe the action you took. This is logged against your account.',
+  });
 
-  const isOpen = item?.status === AdminReportStatus.PENDING;
+  const onDismiss = act('dismiss', dismiss, {
+    title: 'Dismiss report',
+    message: 'Why is this report not actionable?',
+  });
 
   return (
-    <DetailDrawer
-      open={Boolean(item)}
+    <HawkDetailDrawer.Root
+      open={item !== null}
       onClose={onClose}
-      title={item ? `Report ${shortId(item.id, 12)}` : 'Report'}
-      subtitle={item ? humanizeStatus(item.reason_code) : undefined}
-      width={520}
-      footer={
-        item && isOpen ? (
-          <>
-            <AppButton label="Dismiss" variant="outline" height={36} onPressed={onDismiss} />
-            <AppButton label="Resolve" variant="solid" height={36} onPressed={onResolve} />
-          </>
+      title={item ? humanizeStatus(item.reason_code) : 'Report'}
+      subtitle={item ? `${humanizeStatus(item.target_type)} · ${shortId(item.id, 14)}` : undefined}
+      actions={
+        item && isPending ? (
+          <div className="flex w-full items-center justify-end gap-hawk-3">
+            <HawkButton
+              label="Dismiss"
+              variant="outline"
+              loading={dismiss.isPending}
+              onClick={() => void onDismiss()}
+            />
+            <HawkButton
+              label="Resolve"
+              loading={resolve.isPending}
+              onClick={() => void onResolve()}
+            />
+          </div>
         ) : null
       }
     >
       {item && (
-        <>
-          <DetailSection title="Report">
-            <DetailRow label="ID">{shortId(item.id, 18)}</DetailRow>
-            <DetailRow label="Reporter">
-              <UserLink userId={item.reporter_user_id} idLen={18} />
-            </DetailRow>
-            <DetailRow label="Target">
-              <div className="flex items-center gap-2">
-                <span>{humanizeStatus(item.target_type)}</span>
-                {isUserTarget(item.target_type) ? (
-                  <UserLink userId={item.target_id} idLen={18} />
-                ) : (
-                  <code className="text-xs">{shortId(item.target_id, 18)}</code>
-                )}
-              </div>
-            </DetailRow>
-            <DetailRow label="Reason">{humanizeStatus(item.reason_code)}</DetailRow>
-            <DetailRow label="Status">
-              <StatusPill label={humanizeStatus(item.status)} tone={TONE[item.status] ?? 'neutral'} />
-            </DetailRow>
-            <DetailRow label="Description">
-              <span className="whitespace-pre-wrap">{item.description ?? '—'}</span>
-            </DetailRow>
-            <DetailRow label="Created">{formatDateTime(item.created_at)}</DetailRow>
-          </DetailSection>
+        <div className="flex flex-col gap-hawk-6">
+          {item.description && (
+            <div className="flex flex-col gap-hawk-2">
+              <HawkCaption ink="muted">What the reporter said</HawkCaption>
+              <HawkText variant="caption" className="whitespace-pre-wrap leading-relaxed">
+                {item.description}
+              </HawkText>
+            </div>
+          )}
 
-          <DetailSection title="Review">
-            <DetailRow label="Reviewed by">
-              {item.reviewed_by ? <UserLink userId={item.reviewed_by} idLen={18} /> : '—'}
-            </DetailRow>
-            <DetailRow label="Reviewed at">{formatDateTime(item.reviewed_at)}</DetailRow>
-            <DetailRow label="Note">
-              <span className="whitespace-pre-wrap">{item.review_note ?? '—'}</span>
-            </DetailRow>
-          </DetailSection>
-        </>
+          <div className="grid gap-x-hawk-6 gap-y-hawk-4 sm:grid-cols-2">
+            <HawkKeyValue label="Report" value={shortId(item.id, 20)} record />
+            <HawkKeyValue
+              label="Status"
+              value={<HawkStatusBadge status={statusFor('report', item.status)} size="sm" />}
+            />
+            <HawkKeyValue
+              label="Reporter"
+              value={<UserLink userId={item.reporter_user_id} idLen={20} />}
+            />
+            <HawkKeyValue
+              label="Target"
+              value={
+                isUserTarget(item.target_type) ? (
+                  <UserLink userId={item.target_id} idLen={20} />
+                ) : (
+                  <span className="hawk-record">{shortId(item.target_id, 20)}</span>
+                )
+              }
+            />
+            <HawkKeyValue label="Target type" value={humanizeStatus(item.target_type)} />
+            <HawkKeyValue label="Reason" value={humanizeStatus(item.reason_code)} />
+            <HawkKeyValue label="Filed" value={formatDateTime(item.created_at)} record />
+            <HawkKeyValue label="Reviewed" value={formatDateTime(item.reviewed_at)} record />
+          </div>
+
+          {item.review_note && (
+            <HawkCallout
+              semantic={
+                item.status === AdminReportStatus.DISMISSED
+                  ? HawkSemantic.NEUTRAL
+                  : HawkSemantic.SUCCESS
+              }
+              title="Review note"
+              message={item.review_note}
+            />
+          )}
+        </div>
       )}
-    </DetailDrawer>
+    </HawkDetailDrawer.Root>
   );
 }

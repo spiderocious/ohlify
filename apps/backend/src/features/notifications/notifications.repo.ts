@@ -16,15 +16,32 @@ export interface CreateNotificationInput {
   body?: string | null;
   deeplink?: string | null;
   metadata?: Record<string, unknown>;
+  /**
+   * The outbox row that produced this notification, when there is one.
+   *
+   * Makes the write idempotent: the outbox retries a failed dispatch, and
+   * without this a partial failure leaves the user two identical notices.
+   * Absent for rows a service writes directly (admin campaigns).
+   */
+  outboxId?: string | null;
 }
 
+/**
+ * Inserts a notification, or returns null when one already exists for the same
+ * outbox row.
+ *
+ * `ON CONFLICT DO NOTHING` rather than an existence check: two worker instances
+ * can claim different outbox rows concurrently, so a check-then-insert would
+ * still race. Null means "already delivered", which callers treat as success.
+ */
 export const create = async (
   runner: QueryRunner,
   input: CreateNotificationInput,
-): Promise<NotificationRow> => {
+): Promise<NotificationRow | null> => {
   const res = await runner.query<NotificationRow>(
-    `INSERT INTO notifications (id, user_id, kind, title, body, deeplink, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO notifications (id, user_id, kind, title, body, deeplink, metadata, outbox_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (outbox_id) WHERE outbox_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [
       makeId('n'),
@@ -34,9 +51,11 @@ export const create = async (
       input.body ?? null,
       input.deeplink ?? null,
       JSON.stringify(input.metadata ?? {}),
+      input.outboxId ?? null,
     ],
   );
-  return res.rows[0]!;
+  // Empty on an idempotent no-op — the row already exists for this outbox event.
+  return res.rows[0] ?? null;
 };
 
 /**

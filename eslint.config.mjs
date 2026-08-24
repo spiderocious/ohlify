@@ -32,14 +32,17 @@ export default tseslint.config(
     },
     languageOptions: {
       parserOptions: {
-        project: './apps/backend/tsconfig.json',
+        // tsconfig.json excludes *.test.ts so they never reach dist/; the test
+        // config picks them back up. Both are listed so type-aware rules run
+        // over source and tests alike.
+        project: ['./apps/backend/tsconfig.json', './apps/backend/tsconfig.test.json'],
         tsconfigRootDir: __dirname,
       },
     },
     settings: {
       'import/resolver': {
         typescript: {
-          project: './apps/backend/tsconfig.json',
+          project: ['./apps/backend/tsconfig.json', './apps/backend/tsconfig.test.json'],
         },
       },
     },

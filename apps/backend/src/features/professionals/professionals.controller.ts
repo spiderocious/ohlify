@@ -52,11 +52,16 @@ export const home: RequestHandler = asyncHandler(async (req: Request, res: Respo
   ResponseUtil.ok(res, r.data);
 });
 
-/** Everything a professional's home screen needs, in one read. */
+/**
+ * Everything a professional's home screen needs, in one read.
+ *
+ * `?days=` is accepted and ignored. It selected the sparkline window, and the
+ * sparkline is gone — but older builds still send it, and 400-ing a parameter
+ * that used to be valid would break every one of them. Silently tolerating it
+ * costs nothing; the response is identical either way.
+ */
 export const proDashboard: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const raw = req.query['days'];
-  const days = typeof raw === 'string' && raw === '30' ? 30 : 7;
-  const r = await proDashboardService.getProfessionalDashboard(req.userId!, days);
+  const r = await proDashboardService.getProfessionalDashboard(req.userId!);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

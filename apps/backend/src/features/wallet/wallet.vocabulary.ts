@@ -165,3 +165,47 @@ export const lookupWalletTxVocabulary = (
 ): WalletTxVocabularyEntry => {
   return ENTRIES[`${kind}:${direction}`] ?? ENTRIES[kind] ?? FALLBACK;
 };
+
+/**
+ * Stable client-facing transaction `type` derived from the journal kind.
+ *
+ * Mobile branches on these strings directly, so they are contract: renaming
+ * one breaks every shipped build that reads it.
+ *
+ * Lives here beside `lookupWalletTxVocabulary` because the two are the same
+ * concern — turning an internal journal kind into something a client can
+ * render — and the professional dashboard now needs both. It was private to
+ * the wallet service until a second surface had to say the same thing about
+ * the same row.
+ */
+export const journalKindToTxType = (kind: string): string => {
+  switch (kind) {
+    case 'wallet_funding':
+      return 'wallet_funding';
+    case 'wallet_funding_reversed':
+      return 'wallet_funding_reversed';
+    case 'call_payment_reserve':
+      return 'call_payment';
+    case 'call_settlement':
+      return 'call_earning';
+    case 'call_refund':
+    case 'call_refund_post_settle':
+      return 'call_refund';
+    case 'withdrawal_requested':
+      return 'withdrawal';
+    case 'withdrawal_completed':
+      return 'withdrawal_completed';
+    case 'withdrawal_reversed':
+      return 'withdrawal_reversed';
+    case 'admin_credit':
+      return 'admin_credit';
+    case 'admin_debit':
+      return 'admin_debit';
+    case 'admin_manual':
+      return 'admin_manual';
+    case 'platform_promo_grant':
+      return 'promo_credit';
+    default:
+      return kind;
+  }
+};

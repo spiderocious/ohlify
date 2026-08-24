@@ -8,6 +8,16 @@ export const InstantCallStatus = {
   ENDED: 'ended',
   MISSED: 'missed',
   CANCELLED: 'cancelled',
+  /**
+   * The attempt never reached the professional's device — they were offline,
+   * not accepting, or in a DnD block. Terminal on arrival: never rings, never
+   * connects, never billed.
+   *
+   * Distinct from MISSED on purpose. MISSED means the phone rang and nobody
+   * answered, which the no-show rules can penalise; an attempt that never
+   * arrived must not count against anyone.
+   */
+  REJECTED: 'rejected',
 } as const;
 
 export type InstantCallStatus = (typeof InstantCallStatus)[keyof typeof InstantCallStatus];
@@ -40,6 +50,12 @@ export interface InstantCallRow {
   callee_joined_at: Date | null;
   connected_at: Date | null;
   ended_at: Date | null;
+  /**
+   * Why a `rejected` attempt never rang — a `ReachabilityDetail` value
+   * (`not_accepting`, `dnd`, `no_device_token`, …). Null for every other
+   * status. Diagnostic and copy-driving, not something clients branch on.
+   */
+  rejection_reason: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -77,5 +93,7 @@ export interface InstantCallView {
   settled_kobo: JsonKobo;
   connected_at: string | null;
   ended_at: string | null;
+  /** Set only on `rejected` attempts — why the call never reached the device. */
+  rejection_reason: string | null;
   created_at: string;
 }

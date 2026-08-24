@@ -10,7 +10,9 @@ interface QueryRunner {
 }
 
 export interface CreateReviewInput {
-  callId: string;
+  /** Exactly one of these is set — the DB enforces it with a CHECK. */
+  callId?: string;
+  instantCallId?: string;
   reviewerUserId: string;
   subjectUserId: string;
   rating: number;
@@ -21,14 +23,15 @@ export interface CreateReviewInput {
 export const create = async (runner: QueryRunner, input: CreateReviewInput): Promise<ReviewRow> => {
   const res = await runner.query<ReviewRow>(
     `INSERT INTO reviews (
-       id, call_id, reviewer_user_id, subject_user_id,
+       id, call_id, instant_call_id, reviewer_user_id, subject_user_id,
        rating, feedback_text, is_public
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       makeId('rv'),
-      input.callId,
+      input.callId ?? null,
+      input.instantCallId ?? null,
       input.reviewerUserId,
       input.subjectUserId,
       input.rating,
@@ -61,6 +64,14 @@ export const findByCallId = async (callId: string): Promise<ReviewRow | null> =>
   const res = await pool.query<ReviewRow>(`SELECT * FROM reviews WHERE call_id = $1 LIMIT 1`, [
     callId,
   ]);
+  return res.rows[0] ?? null;
+};
+
+export const findByInstantCallId = async (callId: string): Promise<ReviewRow | null> => {
+  const res = await pool.query<ReviewRow>(
+    `SELECT * FROM reviews WHERE instant_call_id = $1 LIMIT 1`,
+    [callId],
+  );
   return res.rows[0] ?? null;
 };
 

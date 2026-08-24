@@ -14,13 +14,15 @@ import type {
 } from './admin.write.schema.js';
 
 export const list: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.listUsers(req.query);
+  const r = await service.listUsers(req.query, req.adminRole);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data.items, r.data.meta);
 });
 
 export const get: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.getUser(String(req.params['id']));
+  // The role decides whether the money block is assembled at all — the
+  // queries for it are skipped rather than fetched then dropped.
+  const r = await service.getUser(String(req.params['id']), req.adminRole);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

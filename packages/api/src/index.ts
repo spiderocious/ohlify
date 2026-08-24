@@ -33,6 +33,7 @@ export type {
   KycIdentityValue,
   KycSelfieValue,
   KycRateValue,
+  KycCallRateValue,
 } from './onboarding/types.js';
 export type {
   MeResponse,

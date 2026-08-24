@@ -10,6 +10,7 @@ import type {
   RespondToInviteDto,
   RespondToRingDto,
   StartCallDto,
+  AnswerCallDto,
 } from './instant-calls.schema.js';
 import * as inviteService from './call-invites.service.js';
 import * as service from './instant-calls.service.js';
@@ -21,7 +22,12 @@ export const start: RequestHandler = asyncHandler(async (req: Request, res: Resp
 });
 
 export const answer: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const r = await service.answerCall(String(req.params['id']), req.userId!);
+  // Body is optional: an old client sends none, and `{}` parses to
+  // `end_ongoing: undefined`, which the service reads as "keep both".
+  const dto = (req.body ?? {}) as AnswerCallDto;
+  const r = await service.answerCall(String(req.params['id']), req.userId!, {
+    endOngoing: dto.end_ongoing ?? false,
+  });
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });
@@ -57,7 +63,7 @@ export const invite: RequestHandler = asyncHandler(async (req: Request, res: Res
   const r = await inviteService.invite({
     callId: String(req.params['id']),
     inviterUserId: req.userId!,
-    handle: (req.body as InviteToCallDto).handle,
+    email: (req.body as InviteToCallDto).email,
   });
   if (!r.success) bail(r);
   else ResponseUtil.created(res, r.data);
@@ -80,6 +86,24 @@ export const respondToRing: RequestHandler = asyncHandler(async (req: Request, r
     userId: req.userId!,
     accept: (req.body as RespondToRingDto).accept,
   });
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
+
+export const history: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const limitRaw = req.query['limit'];
+  const cursorRaw = req.query['cursor'];
+  const r = await service.listHistory(
+    req.userId!,
+    typeof limitRaw === 'string' ? Number(limitRaw) : undefined,
+    typeof cursorRaw === 'string' ? cursorRaw : undefined,
+  );
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data.items, r.data.meta);
+});
+
+export const earnings: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await service.getCallEarnings(String(req.params['id']), req.userId!);
   if (!r.success) bail(r);
   else ResponseUtil.ok(res, r.data);
 });

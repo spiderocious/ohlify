@@ -127,7 +127,20 @@ export const KNOWN_KYC_ITEM_KEYS = [
   // kyc_submissions and only means something next to an ID document, which
   // clients never submit. This one is a standalone column on `users`.
   'client_selfie',
+  /**
+   * @deprecated Superseded by `audio_rate` + `video_rate` (migration 0098).
+   * Kept in the known-key set on purpose: `sanitizeItemKeys` filters historical
+   * `kyc_submissions.reject_item_keys` against this list, so dropping it would
+   * silently discard the key from old partial-rejection rows and widen those
+   * users' resubmit scope. Do not remove until no submission row references it.
+   */
   'rates',
+  // One active rate per channel is already the data model
+  // (`rates.single_rate_per_channel`), so each channel gets its own KYC item
+  // instead of one item wrapping a list. Lets the client render — and the user
+  // fill — audio and video independently.
+  'audio_rate',
+  'video_rate',
 ] as const;
 export type KycItemKey = (typeof KNOWN_KYC_ITEM_KEYS)[number];
 
@@ -140,7 +153,12 @@ export type KycItemKind =
   | 'bank'
   | 'identity'
   | 'selfie'
+  /** @deprecated Superseded by `call_rate`. See the `rates` key above. */
   | 'rates'
+  // Single-channel rate editor: duration + price for one fixed call_type.
+  // Both `audio_rate` and `video_rate` render with this kind — the key names
+  // the channel, the kind names the widget.
+  | 'call_rate'
   | 'image_upload';
 
 // Discriminated union of inline-validation rules. The frontend interprets each
@@ -180,11 +198,49 @@ export interface KycItemConfig {
   validation: KycValidationRule[];
 }
 
+/**
+ * Per-item lifecycle, as the user reads it.
+ *
+ * Derived server-side rather than left to each client. The same four states
+ * were previously inferred from three separate fields — `complete`,
+ * `resubmission.item_keys` and the top-level `kyc_status` — which is three
+ * sources of truth for one badge and two clients free to combine them
+ * differently. One derivation here means mobile and web can never disagree.
+ *
+ * Maps 1:1 onto the design system's KYC status vocabulary (`72-status-kyc`).
+ */
+export type KycItemStatus = 'not_started' | 'under_review' | 'verified' | 'action_needed';
+
 /** Per-request response shape — config + per-user value + complete flag. */
 export interface KycItemSpec extends KycItemConfig {
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   value: unknown | null;
   complete: boolean;
+  /**
+   * What the item's badge should read. See {@link KycItemStatus}.
+   *
+   * Additive: `complete` stays exactly as it was, so clients that predate this
+   * field keep working. Never derive completeness from this — an item can be
+   * `under_review` while incomplete.
+   */
+  status: KycItemStatus;
+  /**
+   * True when the item cannot be edited right now.
+   *
+   * Two causes today: the submission is awaiting admin review (everything
+   * locks), or a partial rejection is in force and this item was not one of
+   * the flagged ones. Both are policy, not validation — a locked item is not
+   * an error, it is simply not this user's move.
+   */
+  locked: boolean;
+  /**
+   * Why it is locked, in words the user can read. `null` when not locked.
+   *
+   * Required alongside `locked`: the design system's locked tile shows a
+   * reason ("Complete the steps above first"), and a lock the product cannot
+   * explain reads as a bug.
+   */
+  lock_reason: string | null;
 }
 
 /**
@@ -236,6 +292,7 @@ export const PROFESSIONAL_KYC_ITEMS = [
   'interests',
   'bank_account',
   'identity',
-  'rates',
+  'audio_rate',
+  'video_rate',
 ] as const;
 export type ProfessionalKycItem = (typeof PROFESSIONAL_KYC_ITEMS)[number];

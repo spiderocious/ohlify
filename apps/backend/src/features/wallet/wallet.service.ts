@@ -44,47 +44,15 @@ import type {
   FundingInitView,
   FundingVerifyView,
   InsufficientBalanceView,
+  JsonKobo,
   PayResponseView,
   WalletStatsView,
   WalletSummaryView,
   WalletTransactionView,
   WithdrawalView,
 } from './wallet.types.js';
-import { lookupWalletTxVocabulary } from './wallet.vocabulary.js';
+import { journalKindToTxType, lookupWalletTxVocabulary } from './wallet.vocabulary.js';
 
-// Stable client-facing transaction `type` derived from the journal kind.
-// Mobile uses these strings directly. Withdrawals come in slice B.
-const journalKindToTxType = (kind: string): string => {
-  switch (kind) {
-    case 'wallet_funding':
-      return 'wallet_funding';
-    case 'wallet_funding_reversed':
-      return 'wallet_funding_reversed';
-    case 'call_payment_reserve':
-      return 'call_payment';
-    case 'call_settlement':
-      return 'call_earning';
-    case 'call_refund':
-    case 'call_refund_post_settle':
-      return 'call_refund';
-    case 'withdrawal_requested':
-      return 'withdrawal';
-    case 'withdrawal_completed':
-      return 'withdrawal_completed';
-    case 'withdrawal_reversed':
-      return 'withdrawal_reversed';
-    case 'admin_credit':
-      return 'admin_credit';
-    case 'admin_debit':
-      return 'admin_debit';
-    case 'admin_manual':
-      return 'admin_manual';
-    case 'platform_promo_grant':
-      return 'promo_credit';
-    default:
-      return kind;
-  }
-};
 
 // Legacy free-form description helper was here — replaced by
 // `lookupWalletTxVocabulary` (see wallet.vocabulary.ts), the single source
@@ -829,4 +797,93 @@ export const getWithdrawal = async (withdrawalId: string, userId: string) => {
     return new ServiceError('not_found', WALLET_MESSAGES.WITHDRAWAL_NOT_FOUND, 404);
   }
   return new ServiceSuccess(withdrawalRowToView(row), WALLET_MESSAGES.WITHDRAWAL_FETCHED);
+};
+
+/**
+ * Human-readable name for one step of a call's escrow lifecycle.
+ *
+ * `isOwnWallet` distinguishes the two lines that would otherwise read alike:
+ * a `call_refund` crediting the caller's own wallet is "Returned to your
+ * wallet", while the same journal kind crediting a system account is not
+ * something the user did or received.
+ */
+const ledgerStepLabel = (kind: string, isOwnWallet: boolean): string | null => {
+  switch (kind) {
+    case 'call_payment_reserve':
+      return 'Reserved in escrow';
+    case 'call_settlement':
+      return isOwnWallet ? 'Paid to you' : 'Settled to professional';
+    case 'call_refund':
+    case 'call_refund_post_settle':
+      return isOwnWallet ? 'Returned to your wallet' : 'Refunded';
+    case 'minutes_settlement':
+      return isOwnWallet ? 'Paid to you' : 'Minutes settled';
+    default:
+      // An unmapped kind is dropped rather than shown raw. A lifecycle with a
+      // line reading `platform_promo_grant` explains nothing and looks broken.
+      return null;
+  }
+};
+
+/**
+ * The receipt behind one wallet row.
+ *
+ * Two reads, not one: the entry itself, and — when it belongs to a call — the
+ * full set of journals that call produced. The second is the escrow story, and
+ * it is the reason this endpoint exists rather than the list row being enough.
+ *
+ * Ownership is enforced in the query, so a caller asking for an entry that is
+ * not theirs is indistinguishable from asking for one that does not exist.
+ * That is deliberate: a 404 that differs from a 403 is an enumeration oracle.
+ */
+export const getTransaction = async (entryId: string, userId: string) => {
+  const row = await repo.findUserTransaction(userId, entryId);
+  if (!row) {
+    return new ServiceError('not_found', WALLET_MESSAGES.TRANSACTIONS_FETCHED, 404);
+  }
+
+  const signed = BigInt(row.signed_amount_kobo);
+  const direction: 'credit' | 'debit' = signed > 0n ? 'credit' : 'debit';
+  const vocab = lookupWalletTxVocabulary(row.journal_kind, direction);
+
+  const ledger: { label: string; amount_kobo: JsonKobo; occurred_at: string }[] = [];
+  if (row.related_call_id !== null) {
+    const steps = await repo.listCallLedger(userId, row.related_call_id);
+    for (const step of steps) {
+      const label = ledgerStepLabel(step.journal_kind, step.is_own_wallet);
+      if (label === null) continue;
+      ledger.push({
+        label,
+        amount_kobo: koboToJson(BigInt(step.amount_kobo)),
+        occurred_at: step.occurred_at.toISOString(),
+      });
+    }
+  }
+
+  return new ServiceSuccess(
+    {
+      id: row.entry_id,
+      journal_id: row.journal_id,
+      reference: row.reference,
+      type: journalKindToTxType(row.journal_kind),
+      amount_kobo: koboToJson(signed),
+      currency: row.currency,
+      status: 'completed' as const,
+      occurred_at: row.occurred_at.toISOString(),
+      title: vocab.title,
+      description: vocab.description,
+      icon: vocab.icon,
+      direction,
+      related_call_id: row.related_call_id,
+      related_payment_id: row.related_payment_id,
+      related_withdrawal_id: row.related_withdrawal_id,
+      /**
+       * Empty for anything that is not a call payment — a top-up has no
+       * escrow story, and inventing a one-step "lifecycle" for it would be
+       * ceremony rather than information.
+       */
+      ledger,
+    },
+    WALLET_MESSAGES.TRANSACTIONS_FETCHED,
+  );
 };

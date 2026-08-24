@@ -24,6 +24,12 @@ export const NotificationKind = {
   REVIEW_RECEIVED: 'review.received',
   // Scheduling, when the other party acts.
   BOOKING_CANCELLED: 'booking.cancelled',
+  // Invites — a decision someone is waiting on, with no other home.
+  CALL_INVITE_REQUESTED: 'call_invite.requested',
+  CALL_INVITE_REJECTED: 'call_invite.rejected',
+  CHAT_INVITE_REQUESTED: 'chat_invite.requested',
+  CHAT_INVITE_APPROVED: 'chat_invite.approved',
+  CHAT_INVITE_REJECTED: 'chat_invite.rejected',
   // Admin campaigns (Phase 5).
   CAMPAIGN: 'campaign',
 } as const;

@@ -1,5 +1,7 @@
 import { countSegmentAudience } from '@features/banners/banner-resolver.js';
+import { withTransaction } from '@lib/db/tx.js';
 import { logger } from '@lib/logger.js';
+import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { publish, RealtimeEvent } from '@lib/realtime/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 import { MESSAGE_KEYS } from '@shared/constants/message-keys.js';
@@ -129,9 +131,39 @@ export const executeCampaign = async (campaignId: string): Promise<void> => {
     });
     await repo.markSent(campaignId, recipients);
 
+    const userIds = await repo.listRecipients(campaignId);
+
+    // ACTUALLY DELIVER IT.
+    //
+    // This step did not exist: the campaign wrote notification rows, published
+    // an SSE nudge, and marked itself sent — so it read as delivered in the
+    // admin while no phone was ever contacted. SSE only reaches an app that is
+    // open and foregrounded, which is precisely the audience a campaign is not
+    // aimed at.
+    //
+    // One outbox row per recipient, because the worker fans out by
+    // `target_user_id`. Going through the outbox rather than calling FCM here
+    // buys the retry, backoff and dead-token pruning the rest of the app
+    // already has.
+    await withTransaction(async (client) => {
+      for (const userId of userIds) {
+        await insertEvent(client, {
+          aggregateType: OutboxAggregateType.CAMPAIGN,
+          aggregateId: campaignId,
+          eventType: OutboxEventType.PUSH_CAMPAIGN,
+          payload: {
+            campaign_id: campaignId,
+            target_user_id: userId,
+            title: claimed.title,
+            body: claimed.body,
+            deeplink: claimed.deeplink ?? '',
+          },
+        });
+      }
+    });
+
     // Nudge anyone with the app open so the panel and badge update without a
     // manual refresh. Best-effort — the rows are already durable.
-    const userIds = await repo.listRecipients(campaignId);
     for (const userId of userIds) {
       publish(userId, { type: RealtimeEvent.NOTIFICATION_NEW });
       publish(userId, { type: RealtimeEvent.BADGES_CHANGED });

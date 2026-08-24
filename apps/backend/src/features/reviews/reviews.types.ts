@@ -1,6 +1,14 @@
 export interface ReviewRow {
   id: string;
-  call_id: string;
+  /**
+   * Set for a review of a *scheduled* call, null for an instant one.
+   *
+   * Exactly one of [call_id] / [instant_call_id] is non-null — enforced in the
+   * database by `reviews_exactly_one_call`, so a row with neither or both
+   * cannot exist to be read here.
+   */
+  call_id: string | null;
+  instant_call_id: string | null;
   reviewer_user_id: string;
   subject_user_id: string;
   rating: number;

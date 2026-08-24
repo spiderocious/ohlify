@@ -1,0 +1,562 @@
+/**
+ * Hawk — the stylesheet.
+ *
+ * Every token the system owns, declared once. Transcribed from the design
+ * system's `preview/_foundation.css` and cross-checked against the Flutter port
+ * at `mobile/lib/ui/hawk/theme/`.
+ *
+ * Two things about this file are load-bearing:
+ *
+ * 1. Every name is `--hawk-*`, distinct from `@ohlify/ui`'s `--ohl-*`. Both
+ *    stylesheets can therefore be loaded into one document with zero collision,
+ *    which is what lets the Hawk gallery live inside the running admin app
+ *    without disturbing it.
+ *
+ * 2. The register (CONTRACTS §0) *is* variable scoping. `.hawk-pass` and
+ *    `.hawk-board` redefine radius, control height, padding and gap; every
+ *    descendant resolves against whichever zone it sits in. This is why Hawk
+ *    uses CSS variables rather than the inline-style idiom of the older
+ *    package — inline styles cannot express an inherited scope.
+ *
+ * Fonts are the app's responsibility (admin-web already loads Mona Sans via
+ * `@fontsource-variable/mona-sans`).
+ */
+
+:root {
+  /* ── PRIMITIVE · violet ramp. Brand #4A3FE5 retained, kept at 500. ───── */
+  --hawk-v-50: #f2f1fe;
+  --hawk-v-100: #e9e7fd;
+  --hawk-v-200: #d5d1fb;
+  --hawk-v-300: #b3acf7;
+  --hawk-v-400: #8a7ff1;
+  --hawk-v-500: #4a3fe5;
+  --hawk-v-600: #3b31d4;
+  --hawk-v-700: #2f27ae;
+  --hawk-v-800: #282287;
+  --hawk-v-900: #1e1a5e;
+  --hawk-v-950: #12103a;
+
+  /* ── PRIMITIVE · ink. Cool-neutral, tuned to sit under violet. ───────── */
+  --hawk-n-0: #ffffff;
+  --hawk-n-25: #fafafc;
+  --hawk-n-50: #f4f3f8;
+  --hawk-n-100: #ecebf2;
+  --hawk-n-200: #dfdde8;
+  --hawk-n-300: #c6c3d2;
+  --hawk-n-400: #9e9bad;
+  --hawk-n-500: #7a7788;
+  --hawk-n-600: #5d5a6b;
+  --hawk-n-700: #454250;
+  --hawk-n-800: #2b2935;
+  --hawk-n-900: #1a1822;
+  --hawk-n-950: #101018;
+
+  /* ── PRIMITIVE · semantic hues ───────────────────────────────────────── */
+  --hawk-g-50: #e8f5ee;
+  --hawk-g-100: #cdeadc;
+  --hawk-g-500: #0f7a4c;
+  --hawk-g-600: #0b6e44;
+  --hawk-g-700: #085534;
+
+  --hawk-a-50: #fdf3e3;
+  --hawk-a-100: #fae6c4;
+  --hawk-a-500: #a66008;
+  --hawk-a-600: #8f5407;
+  --hawk-a-700: #6e4005;
+
+  --hawk-r-50: #fceaeb;
+  --hawk-r-100: #f8d2d4;
+  --hawk-r-500: #b01a20;
+  --hawk-r-600: #9c1218;
+  --hawk-r-700: #7a0e13;
+
+  --hawk-b-50: #e8f0fd;
+  --hawk-b-100: #cfe0fa;
+  --hawk-b-500: #1a5fbf;
+  --hawk-b-600: #154e9e;
+  --hawk-b-700: #103a76;
+
+  /* ══ SEMANTIC · surfaces ══════════════════════════════════════════════ */
+  --hawk-paper: var(--hawk-n-0);
+  --hawk-stock: var(--hawk-n-50);
+  --hawk-ground: #edebf3;
+  --hawk-sunken: var(--hawk-n-100);
+  --hawk-scrim: rgb(16 16 24 / 0.5);
+
+  /* Product surfaces lifted from the app. */
+  --hawk-app-canvas: #f7f7f7;
+  --hawk-app-canvas-tint: #f7f6ff;
+  --hawk-nav-bg: #f0eff8;
+  --hawk-nav-inactive: #868c98;
+  --hawk-hero-violet: var(--hawk-v-500);
+  --hawk-hero-violet-on: #ffffff;
+  --hawk-hero-grid: #5a50e8;
+  --hawk-hero-grid-alt: #7b73ed;
+  --hawk-call-ground: #08080c;
+
+  /* ══ SEMANTIC · ink ladder ════════════════════════════════════════════
+     Four steps plus an inverse pair. Replaces the twelve improvised text
+     colours the audit found — five of them greys inside a 25% band.      */
+  --hawk-ink-strong: var(--hawk-n-950);
+  --hawk-ink: var(--hawk-n-800);
+  --hawk-ink-muted: var(--hawk-n-500);
+  --hawk-ink-disabled: var(--hawk-n-400);
+  --hawk-ink-inverse: var(--hawk-n-0);
+  --hawk-ink-inverse-muted: rgb(255 255 255 / 0.68);
+
+  /* ══ SEMANTIC · lines ═════════════════════════════════════════════════ */
+  --hawk-line: var(--hawk-n-200);
+  --hawk-line-strong: var(--hawk-n-300);
+  --hawk-line-heavy: var(--hawk-n-800);
+  --hawk-line-perf: var(--hawk-n-300);
+
+  /* ══ SEMANTIC · accent (interactive) ══════════════════════════════════ */
+  --hawk-acc: var(--hawk-v-500);
+  --hawk-acc-hover: var(--hawk-v-600);
+  --hawk-acc-pressed: var(--hawk-v-700);
+  --hawk-acc-soft: var(--hawk-v-100);
+  --hawk-acc-soft-hover: var(--hawk-v-200);
+  --hawk-acc-on-soft: var(--hawk-v-700);
+  --hawk-acc-border: var(--hawk-v-300);
+  --hawk-acc-on: var(--hawk-n-0);
+  --hawk-acc-ring: rgb(74 63 229 / 0.22);
+
+  /* ══ SEMANTIC · the five-value enum × the quartet ═════════════════════
+     CONTRACTS §1. Every tone-bearing component reads these. The `soft`
+     tier is the fix for 13 hand-mixed tints across 26 files.             */
+  --hawk-sem-neutral: var(--hawk-n-600);
+  --hawk-sem-neutral-soft: var(--hawk-n-100);
+  --hawk-sem-neutral-on-soft: var(--hawk-n-700);
+  --hawk-sem-neutral-border: var(--hawk-n-300);
+
+  --hawk-sem-info: var(--hawk-b-500);
+  --hawk-sem-info-soft: var(--hawk-b-50);
+  --hawk-sem-info-on-soft: var(--hawk-b-700);
+  --hawk-sem-info-border: var(--hawk-b-100);
+
+  --hawk-sem-success: var(--hawk-g-500);
+  --hawk-sem-success-soft: var(--hawk-g-50);
+  --hawk-sem-success-on-soft: var(--hawk-g-700);
+  --hawk-sem-success-border: var(--hawk-g-100);
+
+  --hawk-sem-caution: var(--hawk-a-500);
+  --hawk-sem-caution-soft: var(--hawk-a-50);
+  --hawk-sem-caution-on-soft: var(--hawk-a-700);
+  --hawk-sem-caution-border: var(--hawk-a-100);
+
+  --hawk-sem-critical: var(--hawk-r-500);
+  --hawk-sem-critical-soft: var(--hawk-r-50);
+  --hawk-sem-critical-on-soft: var(--hawk-r-700);
+  --hawk-sem-critical-border: var(--hawk-r-100);
+
+  /* Hazard — system alarm-state only. NEVER a button. CONTRACTS §0.2. */
+  --hawk-hazard: #c2410c;
+  --hawk-hazard-soft: #fff1e6;
+  --hawk-hazard-on-soft: #8a2c05;
+  --hawk-hazard-border: #fbd3b4;
+
+  /* Critical action — irreversible, user-initiated. Colder than hazard. */
+  --hawk-danger: var(--hawk-r-600);
+  --hawk-danger-hover: var(--hawk-r-700);
+  --hawk-danger-soft: var(--hawk-r-50);
+  --hawk-danger-on-soft: var(--hawk-r-700);
+  --hawk-danger-border: var(--hawk-r-100);
+  --hawk-danger-ring: rgb(156 18 24 / 0.2);
+
+  /* ══ SEMANTIC · money direction ═══════════════════════════════════════
+     Strictly by sign, banker's-ledger discipline. Debits are ink, not red
+     — red means *failed*, and a successful debit is not a failure.       */
+  --hawk-credit: var(--hawk-g-600);
+  --hawk-debit: var(--hawk-ink-strong);
+  --hawk-reversal: var(--hawk-r-600);
+
+  /* ══ STATE LADDER ═════════════════════════════════════════════════════ */
+  --hawk-state-hover-tint: rgb(16 16 24 / 0.04);
+  --hawk-state-pressed-tint: rgb(16 16 24 / 0.08);
+  --hawk-state-selected: var(--hawk-acc-soft);
+  --hawk-state-disabled-opacity: 0.42;
+  --hawk-focus-ring: 0 0 0 3px var(--hawk-acc-ring);
+  --hawk-focus-ring-danger: 0 0 0 3px var(--hawk-danger-ring);
+
+  /* ══ TYPE ═════════════════════════════════════════════════════════════
+     Mona Sans does chrome AND display — it ships 16 weights including
+     Black(900) and ExtraBold(800), so the display tier needs no second
+     family.
+
+     The record face is Mona Sans with `tabular-nums`, not IBM Plex Mono.
+     The spec names Plex Mono because a proportional face makes a live meter
+     jitter — correct, but the remedy is not a second family: Mona Sans
+     carries the `tnum` OpenType feature. Same call as the Flutter port.  */
+  --hawk-f-chrome: 'Mona Sans Variable', 'Mona Sans', 'MonaSans', Inter, system-ui,
+    -apple-system, sans-serif;
+  --hawk-f-display: var(--hawk-f-chrome);
+  --hawk-f-record: var(--hawk-f-chrome);
+
+  /* Display tier — new. The app topped out at 24px, so a wallet balance
+     had no slot. */
+  --hawk-t-display-xl: 44px;
+  --hawk-t-display-lg: 34px;
+  --hawk-t-display: 28px;
+  /* Below here mirrors the app's own text scale 1:1. */
+  --hawk-t-title: 24px;
+  --hawk-t-header: 22px;
+  --hawk-t-body-title: 20px;
+  --hawk-t-medium: 18px;
+  --hawk-t-subheader: 16px;
+  --hawk-t-body: 14px;
+  --hawk-t-label: 12px;
+  --hawk-t-caption: 10px;
+  --hawk-t-overline: 10px;
+  --hawk-t-tiny: 8px;
+
+  --hawk-w-extralight: 200;
+  --hawk-w-light: 300;
+  --hawk-w-regular: 400;
+  --hawk-w-medium: 500;
+  --hawk-w-semibold: 600;
+  --hawk-w-bold: 700;
+  --hawk-w-extrabold: 800;
+  --hawk-w-black: 900;
+
+  --hawk-lh-tight: 1.15;
+  --hawk-lh-snug: 1.3;
+  --hawk-lh-normal: 1.5;
+  --hawk-lh-relaxed: 1.65;
+
+  --hawk-tr-display: -0.028em;
+  --hawk-tr-tight: -0.012em;
+  --hawk-tr-normal: 0;
+  --hawk-tr-label: 0.01em;
+  --hawk-tr-overline: 0.15em;
+
+  /* ══ GEOMETRY ═════════════════════════════════════════════════════════ */
+  --hawk-s-0: 0px;
+  --hawk-s-1: 2px;
+  --hawk-s-2: 4px;
+  --hawk-s-3: 6px;
+  --hawk-s-4: 8px;
+  --hawk-s-5: 12px;
+  --hawk-s-6: 16px;
+  --hawk-s-7: 20px;
+  --hawk-s-8: 24px;
+  --hawk-s-9: 32px;
+  --hawk-s-10: 40px;
+  --hawk-s-11: 48px;
+  --hawk-s-12: 64px;
+
+  --hawk-r-xs: 4px;
+  --hawk-r-sm: 8px;
+  --hawk-r-md: 12px;
+  --hawk-r-lg: 16px;
+  --hawk-r-xl: 20px;
+  --hawk-r-pill: 999px;
+  --hawk-r-circle: 50%;
+
+  --hawk-bw-hair: 1px;
+  --hawk-bw-thick: 2px;
+
+  /* Control heights — the register split, made numeric. CONTRACTS §7. */
+  --hawk-h-pass-sm: 40px;
+  --hawk-h-pass-md: 48px;
+  --hawk-h-pass-lg: 52px;
+  --hawk-h-board-sm: 28px;
+  --hawk-h-board-md: 34px;
+  --hawk-h-board-lg: 40px;
+
+  /* ══ Z-INDEX — a named scale. ═════════════════════════════════════════ */
+  --hawk-z-base: 0;
+  --hawk-z-raised: 10;
+  --hawk-z-sticky: 100;
+  --hawk-z-header: 200;
+  --hawk-z-drawer: 300;
+  --hawk-z-scrim: 400;
+  --hawk-z-modal: 500;
+  --hawk-z-popover: 600;
+  --hawk-z-toast: 700;
+  --hawk-z-tooltip: 800;
+  --hawk-z-critical: 900;
+
+  /* ══ ELEVATION — hairline-first; shadow only for overlays. ════════════ */
+  --hawk-el-none: none;
+  --hawk-el-popover: 0 4px 16px rgb(16 16 24 / 0.1), 0 1px 3px rgb(16 16 24 / 0.06);
+  --hawk-el-modal: 0 16px 48px rgb(16 16 24 / 0.18), 0 2px 8px rgb(16 16 24 / 0.08);
+  --hawk-el-toast: 0 6px 24px rgb(16 16 24 / 0.14);
+  --hawk-el-press: inset 0 1px 2px rgb(16 16 24 / 0.1);
+
+  /* ══ MOTION — retained verbatim from the app's own tokens. ════════════ */
+  --hawk-d-instant: 100ms;
+  --hawk-d-fast: 180ms;
+  --hawk-d-base: 280ms;
+  --hawk-d-slow: 450ms;
+  --hawk-e-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --hawk-e-decelerate: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --hawk-e-linear: linear;
+  --hawk-stagger-step: 35ms;
+}
+
+/* ══ REGISTER SCOPES ══════════════════════════════════════════════════════
+   The law (CONTRACTS §0), made mechanical. Wrap any block in `.hawk-pass` or
+   `.hawk-board` and its density, radius and control heights resolve correctly.
+   Zones nest: a BOARD inside a PASS resolves to BOARD for its own subtree.
+
+   `.hawk-pass` is also declared on `:root` below so a component rendered
+   outside any explicit zone still resolves — an unscoped component must never
+   render with `var(--hawk-rad)` undefined.                                  */
+.hawk-pass {
+  --hawk-rad: var(--hawk-r-lg);
+  --hawk-rad-sm: var(--hawk-r-sm);
+  --hawk-h-sm: var(--hawk-h-pass-sm);
+  --hawk-h-md: var(--hawk-h-pass-md);
+  --hawk-h-lg: var(--hawk-h-pass-lg);
+  --hawk-pad: var(--hawk-s-6);
+  --hawk-pad-sm: var(--hawk-s-5);
+  --hawk-gap: var(--hawk-s-5);
+  --hawk-row-y: var(--hawk-s-5);
+}
+
+.hawk-board {
+  --hawk-rad: var(--hawk-r-sm);
+  --hawk-rad-sm: var(--hawk-r-xs);
+  --hawk-h-sm: var(--hawk-h-board-sm);
+  --hawk-h-md: var(--hawk-h-board-md);
+  --hawk-h-lg: var(--hawk-h-board-lg);
+  /*
+   * Padding and row rhythm were originally one step tighter (12/8/8/6). The
+   * register is meant to be DENSE, not cramped: a board's job is to fit more
+   * rows on screen, and it stops doing that job the moment the rows are too
+   * tight to scan — the eye loses its place between them and every lookup
+   * costs a re-read.
+   *
+   * Heights stay on the board scale, so a control is still 34px rather than
+   * 48px. Only the breathing room around content moved.
+   */
+  --hawk-pad: var(--hawk-s-6);
+  --hawk-pad-sm: var(--hawk-s-5);
+  --hawk-gap: var(--hawk-s-5);
+  --hawk-row-y: var(--hawk-s-5);
+}
+
+/* Default register, so an unscoped component still resolves. */
+:root {
+  --hawk-rad: var(--hawk-r-lg);
+  --hawk-rad-sm: var(--hawk-r-sm);
+  --hawk-h-sm: var(--hawk-h-pass-sm);
+  --hawk-h-md: var(--hawk-h-pass-md);
+  --hawk-h-lg: var(--hawk-h-pass-lg);
+  --hawk-pad: var(--hawk-s-6);
+  --hawk-pad-sm: var(--hawk-s-5);
+  --hawk-gap: var(--hawk-s-5);
+  --hawk-row-y: var(--hawk-s-5);
+}
+
+/* ══ THE RECORD FACE ══════════════════════════════════════════════════════
+   Tabular figures, so a live meter's digits occupy identical width and the
+   layout cannot jitter as values change. CONTRACTS §0.1.                   */
+.hawk-record {
+  font-family: var(--hawk-f-record);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ══ KEYFRAMES ════════════════════════════════════════════════════════════ */
+@keyframes hawk-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Content trails the scrim by 40ms and lands at 280ms. CONTRACTS §4. */
+@keyframes hawk-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hawk-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hawk-sheet-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes hawk-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The skeleton sweep — 1.4s loop. CONTRACTS §6. */
+@keyframes hawk-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes hawk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The live-call pulse. */
+@keyframes hawk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes hawk-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+/* A figure flips; it never tweens. CONTRACTS §0.1 — the digit swaps in
+   place over one instant-tier beat, with no intermediate values shown. */
+@keyframes hawk-flip {
+  0% {
+    transform: translateY(-55%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.hawk-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--hawk-sunken) 0%,
+    var(--hawk-n-50) 45%,
+    var(--hawk-sunken) 90%
+  );
+  background-size: 200% 100%;
+  animation: hawk-shimmer 1.4s linear infinite;
+}
+
+/* ══ REDUCED MOTION ═══════════════════════════════════════════════════════
+   Two routes to the same place: the OS preference, and the gallery's own
+   ambient toggle (which sets `data-hawk-reduced-motion` on a container so
+   the setting can be demonstrated without changing OS settings).
+
+   The skeleton keeps a static tint rather than losing its background —
+   CONTRACTS §6 asks for a static tint, not an absent one.                  */
+@media (prefers-reduced-motion: reduce) {
+  .hawk-skeleton {
+    animation: none;
+    background-image: none;
+    background-color: var(--hawk-sunken);
+  }
+}
+
+[data-hawk-reduced-motion='true'] .hawk-skeleton {
+  animation: none;
+  background-image: none;
+  background-color: var(--hawk-sunken);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hawk-motion {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+[data-hawk-reduced-motion='true'] .hawk-motion {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+}
+
+/* ══ THE PERFORATION ══════════════════════════════════════════════════════
+   The one decorative device the system allows. A dashed rule with a notch
+   punched out of each end, so a Pass reads as card stock that tears.       */
+.hawk-perforation {
+  position: relative;
+  height: 1px;
+  background-image: linear-gradient(
+    to right,
+    var(--hawk-line-perf) 0 6px,
+    transparent 6px 12px
+  );
+  background-size: 12px 1px;
+  background-repeat: repeat-x;
+}
+
+.hawk-perforation::before,
+.hawk-perforation::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--hawk-r-circle);
+  background: var(--hawk-ground);
+  transform: translateY(-50%);
+}
+
+.hawk-perforation::before {
+  left: -8px;
+}
+
+.hawk-perforation::after {
+  right: -8px;
+}
+
+/* ══ THE HATCH ════════════════════════════════════════════════════════════
+   The locked-state fill. One cross-cutting treatment, not 88 variants.     */
+.hawk-hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    rgb(16 16 24 / 0.045) 5px 10px
+  );
+}
+
+/* Focus is never removed, only restyled. */
+.hawk-focusable:focus-visible {
+  outline: none;
+  box-shadow: var(--hawk-focus-ring);
+}

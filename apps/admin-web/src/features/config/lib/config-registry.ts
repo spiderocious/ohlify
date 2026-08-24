@@ -518,6 +518,12 @@ export const KNOWN_KEYS: ReadonlyArray<ConfigKeyDef> = [
     label: 'Banners enabled',
     help: 'Master switch for the banners feature in mobile + web.',
   },
+  {
+    key: 'features.kyc_v2',
+    kind: 'boolean',
+    label: 'KYC v2 screen',
+    help: 'ON routes mobile to the redesigned KYC checklist (vertical stepper, one screen per item). OFF keeps the original modal-driven screen. Same endpoints either way — this only picks which screen renders. Older app builds ignore it and always show the original.',
+  },
 
   // ── platform (legacy alias) ────────────────────────────────────────────
   {

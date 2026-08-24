@@ -7,12 +7,14 @@ import { requireAdmin, requireAdminRole } from '@middlewares/requireAdmin.middle
 
 import * as contentController from './admin.content.controller.js';
 import * as controller from './admin.controller.js';
+import * as dashboardController from './admin.dashboard.controller.js';
 import * as foundationsController from './admin.foundations.controller.js';
 import * as kycController from './admin.kyc.controller.js';
 import * as metricsController from './admin.metrics.controller.js';
 import * as paymentsController from './admin.payments.controller.js';
 import * as reportsController from './admin.reports.controller.js';
 import {
+  AdminDashboardQuerySchema,
   ListAccountsQuerySchema,
   ListJournalsQuerySchema,
   ListWebhooksQuerySchema,
@@ -433,6 +435,24 @@ export const register = (app: Express): void => {
   );
 
   // ── Metrics (overview/cohorts → ANY_ADMIN; revenue → FINANCE) ────────────
+  // ── Dashboards ────────────────────────────────────────────────────────────
+  // One composed read per board. The business dashboard is open to any admin
+  // and omits the money block for roles that may not see it (the service does
+  // that, not the client). The technical board is admin-only: it reports
+  // process internals, dead letters and auth failures.
+  router.get(
+    '/dashboard',
+    requireAdminRole(ANY_ADMIN),
+    validate(AdminDashboardQuerySchema, 'query'),
+    dashboardController.overview,
+  );
+  router.get(
+    '/dashboard/technical',
+    requireAdminRole(ADMIN_ONLY),
+    validate(AdminDashboardQuerySchema, 'query'),
+    dashboardController.technical,
+  );
+
   router.get('/metrics/overview', requireAdminRole(ANY_ADMIN), metricsController.overview);
   router.get(
     '/metrics/revenue',

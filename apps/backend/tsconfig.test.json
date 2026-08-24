@@ -1,0 +1,11 @@
+{
+  // Typechecks the test files that tsconfig.json deliberately excludes so they
+  // never reach dist/. Without this they would compile nowhere and drift.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

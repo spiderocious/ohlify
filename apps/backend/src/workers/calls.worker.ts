@@ -17,6 +17,7 @@ import {
 } from '@features/instant-calls/instant-calls.types.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { pool } from '@lib/db/pool.js';
+import { discardCacheInvalidations, flushCacheInvalidations } from '@lib/db/tx.js';
 import { logger } from '@lib/logger.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 
@@ -159,8 +160,15 @@ const tickStarter = async (): Promise<void> => {
       });
     }
     await client.query('COMMIT');
+    // This worker resolves rings into `missed` and settles stale calls, both of
+    // which move figures on a professional's dashboard. It manages its own
+    // transaction rather than going through `withTransaction`, so it must flush
+    // the queued busts itself — otherwise a professional's missed-call count
+    // stays wrong until the TTL expires.
+    await flushCacheInvalidations(client);
     if (rows.length > 0) logger.info({ flipped: rows.length }, 'call-starter cron flipped');
   } catch (err) {
+    discardCacheInvalidations(client);
     await client.query('ROLLBACK').catch(() => {});
     logger.warn({ err }, 'call-starter tick failed');
   } finally {
@@ -186,8 +194,15 @@ const tickNoShowResolver = async (): Promise<void> => {
       });
     }
     await client.query('COMMIT');
+    // This worker resolves rings into `missed` and settles stale calls, both of
+    // which move figures on a professional's dashboard. It manages its own
+    // transaction rather than going through `withTransaction`, so it must flush
+    // the queued busts itself — otherwise a professional's missed-call count
+    // stays wrong until the TTL expires.
+    await flushCacheInvalidations(client);
     if (rows.length > 0) logger.info({ resolved: rows.length }, 'no-show resolver cron');
   } catch (err) {
+    discardCacheInvalidations(client);
     await client.query('ROLLBACK').catch(() => {});
     logger.warn({ err }, 'no-show resolver tick failed');
   } finally {
@@ -206,8 +221,15 @@ const tickStuckCallResolver = async (): Promise<void> => {
       });
     }
     await client.query('COMMIT');
+    // This worker resolves rings into `missed` and settles stale calls, both of
+    // which move figures on a professional's dashboard. It manages its own
+    // transaction rather than going through `withTransaction`, so it must flush
+    // the queued busts itself — otherwise a professional's missed-call count
+    // stays wrong until the TTL expires.
+    await flushCacheInvalidations(client);
     if (rows.length > 0) logger.info({ resolved: rows.length }, 'stuck-call resolver cron');
   } catch (err) {
+    discardCacheInvalidations(client);
     await client.query('ROLLBACK').catch(() => {});
     logger.warn({ err }, 'stuck-call resolver tick failed');
   } finally {
@@ -268,8 +290,15 @@ const tickRingResolver = async (): Promise<void> => {
       });
     }
     await client.query('COMMIT');
+    // This worker resolves rings into `missed` and settles stale calls, both of
+    // which move figures on a professional's dashboard. It manages its own
+    // transaction rather than going through `withTransaction`, so it must flush
+    // the queued busts itself — otherwise a professional's missed-call count
+    // stays wrong until the TTL expires.
+    await flushCacheInvalidations(client);
     if (rows.length > 0) logger.info({ resolved: rows.length }, 'ring-timeout resolver cron');
   } catch (err) {
+    discardCacheInvalidations(client);
     await client.query('ROLLBACK').catch(() => {});
     logger.warn({ err }, 'ring-timeout resolver tick failed');
   } finally {
@@ -309,7 +338,14 @@ const tickStaleActiveResolver = async (): Promise<void> => {
       });
     }
     await client.query('COMMIT');
+    // This worker resolves rings into `missed` and settles stale calls, both of
+    // which move figures on a professional's dashboard. It manages its own
+    // transaction rather than going through `withTransaction`, so it must flush
+    // the queued busts itself — otherwise a professional's missed-call count
+    // stays wrong until the TTL expires.
+    await flushCacheInvalidations(client);
   } catch (err) {
+    discardCacheInvalidations(client);
     await client.query('ROLLBACK').catch(() => {});
     logger.warn({ err }, 'stale-active resolver tick failed');
   } finally {

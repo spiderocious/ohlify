@@ -1,0 +1,41 @@
+/*
+ * Mobile behaviour for the admin rail.
+ *
+ * `HawkAdminShell` owns its own `<aside>` and exposes no prop for responsive
+ * collapse — correctly, since A22 specifies a desktop board. Rather than fork
+ * the component to add a breakpoint, the wrapper scopes the transform to that
+ * aside from the outside. Forking a design-system component to add a
+ * breakpoint is how a design system stops being one.
+ *
+ * Lives in its own file rather than `styles/index.css` so the global
+ * stylesheet stays byte-identical — the Hawk gallery is verified against it,
+ * and an isolation gate asserts it is untouched.
+ *
+ * Below lg the aside is a fixed slide-over; from lg up every rule here is
+ * switched off and the shell lays out exactly as the specimen draws it.
+ */
+@media (max-width: 1023.98px) {
+  .admin-shell-frame > * > aside {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 200ms var(--hawk-ease-standard, ease);
+  }
+
+  .admin-shell-frame.is-open > * > aside {
+    transform: translateX(0);
+  }
+
+  /* The drawer floats over the page, so the main column takes the full width. */
+  .admin-shell-frame > * > div {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell-frame > * > aside {
+    transition: none;
+  }
+}

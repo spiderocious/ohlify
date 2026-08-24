@@ -5,7 +5,7 @@ import type { AdminFaq } from '@ohlify/api';
 
 import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
 import { DetailDrawer } from '../../../shared/parts/detail-drawer.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
+import { HawkAdminPageHeader, HawkButton } from '@ohlify/hawk-ui';
 import { StatusPill } from '../../../shared/parts/status-pill.js';
 import { confirm, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { useCreateFaq, useDeleteFaq, useFaqs, useUpdateFaq } from '../api/use-legal-faqs.js';
@@ -41,15 +41,13 @@ export function FaqsScreen() {
 
   return (
     <>
-      <PageHeader
+      <HawkAdminPageHeader
         title="FAQs"
         subtitle="Public FAQ list shown in the help section."
         actions={
-          <AppButton
+          <HawkButton
             label="New FAQ"
-            variant="solid"
-            height={36}
-            onPressed={() =>
+            onClick={() =>
               setDraft({
                 question: '',
                 answer: '',

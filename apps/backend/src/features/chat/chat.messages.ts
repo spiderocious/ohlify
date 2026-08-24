@@ -17,3 +17,16 @@ export const CHAT_MESSAGES = {
   SCHEDULE_INVALID_TIME: 'chat.schedule.invalid_time',
   SCHEDULE_IN_PAST: 'chat.schedule.in_past',
 } as const;
+
+export const CHAT_INVITE_MESSAGES = {
+  CREATED: 'chat_invite.created',
+  APPROVED: 'chat_invite.approved',
+  DECLINED: 'chat_invite.declined',
+  NOT_FOUND: 'chat_invite.not_found',
+  FORBIDDEN: 'chat_invite.forbidden',
+  ROOM_FULL: 'chat_invite.room_full',
+  INVALID_TARGET: 'chat_invite.invalid_target',
+  ALREADY_RESOLVED: 'chat_invite.already_resolved',
+  PARTICIPANTS_LISTED: 'chat_invite.participants_listed',
+  REMOVED: 'chat_invite.participant_removed',
+} as const;

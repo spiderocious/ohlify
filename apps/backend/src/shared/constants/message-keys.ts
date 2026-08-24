@@ -333,6 +333,23 @@ export const MESSAGE_KEYS = {
   CALL_SESSION_EVENT_NOT_FOUND: 'call_session_events.not_found',
   CALL_SESSION_EVENTS_SUMMARY: 'call_session_events.summary',
   CALL_SESSION_EVENT_INVALID_TS: 'call_session_events.invalid_ts',
+  INSTANT_CALL_HISTORY_FETCHED: 'instant_call.history.fetched',
+  // Chat participants / invites (group chat)
+  CHAT_INVITE_CREATED: 'chat_invite.created',
+  CHAT_INVITE_APPROVED: 'chat_invite.approved',
+  CHAT_INVITE_DECLINED: 'chat_invite.declined',
+  CHAT_INVITE_NOT_FOUND: 'chat_invite.not_found',
+  CHAT_INVITE_FORBIDDEN: 'chat_invite.forbidden',
+  CHAT_INVITE_ROOM_FULL: 'chat_invite.room_full',
+  CHAT_INVITE_INVALID_TARGET: 'chat_invite.invalid_target',
+  CHAT_INVITE_ALREADY_RESOLVED: 'chat_invite.already_resolved',
+  CHAT_PARTICIPANTS_LISTED: 'chat_invite.participants_listed',
+  CHAT_PARTICIPANT_REMOVED: 'chat_invite.participant_removed',
+  // Files (presigned upload/read URIs)
+  FILES_UPLOAD_URI_CREATED: 'files.upload_uri.created',
+  FILES_FILE_URI_FETCHED: 'files.file_uri.fetched',
+  FILES_UPLOAD_URI_FAILED: 'files.upload_uri.failed',
+  FILES_FILE_URI_FAILED: 'files.file_uri.failed',
 } as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[keyof typeof MESSAGE_KEYS];

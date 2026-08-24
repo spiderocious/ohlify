@@ -103,14 +103,37 @@ export const DEFAULT_PROFESSIONAL_KYC_ITEMS: KycItemConfig[] = [
     enabled: true,
     validation: [{ rule: 'allowed_extensions', value: ['jpg', 'jpeg', 'png'] }],
   },
+  // One item per call channel rather than one item wrapping a list. The data
+  // model already allows at most one active rate per (pro, call_type) — see
+  // `rates.single_rate_per_channel` — so this just surfaces what is already
+  // true, and lets the client show exactly which channel is still unpriced.
+  //
+  // `validation` is empty on purpose: the old `min_items: 1` described a list
+  // that no longer exists, and the price/duration bounds already come from
+  // `rates.min_kobo` / `max_kobo` / `allowed_durations_minutes` on the public
+  // config the rate form reads. Repeating them here would create a second
+  // source of truth that drifts.
   {
-    key: 'rates',
-    kind: 'rates',
-    label: 'Rates',
-    subtitle: 'Set what you charge per call type and duration.',
+    key: 'audio_rate',
+    kind: 'call_rate',
+    label: 'Audio call rate',
+    subtitle: 'Set what you charge for an audio call.',
     required: true,
     enabled: true,
-    validation: [{ rule: 'min_items', value: 1 }],
+    validation: [],
+  },
+  {
+    key: 'video_rate',
+    kind: 'call_rate',
+    label: 'Video call rate',
+    subtitle: 'Set what you charge for a video call.',
+    // Enabled but NOT required: the tile always renders so the user can price
+    // video, but it does not gate submission. `enabled` controls rendering,
+    // `required` controls the completion gate — keeping them apart is what
+    // stops this split from changing any existing professional's status.
+    required: false,
+    enabled: true,
+    validation: [],
   },
 ];
 

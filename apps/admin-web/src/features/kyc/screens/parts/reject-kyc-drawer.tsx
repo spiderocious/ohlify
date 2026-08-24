@@ -46,7 +46,11 @@ const ITEM_DEFS: ReadonlyArray<ItemDef> = [
   { key: 'occupation', label: 'Occupation', hint: 'Pro only — short title' },
   { key: 'description', label: 'Description', hint: 'Bio / about copy' },
   { key: 'interests', label: 'Interests', hint: 'Tag list' },
-  { key: 'rates', label: 'Rates', hint: 'Pro only — call pricing' },
+  // The legacy `rates` key is deliberately absent: the server still accepts it
+  // on historical rows, but new flags should scope to the channel that is
+  // actually wrong rather than bouncing both.
+  { key: 'audio_rate', label: 'Audio rate', hint: 'Pro only — audio call pricing' },
+  { key: 'video_rate', label: 'Video rate', hint: 'Pro only — video call pricing' },
 ];
 
 interface RejectKycDrawerProps {

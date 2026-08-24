@@ -15,6 +15,15 @@ export interface ConversationListRow extends ConversationRow {
   peer_user_id: string;
   peer_name: string | null;
   peer_avatar_url: string | null;
+  /** Whether the peer is currently accepting calls. */
+  peer_is_available: boolean | null;
+  /**
+   * The viewer's own unread, read from their participant row.
+   *
+   * Replaces picking between `client_unread` and `professional_unread`: with a
+   * third person in the thread there is no pair to choose from.
+   */
+  viewer_unread: number;
 }
 
 export interface ConversationView {
@@ -22,6 +31,13 @@ export interface ConversationView {
   peer_user_id: string;
   peer_name: string | null;
   peer_avatar_url: string | null;
+  /**
+   * Drives the presence dot on the thread row.
+   *
+   * Additive and nullable: a client that predates it renders no dot, which is
+   * exactly what it did before.
+   */
+  peer_is_available: boolean;
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;

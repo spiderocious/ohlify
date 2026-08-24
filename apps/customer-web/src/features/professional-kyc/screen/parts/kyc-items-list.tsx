@@ -5,13 +5,17 @@ import {
   IconFileText,
   IconHeart,
   IconIdCard,
+  IconPhone,
   IconTag,
   IconUser,
+  IconVideo,
   type LucideIcon,
 } from '@icons';
 import { DrawerService, InterestsForm, KycItemTile, OccupationForm } from '@ohlify/ui';
+import type { CallType } from '@ohlify/core';
 import type {
   KycBankValue,
+  KycCallRateValue,
   KycIdentityValue,
   KycItemKey,
   KycItemSpec,
@@ -24,6 +28,7 @@ import { useSaveProfessionalKyc } from '../../api/use-save-professional-kyc.js';
 import { BankModalContent } from './bank-modal-content.js';
 import { HandleModalContent } from './handle-modal-content.js';
 import { IdentityModalContent } from './identity-modal-content.js';
+import { CallRateModalContent, callRateSummary } from './call-rate-modal-content.js';
 import { RatesModalContent } from './rates-modal-content.js';
 import { SelfieModalContent } from './selfie-modal-content.js';
 
@@ -40,6 +45,10 @@ const ICONS: Record<KycItemKey, LucideIcon> = {
   // is exhaustive over KycItemKey, so it needs an entry.
   client_selfie: IconCamera,
   rates: IconTag,
+  // Distinct icons per channel: half the "which one still needs pricing"
+  // signal is carried by the tile art, before the user reads a word.
+  audio_rate: IconPhone,
+  video_rate: IconVideo,
 };
 
 const successToast = (m: string) => DrawerService.toast(m, { type: 'success' });
@@ -90,6 +99,8 @@ function summaryFor(item: KycItemSpec): string {
       const v = item.value as KycRateValue[];
       return `${v.length} rate(s) added`;
     }
+    case 'call_rate':
+      return callRateSummary(item.value as KycCallRateValue);
     case 'image_upload':
       return 'File uploaded';
   }
@@ -140,6 +151,8 @@ export function KycItemsList({ items, resubmitKeys = null }: KycItemsListProps) 
         return openSelfieModal(item, saveKyc);
       case 'rates':
         return openRatesModal(item);
+      case 'call_rate':
+        return openCallRateModal(item);
       case 'image_upload':
         // Reserved for future kinds; nothing to do today.
         return;
@@ -321,6 +334,23 @@ function openRatesModal(item: KycItemSpec) {
   DrawerService.showCustomModal(item.label, (dismiss) => <RatesModalContent onDone={dismiss} />, {
     position: 'center',
   });
+}
+
+/**
+ * Per-channel rate modal. The channel comes from the item key, so the form
+ * asks only for duration + price — no call-type step.
+ */
+function openCallRateModal(item: KycItemSpec) {
+  const callType: CallType = item.key === 'video_rate' ? 'video' : 'audio';
+  // `value` is a single object or null for these items (never the legacy array).
+  const existing = (item.value ?? null) as KycCallRateValue | null;
+  DrawerService.showCustomModal(
+    item.label,
+    (dismiss) => (
+      <CallRateModalContent callType={callType} existing={existing} onDone={dismiss} />
+    ),
+    { position: 'center' },
+  );
 }
 
 // Suppress unused-warning during build — referenced for completeness.

@@ -6,6 +6,11 @@ import { encodeCursor, resolveLimit } from '@lib/pagination.js';
 import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { ServiceError, ServiceSuccess } from '@lib/service-result.js';
 
+import { pool } from '@lib/db/pool.js';
+
+import * as participantsRepo from './conversation-participants.repo.js';
+import { ConversationParticipantStatus } from './conversation-participants.types.js';
+
 import { CHAT_MESSAGES } from './chat.messages.js';
 import * as repo from './chat.repo.js';
 import {
@@ -20,15 +25,17 @@ import {
 } from './chat.types.js';
 
 const toConversationView = (row: ConversationListRow, viewerUserId: string) => {
-  const viewerIsClient = row.client_user_id === viewerUserId;
+  // `viewer_unread` comes from the viewer's participant row; the old
+  // client/professional pair cannot express a third participant's badge.
   return {
     id: row.id,
     peer_user_id: row.peer_user_id,
     peer_name: row.peer_name,
     peer_avatar_url: row.peer_avatar_url,
+    peer_is_available: row.peer_is_available ?? false,
     last_message_at: row.last_message_at ? row.last_message_at.toISOString() : null,
     last_message_preview: row.last_message_preview,
-    unread_count: viewerIsClient ? row.client_unread : row.professional_unread,
+    unread_count: row.viewer_unread,
     created_at: row.created_at.toISOString(),
   };
 };
@@ -85,28 +92,44 @@ const queueMessagePush = async (
   messageId: string,
   preview: string,
 ): Promise<void> => {
-  const targetUserId =
-    conv.client_user_id === senderUserId ? conv.professional_id : conv.client_user_id;
+  // One event per recipient. The outbox fans out by `target_user_id`, so a
+  // three-person thread needs three rows — previously this computed "the other
+  // side", which silently drops everyone past the second participant.
+  const recipients = await participantsRepo.listRecipients(client, conv.id, senderUserId);
+  if (recipients.length === 0) return;
   const sender = await authRepo.findUserById(senderUserId);
-  await insertEvent(client, {
-    aggregateType: OutboxAggregateType.CHAT,
-    aggregateId: conv.id,
-    eventType: OutboxEventType.PUSH_CHAT_MESSAGE,
-    payload: {
-      conversation_id: conv.id,
-      message_id: messageId,
-      target_user_id: targetUserId,
-      sender_user_id: senderUserId,
-      sender_full_name: sender?.full_name ?? null,
-      sender_avatar_url: sender?.avatar_url ?? null,
-      preview: preview.length > 140 ? `${preview.slice(0, 139)}…` : preview,
-    },
-  });
+  for (const targetUserId of recipients) {
+    await insertEvent(client, {
+      aggregateType: OutboxAggregateType.CHAT,
+      aggregateId: conv.id,
+      eventType: OutboxEventType.PUSH_CHAT_MESSAGE,
+      payload: {
+        conversation_id: conv.id,
+        message_id: messageId,
+        target_user_id: targetUserId,
+        sender_user_id: senderUserId,
+        sender_full_name: sender?.full_name ?? null,
+        sender_avatar_url: sender?.avatar_url ?? null,
+        preview: preview.length > 140 ? `${preview.slice(0, 139)}…` : preview,
+      },
+    });
+  }
 };
 
-// Ensures the viewer is a participant of the conversation.
-const assertParticipant = (conversation: ConversationRow, userId: string): ServiceError | null => {
-  if (conversation.client_user_id !== userId && conversation.professional_id !== userId) {
+/**
+ * Ensures the viewer is an active participant.
+ *
+ * Reads `conversation_participants` rather than the two columns on the
+ * conversation: a guest belongs to neither, and would be refused their own
+ * thread. 404 rather than 403 on purpose — a non-participant should not learn
+ * that a conversation exists.
+ */
+const assertParticipant = async (
+  conversation: ConversationRow,
+  userId: string,
+): Promise<ServiceError | null> => {
+  const membership = await participantsRepo.findForUser(pool, conversation.id, userId);
+  if (membership === null || membership.status !== ConversationParticipantStatus.ACTIVE) {
     return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
   }
   return null;
@@ -170,7 +193,7 @@ export const openConversation = async (clientUserId: string, professionalId: str
 export const getConversationContext = async (conversationId: string, userId: string) => {
   const conv = await repo.findConversationById(conversationId);
   if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-  const notMine = assertParticipant(conv, userId);
+  const notMine = await assertParticipant(conv, userId);
   if (notMine) return notMine;
 
   const viewerIsClient = conv.client_user_id === userId;
@@ -214,7 +237,7 @@ export const listMessages = async (
 ) => {
   const conv = await repo.findConversationById(conversationId);
   if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-  const notMine = assertParticipant(conv, userId);
+  const notMine = await assertParticipant(conv, userId);
   if (notMine) return notMine;
 
   const lim = resolveLimit(limit);
@@ -239,7 +262,7 @@ export const sendMessage = async (conversationId: string, senderUserId: string, 
   return withTransaction(async (client) => {
     const conv = await repo.findConversationByIdForUpdate(client, conversationId);
     if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-    const notMine = assertParticipant(conv, senderUserId);
+    const notMine = await assertParticipant(conv, senderUserId);
     if (notMine) return notMine;
 
     // The client side must still hold minutes to keep messaging. The pro can
@@ -294,7 +317,7 @@ const insertProposal = async (
 ) => {
   const conv = await repo.findConversationByIdForUpdate(client, conversationId);
   if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-  const notMine = assertParticipant(conv, senderUserId);
+  const notMine = await assertParticipant(conv, senderUserId);
   if (notMine) return notMine;
 
   // Same gate as sending: the client must hold minutes; the pro may always act.
@@ -344,7 +367,7 @@ const applyScheduleAction = async (
   }
   const conv = await repo.findConversationByIdForUpdate(client, msg.conversation_id);
   if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-  const notMine = assertParticipant(conv, userId);
+  const notMine = await assertParticipant(conv, userId);
   if (notMine) return notMine;
 
   const status = msg.schedule_status;
@@ -457,7 +480,7 @@ export const markConversationRead = async (conversationId: string, userId: strin
   return withTransaction(async (client) => {
     const conv = await repo.findConversationByIdForUpdate(client, conversationId);
     if (!conv) return new ServiceError('not_found', CHAT_MESSAGES.NOT_FOUND, 404);
-    const notMine = assertParticipant(conv, userId);
+    const notMine = await assertParticipant(conv, userId);
     if (notMine) return notMine;
     await repo.markRead(client, conv, userId);
     return new ServiceSuccess({ ok: true }, CHAT_MESSAGES.MARKED_READ);

@@ -269,3 +269,61 @@ Read from `platform_config` (DB-backed, 5min in-process refresh):
    `pending` withdrawals and fires transfers in groups is a §21 follow-up.
 5. **Reconciliation drift response.** Worker logs ERROR but doesn't page —
    we'll wire PagerDuty in the observability slice.
+
+---
+
+## `GET /api/v1/wallet/transactions/:id` — one transaction's receipt
+
+Auth required. Returns the same shape as a row from `GET /wallet/transactions`,
+plus a `ledger` array.
+
+Ownership is enforced **inside the query** (`accounts.owner_user_id = $1`), so
+asking for an entry that belongs to someone else is indistinguishable from
+asking for one that does not exist — both answer 404 `not_found`. A 403 that
+differs from a 404 is an enumeration oracle.
+
+### The ledger
+
+```json
+{
+  "data": {
+    "id": "we_…",
+    "type": "call_payment",
+    "amount_kobo": -3625000,
+    "direction": "debit",
+    "status": "completed",
+    "occurred_at": "2026-08-16T14:02:00.000Z",
+    "title": "Call payment",
+    "reference": "OHL·7K2M4",
+    "related_call_id": "ic_…",
+    "ledger": [
+      { "label": "Reserved in escrow",      "amount_kobo": 3750000, "occurred_at": "…" },
+      { "label": "Settled to professional", "amount_kobo": 3081250, "occurred_at": "…" },
+      { "label": "Platform fee",            "amount_kobo": 543750,  "occurred_at": "…" },
+      { "label": "Returned to your wallet", "amount_kobo": 125000,  "occurred_at": "…" }
+    ]
+  }
+}
+```
+
+**`ledger` is empty for anything that is not a call payment.** A top-up has no
+escrow story, and a one-step "lifecycle" would be ceremony rather than
+information — the client renders no timeline at all in that case.
+
+It is reconstructed, not stored: every journal a call produces carries the same
+`related_call_id`, so the reserve, the settlement, the platform's cut and any
+returned remainder can be read back in order. Nothing needed backfilling.
+
+The query deliberately reads the **platform's** view of those journals rather
+than only the caller's own lines — a client who paid ₦37,500 needs to see the
+split, and their own wallet only ever shows the debit and the refund. System
+accounts have no `owner_user_id`, so no other user's identity is exposed.
+
+Journal kinds with no human label are **dropped**, not shown raw: a timeline
+row reading `platform_promo_grant` explains nothing and looks broken.
+
+### Amounts
+
+`amount_kobo` is `JsonKobo` — a JSON **number** while the value fits in a safe
+integer, and a **string** once it does not. Clients must parse both; a bare
+`as num` cast returns null on exactly the largest amounts.

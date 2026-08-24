@@ -4,6 +4,24 @@ export interface ProEarningsRow {
   today_kobo: string;
   week_kobo: string;
   withdrawable_kobo: string;
+  /**
+   * The same two windows, shifted back one period — yesterday, and the seven
+   * days before the current seven. The deltas on the dashboard are computed
+   * from these rather than stored, so there is nothing to backfill and no
+   * chance of a comparison going stale against its own baseline.
+   */
+  prev_day_kobo: string;
+  prev_week_kobo: string;
+  /**
+   * When this professional's first credit landed. Null means they have never
+   * earned anything.
+   *
+   * Drives the honest "first day" / "first week" labels: a percentage needs a
+   * baseline period that actually existed, and someone who started trading
+   * yesterday has no previous week to be up or down against. Without this the
+   * only options are a fabricated +0.0% or a silent blank.
+   */
+  first_earning_at: Date | null;
 }
 
 export interface ProAttentionRow {
@@ -46,6 +64,17 @@ export const readEarnings = async (professionalId: string): Promise<ProEarningsR
          WHERE we.created_at >= date_trunc('day', now())), 0)::text  AS today_kobo,
        COALESCE(SUM(we.signed_amount_kobo) FILTER (
          WHERE we.created_at >= now() - INTERVAL '7 days'), 0)::text AS week_kobo,
+       -- Yesterday, bounded on BOTH sides. An open-ended "before today" would
+       -- compare today against all history, which grows without limit and
+       -- makes every day look like a collapse.
+       COALESCE(SUM(we.signed_amount_kobo) FILTER (
+         WHERE we.created_at >= date_trunc('day', now()) - INTERVAL '1 day'
+           AND we.created_at <  date_trunc('day', now())), 0)::text  AS prev_day_kobo,
+       -- The seven days before the current seven, same reasoning.
+       COALESCE(SUM(we.signed_amount_kobo) FILTER (
+         WHERE we.created_at >= now() - INTERVAL '14 days'
+           AND we.created_at <  now() - INTERVAL '7 days'), 0)::text AS prev_week_kobo,
+       MIN(we.created_at)                                            AS first_earning_at,
        COALESCE((SELECT ab.balance_kobo FROM accounts a2
                    JOIN account_balances ab ON ab.account_id = a2.id
                   WHERE a2.owner_user_id = $1 AND a2.kind = 'user' LIMIT 1), 0)::text
@@ -57,7 +86,16 @@ export const readEarnings = async (professionalId: string): Promise<ProEarningsR
         AND we.signed_amount_kobo > 0`,
     [professionalId],
   );
-  return res.rows[0] ?? { today_kobo: '0', week_kobo: '0', withdrawable_kobo: '0' };
+  return (
+    res.rows[0] ?? {
+      today_kobo: '0',
+      week_kobo: '0',
+      withdrawable_kobo: '0',
+      prev_day_kobo: '0',
+      prev_week_kobo: '0',
+      first_earning_at: null,
+    }
+  );
 };
 
 /** The three things a professional may need to act on right now. */

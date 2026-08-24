@@ -1,38 +1,47 @@
 import { useState } from 'react';
 
-import { AppButton, AppDropdownInput, AppText, AppTextInput } from '@ohlify/ui';
+import { StrikeReasonCode, StrikeStatus, type AdminStrikeView } from '@ohlify/api';
 import {
-  StrikeReasonCode,
-  StrikeStatus,
-  StrikeSubjectRole,
-  type AdminStrikeView,
-} from '@ohlify/api';
+  HawkButton,
+  HawkCaption,
+  HawkDropdown,
+  HawkSearchInput,
+  HawkStatusBadge,
+  HawkText,
+  IconShield,
+  type HawkColumn,
+  type HawkKpi,
+} from '@ohlify/hawk-ui';
 
-import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
-import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
-import { FilterBar } from '../../../shared/parts/filter-bar.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
+import { BoardScreen } from '../../../shared/parts/board-screen.js';
+import { statusFor, statusTabs } from '../../../shared/parts/board-status.js';
 import { UserLink } from '../../../shared/parts/user-link.js';
 import { formatRelative } from '../../../shared/format/datetime.js';
 import { humanizeStatus } from '../../../shared/lib/labels.js';
 import { useStrikes } from '../api/use-strikes.js';
 import { IssueStrikeDialog } from '../parts/issue-strike-dialog.js';
 import { StrikeDetailDrawer } from '../parts/strike-detail-drawer.js';
-import { StrikeStatusPill } from '../parts/strike-status-pill.js';
 
-const STATUS_OPTIONS = [
-  { label: 'Any', value: '' },
-  ...Object.values(StrikeStatus).map((v) => ({ label: humanizeStatus(v), value: v })),
-];
 const ROLE_OPTIONS = [
-  { label: 'Any role', value: '' },
-  ...Object.values(StrikeSubjectRole).map((v) => ({ label: humanizeStatus(v), value: v })),
-];
-const REASON_OPTIONS = [
-  { label: 'Any reason', value: '' },
-  ...Object.values(StrikeReasonCode).map((v) => ({ label: humanizeStatus(v), value: v })),
+  { value: '', label: 'Any role' },
+  { value: 'client', label: 'Client' },
+  { value: 'professional', label: 'Professional' },
 ];
 
+const REASON_OPTIONS = [
+  { value: '', label: 'Any reason' },
+  ...Object.values(StrikeReasonCode).map((v) => ({ value: v, label: humanizeStatus(v) })),
+];
+
+/**
+ * The strike board (A18).
+ *
+ * Strikes accumulate against standing, so the queue is read for two things:
+ * **disputed** ones, which need a human decision, and repeat subjects, which
+ * are the pattern worth acting on. Disputes therefore lead the tabs and get
+ * their own metric — an unanswered dispute is somebody locked out of earning
+ * while they wait.
+ */
 export function StrikesListScreen() {
   const [status, setStatus] = useState('');
   const [subjectRole, setSubjectRole] = useState('');
@@ -48,119 +57,136 @@ export function StrikesListScreen() {
     subject_user_id: subjectUserId,
   });
 
-  const columns: ColumnDef<AdminStrikeView>[] = [
+  const active = list.items.filter((row) => row.status === StrikeStatus.ACTIVE).length;
+  const disputed = list.items.filter((row) => row.status === StrikeStatus.DISPUTED).length;
+
+  const kpis: HawkKpi[] = [
+    {
+      key: 'disputed',
+      label: 'Awaiting a ruling',
+      value: disputed.toLocaleString(),
+      icon: IconShield,
+      semantic: disputed > 0 ? 'caution' : 'neutral',
+    },
+    {
+      key: 'active',
+      label: 'Active on this page',
+      value: active.toLocaleString(),
+      icon: IconShield,
+      semantic: active > 0 ? 'critical' : 'neutral',
+    },
+    {
+      key: 'shown',
+      label: 'Rows shown',
+      value: list.items.length.toLocaleString(),
+    },
+  ];
+
+  const columns: ReadonlyArray<HawkColumn<AdminStrikeView>> = [
     {
       key: 'subject',
       header: 'Subject',
       width: '24%',
-      render: (s) => (
+      render: (row) => (
         <div className="flex flex-col">
-          <AppText variant="body" className="font-semibold text-text-primary">
-            {s.subject?.name ?? '—'}
-          </AppText>
-          <UserLink userId={s.subject?.id} idLen={18} />
+          <HawkText variant="label" ink="strong" clamp={1} className="font-medium">
+            {row.subject?.name ?? '—'}
+          </HawkText>
+          <UserLink userId={row.subject?.id} idLen={16} />
         </div>
       ),
     },
     {
       key: 'role',
       header: 'Role',
-      width: '12%',
-      render: (s) => (s.subject?.role ? humanizeStatus(s.subject.role) : '—'),
+      width: '11%',
+      render: (row) => (
+        <HawkCaption>{row.subject?.role ? humanizeStatus(row.subject.role) : '—'}</HawkCaption>
+      ),
     },
     {
       key: 'reason',
       header: 'Reason',
-      width: '20%',
-      render: (s) => humanizeStatus(s.reason_code ?? ''),
+      width: '18%',
+      render: (row) => (
+        <HawkText variant="label">{humanizeStatus(row.reason_code ?? '')}</HawkText>
+      ),
     },
     {
       key: 'desc',
-      header: 'Description',
-      width: '22%',
-      render: (s) => <span className="line-clamp-1">{s.description ?? '—'}</span>,
+      header: 'Detail',
+      render: (row) => (
+        <HawkCaption ink="muted" clamp={1}>
+          {row.description ?? '—'}
+        </HawkCaption>
+      ),
     },
     {
       key: 'status',
       header: 'Status',
-      width: '12%',
-      render: (s) => <StrikeStatusPill status={s.status} />,
+      width: '13%',
+      render: (row) => <HawkStatusBadge status={statusFor('strike', row.status)} size="sm" />,
     },
     {
       key: 'when',
-      header: 'When',
-      width: '10%',
-      render: (s) => <span className="text-text-muted">{formatRelative(s.created_at)}</span>,
+      header: 'Issued',
+      align: 'right',
+      width: '12%',
+      render: (row) => (
+        <span className="hawk-record text-hawk-ink-muted">{formatRelative(row.created_at)}</span>
+      ),
     },
   ];
 
   return (
     <>
-      <PageHeader
+      <BoardScreen
         title="Strikes"
-        subtitle="Moderate disputed strikes, void mistaken ones, or issue manually."
+        subtitle={
+          disputed > 0
+            ? `${disputed} disputed and awaiting a ruling`
+            : 'Moderate disputed strikes, void mistaken ones, or issue manually.'
+        }
         actions={
-          <AppButton
+          <HawkButton
             label="Issue strike"
-            variant="solid"
-            height={36}
-            onPressed={() => setShowIssue(true)}
+            startIcon={IconShield}
+            onClick={() => setShowIssue(true)}
           />
         }
-      />
-
-      <FilterBar>
-        <div className="w-44">
-          <AppDropdownInput
-            label="Status"
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={setStatus}
-          />
-        </div>
-        <div className="w-44">
-          <AppDropdownInput
-            label="Role"
-            options={ROLE_OPTIONS}
-            value={subjectRole}
-            onChange={setSubjectRole}
-          />
-        </div>
-        <div className="w-56">
-          <AppDropdownInput
-            label="Reason"
-            options={REASON_OPTIONS}
-            value={reasonCode}
-            onChange={setReasonCode}
-          />
-        </div>
-        <div className="w-72">
-          <AppTextInput
-            label="Subject user ID"
-            placeholder="user uuid"
-            value={subjectUserId}
-            onChange={setSubjectUserId}
-          />
-        </div>
-      </FilterBar>
-
-      <DataTable
+        kpis={kpis}
+        tabs={statusTabs('strike')}
+        activeTab={status}
+        onTabChange={setStatus}
+        filters={
+          <>
+            <HawkDropdown
+              options={ROLE_OPTIONS}
+              value={subjectRole}
+              onChange={setSubjectRole}
+              placeholder="Any role"
+            />
+            <HawkDropdown
+              options={REASON_OPTIONS}
+              value={reasonCode}
+              onChange={setReasonCode}
+              placeholder="Any reason"
+            />
+            <div className="w-56">
+              <HawkSearchInput
+                value={subjectUserId}
+                onChange={setSubjectUserId}
+                placeholder="Filter by subject user ID"
+              />
+            </div>
+          </>
+        }
         columns={columns}
-        rows={list.items}
-        rowKey={(s) => s.id}
-        isLoading={list.isLoading}
-        error={list.error}
+        list={list}
+        rowKey={(row) => row.id}
+        onRowClick={(row) => setOpenId(row.id)}
         emptyTitle="No strikes"
-        onRowClick={(s) => setOpenId(s.id)}
-        footer={
-          <CursorPagination
-            hasPrev={list.hasPrev}
-            hasNext={list.hasNext}
-            onPrev={list.goPrev}
-            onNext={list.goNext}
-            itemCount={list.items.length}
-          />
-        }
+        emptyDescription="Nothing matches these filters."
       />
 
       <StrikeDetailDrawer strikeId={openId} onClose={() => setOpenId(null)} />
@@ -168,9 +194,10 @@ export function StrikesListScreen() {
       <IssueStrikeDialog
         open={showIssue}
         onClose={() => setShowIssue(false)}
-        onIssued={(s) => {
+        onIssued={(strike) => {
+          setShowIssue(false);
+          setOpenId(strike.id);
           list.refetch();
-          setOpenId(s.id);
         }}
       />
     </>

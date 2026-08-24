@@ -6,7 +6,7 @@ import { BannerAudience, type AdminBanner } from '@ohlify/api';
 import { CursorPagination } from '../../../shared/parts/cursor-pagination.js';
 import { DataTable, type ColumnDef } from '../../../shared/parts/data-table.js';
 import { DetailDrawer } from '../../../shared/parts/detail-drawer.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
+import { HawkAdminPageHeader, HawkButton } from '@ohlify/hawk-ui';
 import { StatusPill } from '../../../shared/parts/status-pill.js';
 import { confirm, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
 import { formatDateTime } from '../../../shared/format/datetime.js';
@@ -85,15 +85,13 @@ export function BannersScreen() {
 
   return (
     <>
-      <PageHeader
+      <HawkAdminPageHeader
         title="Banners"
         subtitle="Marketing banners shown in mobile/web apps."
         actions={
-          <AppButton
+          <HawkButton
             label="New banner"
-            variant="solid"
-            height={36}
-            onPressed={() =>
+            onClick={() =>
               setDraft({
                 title: '',
                 placement: 'home_top',

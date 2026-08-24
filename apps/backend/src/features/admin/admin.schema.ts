@@ -35,6 +35,25 @@ export const SummaryWindowQuerySchema = z
   })
   .strict();
 
+/**
+ * The dashboards' only input.
+ *
+ * A named range rather than free `from`/`to`: both boards compare a period
+ * against the one immediately before it, and that comparison is only
+ * meaningful when the two windows are the same length. Accepting arbitrary
+ * dates would let a caller ask for a three-day window compared against
+ * ninety, and the delta badges would quietly lie.
+ *
+ * Defaulted, so the endpoint is callable with no query at all.
+ */
+export const AdminDashboardQuerySchema = z
+  .object({
+    range: z.enum(['today', '7d', '30d', '90d']).default('7d'),
+  })
+  .strict();
+
+export type AdminDashboardQueryDto = z.infer<typeof AdminDashboardQuerySchema>;
+
 export type ListAccountsQueryDto = z.infer<typeof ListAccountsQuerySchema>;
 export type ListJournalsQueryDto = z.infer<typeof ListJournalsQuerySchema>;
 export type ListWebhooksQueryDto = z.infer<typeof ListWebhooksQuerySchema>;

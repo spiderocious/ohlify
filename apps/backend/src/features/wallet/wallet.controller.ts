@@ -25,6 +25,20 @@ export const getStats: RequestHandler = asyncHandler(async (req: Request, res: R
   ResponseUtil.ok(res, r.data);
 });
 
+/**
+ * One transaction's receipt, including the escrow lifecycle for a call.
+ *
+ * Registered AFTER `/transactions` so the literal path is never shadowed by
+ * this parameterised one — Express matches in registration order.
+ */
+export const getTransaction: RequestHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const r = await service.getTransaction(String(req.params['id']), req.userId!);
+    if (!r.success) bail(r);
+    else ResponseUtil.ok(res, r.data);
+  },
+);
+
 export const listTransactions: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const r = await service.listTransactions(req.query, req.userId!);

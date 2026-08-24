@@ -3,15 +3,32 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { ROUTES } from '@ohlify/core';
-import { AppButton, AppLoader, AppText, AppTextInput, DrawerService, cn } from '@ohlify/ui';
+import { AppButton, AppText, AppTextInput, DrawerService, cn } from '@ohlify/ui';
 import type { ChatMessage, ScheduleAction } from '@ohlify/api';
 
 import { useConversationContext } from '../api/use-conversation-context.js';
-import { useMarkRead, useMessages, useSendMessage } from '../api/use-messages.js';
+import {
+  useDiscardMessage,
+  useMarkRead,
+  useMessages,
+  useSendMessage,
+} from '../api/use-messages.js';
+import type { PendingChatMessage } from '../api/use-messages.js';
 import { useProposeSchedule, useReschedule, useScheduleAction } from '../api/use-schedule.js';
 import { CreditsBanner } from './parts/credits-banner.js';
 import { ScheduleCard } from './parts/schedule-card.js';
 import { SchedulePicker } from './parts/schedule-picker.js';
+
+/** Alternating sides, so the loading state reads as a conversation. */
+const SKELETON_BUBBLES: boolean[] = [false, true, false, true];
+
+/**
+ * `pending` and `failed` live only in the cache — the API never sends them —
+ * so they are read through a narrowing cast rather than added to `ChatMessage`,
+ * which is the server's contract and should keep describing only what it sends.
+ */
+const isPending = (m: ChatMessage) => Boolean((m as PendingChatMessage).pending);
+const isFailed = (m: ChatMessage) => Boolean((m as PendingChatMessage).failed);
 
 /** A single conversation thread — messages, schedule cards, a credits banner,
  *  the composer, and a Call button that launches an instant call with the peer. */
@@ -20,8 +37,9 @@ export function ChatThreadScreen() {
   const navigate = useNavigate();
 
   const { data: context } = useConversationContext(id);
-  const { data: messages, isLoading } = useMessages(id);
+  const { data: messages, isLoading, isError, refetch } = useMessages(id);
   const sendMessage = useSendMessage(id);
+  const discardMessage = useDiscardMessage(id);
   const markRead = useMarkRead(id);
   const proposeSchedule = useProposeSchedule(id);
   const scheduleAction = useScheduleAction(id);
@@ -50,8 +68,16 @@ export function ChatThreadScreen() {
   const send = () => {
     const body = draft.trim();
     if (!body || !canSend) return;
+    // Cleared only once the optimistic row exists, so a rejected send leaves
+    // the text somewhere the user can still see it.
+    sendMessage.mutate(body, { onSettled: () => undefined });
     setDraft('');
-    sendMessage.mutate(body);
+  };
+
+  /** Re-send a failed message: drop the dead placeholder, send the body again. */
+  const retry = (m: PendingChatMessage) => {
+    discardMessage(m.id);
+    sendMessage.mutate(m.body);
   };
 
   const call = () => {
@@ -131,9 +157,36 @@ export function ChatThreadScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <Show when={isLoading}>
-          <div className="flex justify-center py-10">
-            <AppLoader />
+        {/*
+          Skeleton bubbles rather than a centred spinner: they stand in the
+          shape the messages will occupy, so the thread does not jump when it
+          arrives. Alternating sides, because a column of identical blocks
+          reads as a broken layout rather than as a conversation.
+        */}
+        <Show when={isLoading && ordered.length === 0}>
+          <div className="flex flex-col gap-2 py-2">
+            <Repeat each={SKELETON_BUBBLES}>
+              {(own, i) => (
+                <div key={i} className={cn('flex', own ? 'justify-end' : 'justify-start')}>
+                  <div
+                    className={cn(
+                      'h-9 animate-pulse rounded-2xl bg-surface-light',
+                      own ? 'w-[45%]' : 'w-[60%]',
+                    )}
+                  />
+                </div>
+              )}
+            </Repeat>
+          </div>
+        </Show>
+
+        {/* Cold cache only — with messages on screen the error is a banner. */}
+        <Show when={isError && ordered.length === 0}>
+          <div className="flex flex-col items-center gap-3 py-10">
+            <AppText variant="body" align="center" color="var(--ohl-text-muted)">
+              Could not load this conversation.
+            </AppText>
+            <AppButton label="Try again" radius={100} height={36} onPressed={() => void refetch()} />
           </div>
         </Show>
         <Repeat each={ordered}>
@@ -148,19 +201,43 @@ export function ChatThreadScreen() {
               />
             ) : (
               <div key={m.id} className={cn('mb-2 flex', m.mine ? 'justify-end' : 'justify-start')}>
-                <div
-                  className={cn(
-                    'max-w-[75%] rounded-2xl px-3.5 py-2',
-                    m.mine ? 'bg-primary text-white' : 'bg-surface-light text-jet',
-                  )}
-                >
-                  <AppText
-                    variant="body"
-                    align="start"
-                    color={m.mine ? '#fff' : 'var(--ohl-text-jet)'}
+                <div className="flex max-w-[75%] flex-col items-end gap-1">
+                  <div
+                    className={cn(
+                      'rounded-2xl px-3.5 py-2 transition-opacity',
+                      m.mine ? 'bg-primary text-white' : 'bg-surface-light text-jet',
+                      // Sent but unconfirmed: on screen, visibly not yet landed.
+                      isPending(m) && 'opacity-55',
+                      isFailed(m) && 'bg-error/10',
+                    )}
                   >
-                    {m.body}
-                  </AppText>
+                    <AppText
+                      variant="body"
+                      align="start"
+                      color={
+                        isFailed(m)
+                          ? 'var(--ohl-text-jet)'
+                          : m.mine
+                            ? '#fff'
+                            : 'var(--ohl-text-jet)'
+                      }
+                    >
+                      {m.body}
+                    </AppText>
+                  </div>
+
+                  <Show when={isFailed(m)}>
+                    <button
+                      type="button"
+                      onClick={() => retry(m)}
+                      className="px-1 text-left"
+                      aria-label="Retry sending this message"
+                    >
+                      <AppText variant="bodySmall" align="end" color="var(--ohl-error)">
+                        Failed — tap to retry
+                      </AppText>
+                    </button>
+                  </Show>
                 </div>
               </div>
             )

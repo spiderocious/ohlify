@@ -1,19 +1,32 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
-import { AppButton, AppText } from '@ohlify/ui';
-import { AdminUserStatus } from '@ohlify/api';
+import { AdminRole, type AdminUserDetail } from '@ohlify/api';
+import {
+  HawkAdminPageHeader,
+  HawkAvatar,
+  HawkBadge,
+  HawkBreadcrumb,
+  HawkButton,
+  HawkCaption,
+  HawkDot,
+  HawkErrorState,
+  HawkIconButton,
+  HawkSemantic,
+  HawkSkeleton,
+  HawkSkeletonLine,
+  HawkStatusBadge,
+  HawkTabs,
+  HawkText,
+  IconCopy,
+  IconLogOut,
+  IconShield,
+  IconUser,
+} from '@ohlify/hawk-ui';
 
-import { Avatar } from '../../../shared/parts/avatar.js';
-import { BackLink } from '../../../shared/parts/back-link.js';
-import { DetailRow } from '../../../shared/parts/detail-row.js';
-import { FilePreview } from '../../../shared/parts/file-preview.js';
-import { InfoCard } from '../../../shared/parts/info-card.js';
-import { PageHeader } from '../../../shared/parts/page-header.js';
-import { QueryView } from '../../../shared/parts/empty-or-error.js';
+import { useCurrentAdmin } from '../../../shared/auth/use-current-admin.js';
 import { confirm, promptForReason, toastError, toastSuccess } from '../../../shared/lib/confirm.js';
-import { formatDateTime, formatDuration } from '../../../shared/format/datetime.js';
-import { formatKobo } from '../../../shared/format/kobo.js';
-import { humanizeStatus, shortId } from '../../../shared/lib/labels.js';
+import { KpiStripSkeleton, RowsSkeleton } from '../../../shared/parts/board-skeletons.js';
 import { ADMIN_ROUTES } from '../../../shared/routes/admin-routes.js';
 import {
   useAdminUser,
@@ -24,23 +37,214 @@ import {
   useUnblockUser,
   useUnsuspendUser,
 } from '../api/use-users.js';
-import { KycStatusPill, UserStatusPill } from '../parts/user-status-pill.js';
+import { UserActivityTab } from '../parts/user-activity-tab.js';
+import { displayName } from '../parts/user-adapters.js';
+import { UserMoneyTab } from '../parts/user-money-tab.js';
+import { UserOverviewTab } from '../parts/user-overview-tab.js';
+import { UserSecurityTab } from '../parts/user-security-tab.js';
+import { UserTrustTab } from '../parts/user-trust-tab.js';
+import { relativeTime, statusFor } from '../parts/user-status.js';
+
+/**
+ * One user, in full.
+ *
+ * Five tabs, each holding the answer to one class of support question:
+ *
+ *   **Overview** — is this account in trouble, what is it worth, who is it
+ *   **Money** — the ledger view (finance and admin only)
+ *   **Activity** — calls, reviews, chat volume, tickets
+ *   **Trust** — KYC, strikes, reports, operator actions
+ *   **Security** — sessions, devices, the auth trail
+ *
+ * Tabs rather than accordions because an operator returns to the same tab
+ * repeatedly for the same kind of ticket, and a tab remembers where they were
+ * in a way a scroll position does not.
+ */
+
+type UserTab = 'overview' | 'money' | 'activity' | 'trust' | 'security';
 
 export function UserDetailScreen() {
   const { id = '' } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const detail = useAdminUser(id);
-  const suspend = useSuspendUser(id);
-  const unsuspend = useUnsuspendUser(id);
-  const block = useBlockUser(id);
-  const unblock = useUnblockUser(id);
-  const resetPw = useResetUserPassword(id);
-  const impersonate = useImpersonateUser(id);
+  const [tab, setTab] = useState<UserTab>('overview');
+  const admin = useCurrentAdmin();
+  const query = useAdminUser(id);
+  const user = query.data;
 
-  const user = detail.data;
-  const isSuspended = user?.status === AdminUserStatus.SUSPENDED;
-  const isBlocked = user?.status === AdminUserStatus.BLOCKED;
-  const isProfessional = user?.role === 'professional';
+  // The money tab reads the ledger, which is finance-gated on the backend —
+  // the service returns `money: null` for other roles, so offering the tab
+  // would open an empty one.
+  const canViewMoney =
+    admin?.role === AdminRole.ADMIN || admin?.role === AdminRole.FINANCE_OPS;
+
+  const tabs = [
+    { value: 'overview' as const, label: 'Overview' },
+    ...(canViewMoney ? [{ value: 'money' as const, label: 'Money' }] : []),
+    { value: 'activity' as const, label: 'Activity' },
+    {
+      value: 'trust' as const,
+      label: 'Trust',
+      ...(user && user.vitals.active_strikes > 0
+        ? { count: user.vitals.active_strikes }
+        : {}),
+    },
+    { value: 'security' as const, label: 'Security' },
+  ];
+
+  if (query.error) {
+    return (
+      <div className="px-hawk-pad py-hawk-9">
+        <HawkErrorState
+          title="Could not load this user"
+          description={query.error.errorMessage ?? 'The request failed.'}
+          onRetry={() => void query.refetch()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <HawkAdminPageHeader
+        breadcrumb={
+          <HawkBreadcrumb
+            items={[
+              { label: 'Users', href: ADMIN_ROUTES.USERS.absPath },
+              { label: user ? displayName(user) : 'User' },
+            ]}
+            as={Link}
+          />
+        }
+        title={user ? <IdentityHero user={user} /> : <HeroSkeleton />}
+        actions={user ? <UserActions user={user} onShowSessions={() => setTab('security')} /> : null}
+      />
+
+      <div className="flex flex-col gap-hawk-6 px-hawk-pad pb-hawk-9">
+        <HawkTabs tabs={tabs} value={tab} onChange={setTab} />
+
+        {!user ? (
+          <div className="flex flex-col gap-hawk-6">
+            <KpiStripSkeleton />
+            <RowsSkeleton rows={8} />
+          </div>
+        ) : (
+          <>
+            {tab === 'overview' && <UserOverviewTab user={user} />}
+            {tab === 'money' && canViewMoney && <UserMoneyTab user={user} />}
+            {tab === 'activity' && <UserActivityTab user={user} />}
+            {tab === 'trust' && <UserTrustTab user={user} />}
+            {tab === 'security' && <UserSecurityTab user={user} />}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function HeroSkeleton() {
+  return (
+    <div className="flex items-center gap-hawk-5">
+      <HawkSkeleton width={56} height={56} circle />
+      <div className="flex flex-col gap-hawk-2">
+        <HawkSkeletonLine widthFactor={0.5} height={20} />
+        <HawkSkeletonLine widthFactor={0.8} height={11} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The identity hero.
+ *
+ * Avatar, name, handle, and the two badges that decide what an operator can do
+ * next — account status and KYC. Everything else waits for a tab; these four
+ * facts are the ones needed before reading anything at all.
+ */
+function IdentityHero({ user }: { user: AdminUserDetail }) {
+  const display = displayName(user);
+  const online =
+    user.last_seen_at !== null && Date.now() - new Date(user.last_seen_at).getTime() < 300_000;
+
+  return (
+    <div className="flex flex-wrap items-center gap-hawk-5">
+      <HawkAvatar
+        name={display}
+        size="lg"
+        {...(user.avatar_url ? { src: user.avatar_url } : {})}
+      />
+      <div className="flex min-w-0 flex-col gap-hawk-2">
+        <span className="flex flex-wrap items-center gap-hawk-3">
+          <HawkText variant="header" ink="strong" as="h1">
+            {display}
+          </HawkText>
+          {user.handle && (
+            <HawkCaption ink="muted" className="hawk-record">
+              @{user.handle}
+            </HawkCaption>
+          )}
+          {online && (
+            <span className="flex items-center gap-hawk-2">
+              <HawkDot semantic={HawkSemantic.SUCCESS} size={7} pulse />
+              <HawkCaption className="text-hawk-success">Online</HawkCaption>
+            </span>
+          )}
+        </span>
+
+        <span className="flex flex-wrap items-center gap-hawk-3">
+          <HawkBadge
+            label={user.role === 'professional' ? 'Professional' : 'Client'}
+            semantic={user.role === 'professional' ? HawkSemantic.INFO : HawkSemantic.NEUTRAL}
+            size="sm"
+          />
+          <HawkStatusBadge status={statusFor('user', user.status)} size="sm" />
+          <HawkStatusBadge status={statusFor('kyc', user.kyc_status)} size="sm" />
+          <HawkCaption ink="disabled" className="hawk-record">
+            {user.email} · seen {relativeTime(user.last_seen_at)}
+          </HawkCaption>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The action rail.
+ *
+ * All six actions are visible: an operator on this screen is here to *do*
+ * something, and hiding two-thirds behind a chevron makes every task a click
+ * longer. What the layout adds is *weight* — reset-password and suspend are
+ * the everyday pair and lead; block sits apart, after a divider, styled
+ * destructive, because it is the one that is hard to undo.
+ *
+ * Every action takes a typed reason and lands in the audit log with the
+ * operator's identity. Impersonation especially — it is the most invasive
+ * thing this console can do.
+ */
+function UserActions({
+  user,
+  onShowSessions,
+}: {
+  user: AdminUserDetail;
+  onShowSessions: () => void;
+}) {
+  const suspend = useSuspendUser(user.id);
+  const unsuspend = useUnsuspendUser(user.id);
+  const block = useBlockUser(user.id);
+  const unblock = useUnblockUser(user.id);
+  const resetPassword = useResetUserPassword(user.id);
+  const impersonate = useImpersonateUser(user.id);
+
+  const isSuspended = user.status === 'suspended';
+  const isBlocked = user.status === 'blocked';
+
+  // One in-flight action at a time. Two overlapping status writes would race,
+  // and the loser's response would overwrite the winner's in the cache.
+  const busy =
+    suspend.isPending ||
+    unsuspend.isPending ||
+    block.isPending ||
+    unblock.isPending ||
+    resetPassword.isPending ||
+    impersonate.isPending;
 
   const handleSuspend = async () => {
     const reason = await promptForReason({
@@ -53,6 +257,7 @@ export function UserDetailScreen() {
       { onSuccess: () => toastSuccess('User suspended'), onError: (err) => toastError(err) },
     );
   };
+
   const handleUnsuspend = async () => {
     if (!(await confirm({ title: 'Unsuspend user?', message: 'They can sign in again.' }))) return;
     unsuspend.mutate(
@@ -60,6 +265,7 @@ export function UserDetailScreen() {
       { onSuccess: () => toastSuccess('User unsuspended'), onError: (err) => toastError(err) },
     );
   };
+
   const handleBlock = async () => {
     const reason = await promptForReason({
       title: 'Block user',
@@ -71,6 +277,7 @@ export function UserDetailScreen() {
       { onSuccess: () => toastSuccess('User blocked'), onError: (err) => toastError(err) },
     );
   };
+
   const handleUnblock = async () => {
     if (!(await confirm({ title: 'Unblock user?', message: 'Reinstates the user to active.' })))
       return;
@@ -79,19 +286,21 @@ export function UserDetailScreen() {
       { onSuccess: () => toastSuccess('User unblocked'), onError: (err) => toastError(err) },
     );
   };
+
   const handleResetPassword = async () => {
-    if (
-      !(await confirm({
-        title: 'Reset password?',
-        message: 'A password-reset email will be sent.',
-      }))
-    )
-      return;
-    resetPw.mutate(
-      { send_email: true, note: 'Password reset requested from admin user detail.' },
+    const note = await promptForReason({
+      title: 'Reset password',
+      message: 'Emails the user a reset link. Provide a reason for the audit log.',
+    });
+    if (!note) return;
+    // `send_email` and `note` are both required by the backend's strict schema
+    // — the old `{ notify }` payload 400'd every reset. (BUGS.md B5.)
+    resetPassword.mutate(
+      { send_email: true, note },
       { onSuccess: () => toastSuccess('Reset email sent'), onError: (err) => toastError(err) },
     );
   };
+
   const handleImpersonate = async () => {
     const reason = await promptForReason({
       title: 'Impersonate user',
@@ -108,275 +317,79 @@ export function UserDetailScreen() {
   };
 
   return (
-    <>
-      <PageHeader
-        topSlot={<BackLink to={ADMIN_ROUTES.USERS.absPath} label="All users" />}
-        title={user?.full_name ?? user?.email ?? `User ${shortId(id, 12)}`}
-        subtitle={user?.email ?? undefined}
-        actions={
-          user ? (
-            <>
-              <AppButton
-                label="Reset password"
-                variant="outline"
-                height={36}
-                onPressed={handleResetPassword}
-              />
-              <AppButton
-                label="Impersonate"
-                variant="outline"
-                height={36}
-                onPressed={handleImpersonate}
-              />
-              {isSuspended ? (
-                <AppButton
-                  label="Unsuspend"
-                  variant="solid"
-                  height={36}
-                  onPressed={handleUnsuspend}
-                />
-              ) : (
-                <AppButton
-                  label="Suspend"
-                  variant="outline"
-                  height={36}
-                  onPressed={handleSuspend}
-                />
-              )}
-              {isBlocked ? (
-                <AppButton label="Unblock" variant="solid" height={36} onPressed={handleUnblock} />
-              ) : (
-                <AppButton label="Block" variant="outline" height={36} onPressed={handleBlock} />
-              )}
-            </>
-          ) : null
-        }
+    <div className="flex flex-wrap items-center gap-hawk-3">
+      <HawkIconButton
+        icon={IconCopy}
+        label="Copy user ID"
+        variant="plain"
+        onClick={() => {
+          void navigator.clipboard?.writeText(user.id);
+          toastSuccess('User ID copied');
+        }}
       />
 
-      <div className="px-4 py-6 sm:px-6">
-        <QueryView isLoading={detail.isLoading} error={detail.error}>
-          {user && (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              {/* Left column */}
-              <div className="flex flex-col gap-4 xl:col-span-2">
-                <InfoCard title="Identity">
-                  <div className="flex items-center gap-4">
-                    <Avatar fileKey={user.avatar_url} name={user.full_name} size={64} />
-                    <div className="min-w-0 flex-1">
-                      <AppText variant="bodyTitle" className="text-text-primary">
-                        {user.full_name ?? '—'}
-                      </AppText>
-                      <AppText variant="bodySmall" className="text-text-muted">
-                        {user.email}
-                      </AppText>
-                      <div className="mt-1.5 flex flex-wrap gap-2">
-                        <UserStatusPill status={user.status} />
-                        <KycStatusPill status={user.kyc_status} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2">
-                    <DetailRow label="ID">{shortId(user.id, 18)}</DetailRow>
-                    <DetailRow label="Handle">{user.handle ?? '—'}</DetailRow>
-                    <DetailRow label="Role">
-                      {user.role ? humanizeStatus(user.role) : '—'}
-                    </DetailRow>
-                    <DetailRow label="Phone">{user.phone_number ?? '—'}</DetailRow>
-                    <DetailRow label="Email verified">
-                      {user.email_verified_at ? formatDateTime(user.email_verified_at) : 'No'}
-                    </DetailRow>
-                    <DetailRow label="Phone verified">
-                      {user.phone_verified_at ? formatDateTime(user.phone_verified_at) : 'No'}
-                    </DetailRow>
-                    <DetailRow label="Created">{formatDateTime(user.created_at)}</DetailRow>
-                    <DetailRow label="Last seen">{formatDateTime(user.last_seen_at)}</DetailRow>
-                    <DetailRow label="Suspended until">
-                      {user.suspended_until ? formatDateTime(user.suspended_until) : '—'}
-                    </DetailRow>
-                  </div>
-                </InfoCard>
+      <HawkButton
+        label="Reset password"
+        variant="outline"
+        loading={resetPassword.isPending}
+        disabled={busy && !resetPassword.isPending}
+        onClick={() => void handleResetPassword()}
+      />
 
-                {isProfessional && (
-                  <InfoCard title="Professional profile">
-                    <DetailRow label="Occupation">{user.occupation ?? '—'}</DetailRow>
-                    <DetailRow label="Description">
-                      <span className="whitespace-pre-wrap text-text-primary">
-                        {user.description ?? '—'}
-                      </span>
-                    </DetailRow>
-                  </InfoCard>
-                )}
+      <HawkButton
+        label="Revoke sessions"
+        variant="outline"
+        startIcon={IconLogOut}
+        onClick={onShowSessions}
+      />
 
-                {user.kyc_submission && (
-                  <InfoCard title="KYC submission">
-                    <DetailRow label="Submission ID">
-                      {shortId(user.kyc_submission.id, 18)}
-                    </DetailRow>
-                    <DetailRow label="Type">
-                      {humanizeStatus(user.kyc_submission.identity_type ?? '')}
-                    </DetailRow>
-                    <DetailRow label="Number">
-                      <code>{user.kyc_submission.identity_number ?? '—'}</code>
-                    </DetailRow>
-                    <DetailRow label="Status">
-                      <KycStatusPill status={user.kyc_submission.status} />
-                    </DetailRow>
-                    <DetailRow label="Reviewed at">
-                      {formatDateTime(user.kyc_submission.reviewed_at)}
-                    </DetailRow>
-                    <DetailRow label="Reject reason">
-                      {user.kyc_submission.reject_reason_code ?? '—'}
-                    </DetailRow>
-                    <DetailRow label="Reject note">
-                      {user.kyc_submission.reject_note ?? '—'}
-                    </DetailRow>
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <AppText
-                          variant="bodySmall"
-                          className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted"
-                        >
-                          Identity document
-                        </AppText>
-                        <FilePreview
-                          fileKey={user.kyc_submission.document_upload_id}
-                          label="Identity document"
-                          height={220}
-                        />
-                      </div>
-                      <div>
-                        <AppText
-                          variant="bodySmall"
-                          className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted"
-                        >
-                          Selfie
-                        </AppText>
-                        <FilePreview
-                          fileKey={user.kyc_submission.selfie_upload_key}
-                          label="Selfie"
-                          height={220}
-                        />
-                      </div>
-                    </div>
-                  </InfoCard>
-                )}
+      <HawkButton
+        label="Impersonate"
+        variant="outline"
+        startIcon={IconUser}
+        loading={impersonate.isPending}
+        disabled={busy && !impersonate.isPending}
+        onClick={() => void handleImpersonate()}
+      />
 
-                {(user.recent_calls_as_caller?.length ?? 0) +
-                  (user.recent_calls_as_callee?.length ?? 0) >
-                  0 && (
-                  <InfoCard title="Recent calls">
-                    <ul className="flex flex-col">
-                      {[
-                        ...(user.recent_calls_as_caller ?? []),
-                        ...(user.recent_calls_as_callee ?? []),
-                      ]
-                        .slice(0, 12)
-                        .map((c) => (
-                          <li
-                            key={c.id}
-                            className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/60 py-2 text-sm last:border-b-0"
-                          >
-                            <code className="font-mono text-xs text-text-muted">
-                              {shortId(c.id, 14)}
-                            </code>
-                            <div className="min-w-0">
-                              <span className="font-medium text-text-primary">
-                                {humanizeStatus(c.status)}
-                              </span>
-                              <span className="ml-2 text-text-muted">
-                                {formatDuration(c.connected_seconds)}
-                              </span>
-                            </div>
-                            <span className="text-text-muted">{formatDateTime(c.start_at)}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </InfoCard>
-                )}
+      {isSuspended ? (
+        <HawkButton
+          label="Unsuspend"
+          loading={unsuspend.isPending}
+          disabled={busy && !unsuspend.isPending}
+          onClick={() => void handleUnsuspend()}
+        />
+      ) : (
+        <HawkButton
+          label="Suspend"
+          variant="outline"
+          startIcon={IconShield}
+          loading={suspend.isPending}
+          disabled={busy && !suspend.isPending}
+          onClick={() => void handleSuspend()}
+        />
+      )}
 
-                {user.recent_transactions && user.recent_transactions.length > 0 && (
-                  <InfoCard title="Recent ledger entries">
-                    <ul className="flex flex-col">
-                      {user.recent_transactions.map((t) => (
-                        <li
-                          key={t.journal_id}
-                          className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-border/60 py-2 text-sm last:border-b-0"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-text-primary">{humanizeStatus(t.kind)}</div>
-                            {t.memo && (
-                              <div className="truncate text-xs text-text-muted">{t.memo}</div>
-                            )}
-                          </div>
-                          <span
-                            className={
-                              'font-semibold tabular-nums ' +
-                              (Number(t.signed_amount_kobo) >= 0
-                                ? 'text-emerald-700'
-                                : 'text-red-700')
-                            }
-                          >
-                            {formatKobo(t.signed_amount_kobo, { signed: true })}
-                          </span>
-                          <span className="text-xs text-text-muted">
-                            {formatDateTime(t.created_at)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </InfoCard>
-                )}
-              </div>
+      {/* The divider is the whole point: block is not a peer of the others. */}
+      <span aria-hidden="true" className="mx-hawk-2 h-6 w-px bg-hawk-line" />
 
-              {/* Right column */}
-              <div className="flex flex-col gap-4">
-                <InfoCard
-                  title="Wallet"
-                  actions={
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-primary hover:underline"
-                      onClick={() =>
-                        navigate(ADMIN_ROUTES.WALLETS.USER_WALLET.build({ userId: user.id }))
-                      }
-                    >
-                      Open ledger ↗
-                    </button>
-                  }
-                >
-                  <DetailRow label="Available">
-                    <AppText variant="bodyTitle" className="text-text-primary">
-                      {formatKobo(user.wallet?.available_kobo)}
-                    </AppText>
-                  </DetailRow>
-                  <DetailRow label="Pending">{formatKobo(user.wallet?.pending_kobo)}</DetailRow>
-                  <DetailRow label="Currency">{user.wallet?.currency ?? '—'}</DetailRow>
-                </InfoCard>
-
-                {user.bank_account && (
-                  <InfoCard title="Bank account">
-                    <DetailRow label="Bank">{user.bank_account.bank_name}</DetailRow>
-                    <DetailRow label="Last 4">{user.bank_account.account_number_last4}</DetailRow>
-                    <DetailRow label="Account name">{user.bank_account.account_name}</DetailRow>
-                    <DetailRow label="Added">
-                      {formatDateTime(user.bank_account.added_at)}
-                    </DetailRow>
-                  </InfoCard>
-                )}
-
-                <InfoCard title="Flags">
-                  <DetailRow label="Reports against">
-                    {user.flags?.active_reports_against ?? 0}
-                  </DetailRow>
-                  <DetailRow label="Failed payouts (30d)">
-                    {user.flags?.failed_payouts_30d ?? 0}
-                  </DetailRow>
-                </InfoCard>
-              </div>
-            </div>
-          )}
-        </QueryView>
-      </div>
-    </>
+      {isBlocked ? (
+        <HawkButton
+          label="Unblock"
+          loading={unblock.isPending}
+          disabled={busy && !unblock.isPending}
+          onClick={() => void handleUnblock()}
+        />
+      ) : (
+        <HawkButton
+          label="Block"
+          variant="outline"
+          destructive
+          loading={block.isPending}
+          disabled={busy && !block.isPending}
+          onClick={() => void handleBlock()}
+        />
+      )}
+    </div>
   );
 }

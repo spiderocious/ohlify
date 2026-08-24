@@ -17,5 +17,8 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  // Tests live next to the code they cover, but must not be emitted into
+  // dist — that would ship vitest imports into the production bundle. Vitest
+  // has its own config and typechecks them via `tsconfig.test.json`.
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
 }
