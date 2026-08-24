@@ -19,7 +19,8 @@ export function useEditRate() {
         // absent rather than sending undefined — the schema is `.strict()`.
         const res = await apiClient
           .patch(EP.ME_RATE(id), {
-            json: duration_minutes === undefined ? { price_kobo } : { price_kobo, duration_minutes },
+            json:
+              duration_minutes === undefined ? { price_kobo } : { price_kobo, duration_minutes },
           })
           .json<{ data: Rate }>();
         return res.data;

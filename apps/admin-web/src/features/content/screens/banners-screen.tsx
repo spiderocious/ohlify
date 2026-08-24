@@ -66,13 +66,22 @@ export function BannersScreen() {
       width: '12%',
       render: (b) => humanizeStatus(b.audience ?? ''),
     },
-    { key: 'pri', header: 'Priority', width: '10%', align: 'right', render: (b) => b.priority ?? 0 },
+    {
+      key: 'pri',
+      header: 'Priority',
+      width: '10%',
+      align: 'right',
+      render: (b) => b.priority ?? 0,
+    },
     {
       key: 'active',
       header: 'Active',
       width: '10%',
       render: (b) => (
-        <StatusPill label={b.is_active ? 'Active' : 'Off'} tone={b.is_active ? 'success' : 'muted'} />
+        <StatusPill
+          label={b.is_active ? 'Active' : 'Off'}
+          tone={b.is_active ? 'success' : 'muted'}
+        />
       ),
     },
     {
@@ -220,7 +229,9 @@ function BannerEditor({
               onPressed={onToggle}
             />
           )}
-          {isEdit && <AppButton label="Delete" variant="outline" height={36} onPressed={onDelete} />}
+          {isEdit && (
+            <AppButton label="Delete" variant="outline" height={36} onPressed={onDelete} />
+          )}
           <AppButton
             label={isEdit ? 'Save' : 'Create'}
             variant="solid"

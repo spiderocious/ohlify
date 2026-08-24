@@ -20,8 +20,7 @@ export const AdminDashboardRange = {
   MONTH: '30d',
   QUARTER: '90d',
 } as const;
-export type AdminDashboardRange =
-  (typeof AdminDashboardRange)[keyof typeof AdminDashboardRange];
+export type AdminDashboardRange = (typeof AdminDashboardRange)[keyof typeof AdminDashboardRange];
 
 /** A bucketed time series. `bucket` is an ISO timestamp at UTC bucket start. */
 export interface AdminSeriesPoint {

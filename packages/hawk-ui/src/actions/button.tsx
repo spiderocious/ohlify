@@ -34,8 +34,7 @@ export const HawkButtonVariant = {
   PLAIN: 'plain',
   GHOST: 'ghost',
 } as const;
-export type HawkButtonVariant =
-  (typeof HawkButtonVariant)[keyof typeof HawkButtonVariant];
+export type HawkButtonVariant = (typeof HawkButtonVariant)[keyof typeof HawkButtonVariant];
 
 const SIZE_CLASS: Record<HawkButtonSize, string> = {
   // Heights come from the register: `md` is 48px in PASS, 34px in BOARD.
@@ -46,11 +45,7 @@ const SIZE_CLASS: Record<HawkButtonSize, string> = {
 
 const GLYPH_PX: Record<HawkButtonSize, number> = { sm: 14, md: 16, lg: 18 };
 
-function variantClass(
-  variant: HawkButtonVariant,
-  destructive: boolean,
-  onDark: boolean,
-): string {
+function variantClass(variant: HawkButtonVariant, destructive: boolean, onDark: boolean): string {
   if (onDark) {
     // On a dark surface the whole ladder inverts: the call screen and the
     // violet hero card both need a button that reads against them, and tinting

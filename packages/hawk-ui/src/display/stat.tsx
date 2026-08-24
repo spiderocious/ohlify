@@ -45,7 +45,12 @@ export function HawkStatDeltaBadge({ delta }: { delta: HawkStatDelta }) {
   const rising = delta.percent > 0;
 
   return (
-    <span className={cn('inline-flex items-center gap-hawk-2 text-hawk-caption font-semibold', tone.text)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-hawk-2 text-hawk-caption font-semibold',
+        tone.text,
+      )}
+    >
       {delta.percent !== 0 && (
         <HawkIcon icon={rising ? IconTrendingUp : IconTrendingDown} size={12} />
       )}
@@ -114,12 +119,7 @@ export function HawkStat({
       {valueKobo !== undefined ? (
         <HawkFigure value={valueKobo} size="lg" stale={stale} />
       ) : (
-        <HawkText
-          variant="display"
-          ink="strong"
-          record
-          className={cn(stale && 'opacity-70')}
-        >
+        <HawkText variant="display" ink="strong" record className={cn(stale && 'opacity-70')}>
           {value ?? '—'}
         </HawkText>
       )}

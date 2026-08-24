@@ -2,12 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { HawkIcon } from '../foundation/icon.js';
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconClose,
-  IconInfo,
-} from '../icons/index.js';
+import { IconAlertTriangle, IconCheck, IconClose, IconInfo } from '../icons/index.js';
 import type { HawkIconComponent } from '../icons/index.js';
 import { HawkSemantic, quartet } from '../theme/semantic.js';
 import { cn } from '../utils/cn.js';

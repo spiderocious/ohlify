@@ -45,7 +45,21 @@ export function PagePalette() {
     },
     {
       name: 'Ink — cool neutral',
-      steps: ['0', '25', '50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'],
+      steps: [
+        '0',
+        '25',
+        '50',
+        '100',
+        '200',
+        '300',
+        '400',
+        '500',
+        '600',
+        '700',
+        '800',
+        '900',
+        '950',
+      ],
       prefix: 'n',
     },
   ];
@@ -121,19 +135,22 @@ export function PagePalette() {
         rule="Hazard is a system alarm-state, deliberately unreachable from the semantic enum. It escalates within the warm family beyond caution. A user cannot press a hazard; a hazard is something the system reports. Critical red stays reserved for irreversible operator actions."
       >
         <div className="flex flex-wrap gap-hawk-4">
-          {[HAWK_HAZARD.cssBase, HAWK_HAZARD.cssSoft, HAWK_HAZARD.cssOnSoft, HAWK_HAZARD.cssBorder].map(
-            (value, index) => (
-              <div key={index} className="flex w-24 flex-col gap-hawk-2">
-                <div
-                  className="h-12 rounded-hawk-xs border border-hawk-line"
-                  style={{ background: value }}
-                />
-                <HawkText variant="tiny" ink="disabled">
-                  {['base', 'soft', 'onSoft', 'border'][index]}
-                </HawkText>
-              </div>
-            ),
-          )}
+          {[
+            HAWK_HAZARD.cssBase,
+            HAWK_HAZARD.cssSoft,
+            HAWK_HAZARD.cssOnSoft,
+            HAWK_HAZARD.cssBorder,
+          ].map((value, index) => (
+            <div key={index} className="flex w-24 flex-col gap-hawk-2">
+              <div
+                className="h-12 rounded-hawk-xs border border-hawk-line"
+                style={{ background: value }}
+              />
+              <HawkText variant="tiny" ink="disabled">
+                {['base', 'soft', 'onSoft', 'border'][index]}
+              </HawkText>
+            </div>
+          ))}
         </div>
       </PreviewSection>
 
@@ -335,8 +352,8 @@ function FlipDemo() {
           <HawkFigure key={value} value={value} size="lg" />
         ))}
         <HawkCaption>
-          Only the digits that actually changed re-animate. Re-animating an unchanged
-          digit would suggest a value moved when it did not.
+          Only the digits that actually changed re-animate. Re-animating an unchanged digit would
+          suggest a value moved when it did not.
         </HawkCaption>
       </div>
     </PreviewStage>
@@ -570,8 +587,8 @@ export function PageFigure() {
           <div className="flex flex-col gap-hawk-4">
             <HawkFigure value={842_000} size="lg" />
             <HawkCaption>
-              A public rate opts out: masking hides <em>your</em> balance from a
-              shoulder-surfer, not a price list. → <HawkFigure value={250_000} size="sm" neverMasked />
+              A public rate opts out: masking hides <em>your</em> balance from a shoulder-surfer,
+              not a price list. → <HawkFigure value={250_000} size="sm" neverMasked />
             </HawkCaption>
           </div>
         </PreviewStage>

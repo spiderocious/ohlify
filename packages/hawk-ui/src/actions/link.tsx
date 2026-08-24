@@ -171,7 +171,9 @@ export function HawkMenuLink({
         <span
           className={cn(
             'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-hawk-sm',
-            destructive ? 'bg-hawk-danger-soft text-hawk-danger' : 'bg-hawk-sunken text-hawk-ink-muted',
+            destructive
+              ? 'bg-hawk-danger-soft text-hawk-danger'
+              : 'bg-hawk-sunken text-hawk-ink-muted',
           )}
         >
           <HawkIcon icon={icon} size={17} />
@@ -192,7 +194,9 @@ export function HawkMenuLink({
         )}
       </span>
       {trailing}
-      {!noChevron && <HawkIcon icon={IconChevronRight} size={16} className="text-hawk-ink-disabled" />}
+      {!noChevron && (
+        <HawkIcon icon={IconChevronRight} size={16} className="text-hawk-ink-disabled" />
+      )}
     </Tag>
   );
 }

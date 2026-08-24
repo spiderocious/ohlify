@@ -180,9 +180,7 @@ export function HawkKpiCard({
       )}
     >
       <HawkKpiCell kpi={kpi} className="border-0 p-0" />
-      {footer && (
-        <div className="border-t border-hawk-line pt-hawk-4">{footer}</div>
-      )}
+      {footer && <div className="border-t border-hawk-line pt-hawk-4">{footer}</div>}
     </div>
   );
 }

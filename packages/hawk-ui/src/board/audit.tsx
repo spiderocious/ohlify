@@ -42,13 +42,7 @@ export interface HawkAuditEntry {
   origin?: string;
 }
 
-export function HawkAuditRow({
-  entry,
-  className,
-}: {
-  entry: HawkAuditEntry;
-  className?: string;
-}) {
+export function HawkAuditRow({ entry, className }: { entry: HawkAuditEntry; className?: string }) {
   const tone = quartet(entry.highGravity ? HawkSemantic.CAUTION : HawkSemantic.NEUTRAL);
 
   return (
@@ -159,7 +153,10 @@ export function HawkAuditLogSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div role="status" aria-busy="true" aria-label="Loading" className="hawk-board flex flex-col">
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="flex gap-hawk-5 border-b border-hawk-line px-hawk-pad py-hawk-row-y">
+        <div
+          key={index}
+          className="flex gap-hawk-5 border-b border-hawk-line px-hawk-pad py-hawk-row-y"
+        >
           <HawkSkeletonLine widthFactor={1} height={32} className="w-8 shrink-0 rounded-full" />
           <div className="flex flex-1 flex-col gap-hawk-2">
             <HawkSkeletonLine widthFactor={0.55} height={11} />

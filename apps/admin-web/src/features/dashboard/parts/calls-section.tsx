@@ -91,9 +91,9 @@ export function CallsSection({
         </div>
         {loading ? <KpiStripSkeleton /> : <HawkKpiStrip items={toCallQualityKpis(data)} />}
         <HawkCaption ink="muted" className="leading-snug">
-          Permission-blocked is the one worth watching — nothing else in the stack reports a
-          user who could not grant mic access, and a rising count is a broken onboarding rather
-          than a call problem.
+          Permission-blocked is the one worth watching — nothing else in the stack reports a user
+          who could not grant mic access, and a rising count is a broken onboarding rather than a
+          call problem.
         </HawkCaption>
       </div>
 
@@ -134,10 +134,7 @@ function ScheduledFunnel({ steps }: { steps: readonly HawkChartPoint[] }) {
 
   if (top === 0) {
     return (
-      <HawkEmptyState
-        title="No scheduled calls"
-        description="Nothing was booked in this period."
-      />
+      <HawkEmptyState title="No scheduled calls" description="Nothing was booked in this period." />
     );
   }
 

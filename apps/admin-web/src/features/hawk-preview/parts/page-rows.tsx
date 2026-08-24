@@ -20,12 +20,7 @@ import {
   lookupStatus,
 } from '@ohlify/hawk-ui';
 
-import {
-  PreviewPage,
-  PreviewSection,
-  PreviewState,
-  PreviewStates,
-} from './preview-shell.js';
+import { PreviewPage, PreviewSection, PreviewState, PreviewStates } from './preview-shell.js';
 
 const call = (key: string) => lookupStatus('call', key)!;
 const withdrawal = (key: string) => lookupStatus('withdrawal', key)!;
@@ -179,18 +174,44 @@ export function PageRows() {
 
       <PreviewSection title="Rates, reviews & KYC">
         <HawkList>
-          <HawkRateRow label="Standard consultation" amountKobo={250_000} minimumMinutes={15} onEdit={() => {}} />
-          <HawkRateRow label="Extended review" amountKobo={400_000} minimumMinutes={30} active={false} onEdit={() => {}} />
+          <HawkRateRow
+            label="Standard consultation"
+            amountKobo={250_000}
+            minimumMinutes={15}
+            onEdit={() => {}}
+          />
+          <HawkRateRow
+            label="Extended review"
+            amountKobo={400_000}
+            minimumMinutes={30}
+            active={false}
+            onEdit={() => {}}
+          />
           <HawkReviewRow
             author="Chidi Nwosu"
             rating={5}
             comment="Clear, direct and did not waste my time. Exactly what I needed."
             timestamp="2 days ago"
           />
-          <HawkReviewRow author="Anonymous" anonymous rating={3} comment="Helpful, but the call dropped twice." timestamp="1 week ago" />
+          <HawkReviewRow
+            author="Anonymous"
+            anonymous
+            rating={3}
+            comment="Helpful, but the call dropped twice."
+            timestamp="1 week ago"
+          />
           <HawkKycItemRow label="Identity document" status={kyc('verified')} />
-          <HawkKycItemRow label="Bank account" status={kyc('under_review')} description="Submitted 2 days ago" />
-          <HawkKycItemRow label="Proof of address" status={kyc('action_needed')} description="The document was unreadable" onClick={() => {}} />
+          <HawkKycItemRow
+            label="Bank account"
+            status={kyc('under_review')}
+            description="Submitted 2 days ago"
+          />
+          <HawkKycItemRow
+            label="Proof of address"
+            status={kyc('action_needed')}
+            description="The document was unreadable"
+            onClick={() => {}}
+          />
         </HawkList>
       </PreviewSection>
 
@@ -218,7 +239,11 @@ export function PageRows() {
 
       <PreviewStates columns={3}>
         <PreviewState name="default">
-          <HawkProfessionalRow name="Adaeze Okonkwo" headline="Tax law" ratePerMinuteKobo={250_000} />
+          <HawkProfessionalRow
+            name="Adaeze Okonkwo"
+            headline="Tax law"
+            ratePerMinuteKobo={250_000}
+          />
         </PreviewState>
         <PreviewState name="skeleton" note="Mirrors the row's own layout.">
           <div className="flex flex-col">
@@ -228,7 +253,12 @@ export function PageRows() {
           </div>
         </PreviewState>
         <PreviewState name="unread" note="Full ink on the preview, accent on the timestamp.">
-          <HawkChatRow name="Chidi Nwosu" preview="Are you free at 15:00?" timestamp="14:04" unread={3} />
+          <HawkChatRow
+            name="Chidi Nwosu"
+            preview="Are you free at 15:00?"
+            timestamp="14:04"
+            unread={3}
+          />
         </PreviewState>
       </PreviewStates>
     </PreviewPage>

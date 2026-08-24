@@ -160,7 +160,13 @@ export function PageDetailDrawer() {
       subtitle="OHL-4821-XQ"
       actions={
         <div className="flex w-full items-center justify-end gap-hawk-3">
-          <HawkButton label="Reject" variant="outline" destructive size="sm" onClick={() => setOpen(null)} />
+          <HawkButton
+            label="Reject"
+            variant="outline"
+            destructive
+            size="sm"
+            onClick={() => setOpen(null)}
+          />
           <HawkButton
             label="Approve"
             size="sm"
@@ -208,7 +214,12 @@ export function PageDetailDrawer() {
         <PreviewStage>
           <div className="flex gap-hawk-4">
             <HawkButton label="Names match" variant="outline" onClick={() => setOpen('match')} />
-            <HawkButton label="Names do not match" variant="outline" destructive onClick={() => setOpen('mismatch')} />
+            <HawkButton
+              label="Names do not match"
+              variant="outline"
+              destructive
+              onClick={() => setOpen('mismatch')}
+            />
           </div>
         </PreviewStage>
       </PreviewSection>
@@ -421,7 +432,10 @@ export function PageFilters() {
       </PreviewSection>
 
       <PreviewStates columns={3}>
-        <PreviewState name="none" note="Renders nothing — an empty 'Filters:' label is chrome that says nothing.">
+        <PreviewState
+          name="none"
+          note="Renders nothing — an empty 'Filters:' label is chrome that says nothing."
+        >
           <HawkActiveFilters filters={[]} />
         </PreviewState>
         <PreviewState name="active">
@@ -504,10 +518,7 @@ export function PageAudit() {
         rule="Shows the live value beside the editor whenever the field is dirty. An operator changing a platform fee needs to see what it is while typing what it will become — a config screen that hides the current value invites exactly the mistake it is being edited to fix."
       >
         <PreviewStage>
-          <HawkConfigSection
-            title="Fees"
-            description="Applied to every completed call."
-          >
+          <HawkConfigSection title="Fees" description="Applied to every completed call.">
             <HawkConfigField
               label="Platform fee"
               description="A percentage of the call value, taken at settlement."
@@ -571,9 +582,7 @@ export function PageAudit() {
       <PreviewStates columns={2}>
         <PreviewState name="default">
           <HawkAuditLog
-            entries={[
-              { id: '1', actor: 'Segun Adeyemi', action: 'signed in', timestamp: '09:15' },
-            ]}
+            entries={[{ id: '1', actor: 'Segun Adeyemi', action: 'signed in', timestamp: '09:15' }]}
           />
         </PreviewState>
         <PreviewState name="high-gravity">
@@ -639,7 +648,13 @@ export function PageBoardPrimitives() {
                   />
                   <div className="flex gap-hawk-3">
                     <HawkButton label="Approve" size="md" onClick={() => {}} />
-                    <HawkButton label="Reject" variant="outline" destructive size="md" onClick={() => {}} />
+                    <HawkButton
+                      label="Reject"
+                      variant="outline"
+                      destructive
+                      size="md"
+                      onClick={() => {}}
+                    />
                   </div>
                   <HawkAdminPanel title="A panel">
                     <HawkText variant="caption" ink="muted">
@@ -666,7 +681,13 @@ export function PageBoardPrimitives() {
             />
             <HawkBulkActionBar count={4} onClear={() => {}}>
               <HawkButton label="Approve selected" size="sm" onClick={() => {}} />
-              <HawkButton label="Reject selected" variant="outline" destructive size="sm" onClick={() => {}} />
+              <HawkButton
+                label="Reject selected"
+                variant="outline"
+                destructive
+                size="sm"
+                onClick={() => {}}
+              />
             </HawkBulkActionBar>
           </HawkRegisterScope>
         </PreviewStage>

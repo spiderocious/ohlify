@@ -188,7 +188,10 @@ export function PagePass() {
             </HawkPass.Stub>
           </HawkPass.Root>
         </PreviewState>
-        <PreviewState name="skeleton" note="Includes the stub band — omitting it would imply a shorter card and then jump.">
+        <PreviewState
+          name="skeleton"
+          note="Includes the stub band — omitting it would imply a shorter card and then jump."
+        >
           <HawkPass.Skeleton />
         </PreviewState>
       </PreviewStates>
@@ -287,7 +290,11 @@ export function PageStat() {
       >
         <PreviewGrid columns={3}>
           <PreviewStage label="revenue — up is good">
-            <HawkStat label="Revenue" valueKobo={84_200_000} delta={{ percent: 12.4, period: 'vs last week' }} />
+            <HawkStat
+              label="Revenue"
+              valueKobo={84_200_000}
+              delta={{ percent: 12.4, period: 'vs last week' }}
+            />
           </PreviewStage>
           <PreviewStage label="refunds — up is bad">
             <HawkStat
@@ -317,7 +324,12 @@ export function PageStat() {
             </div>
           </PreviewStage>
           <PreviewStage label="with a glyph">
-            <HawkStatIcon label="Wallet balance" valueKobo={842_000} icon={IconWallet} semantic="success" />
+            <HawkStatIcon
+              label="Wallet balance"
+              valueKobo={842_000}
+              icon={IconWallet}
+              semantic="success"
+            />
           </PreviewStage>
         </PreviewGrid>
       </PreviewSection>
@@ -371,7 +383,12 @@ export function PageStat() {
           <HawkStat label="Revenue" valueKobo={84_200_000} />
         </PreviewState>
         <PreviewState name="stale">
-          <HawkStat label="Revenue" valueKobo={84_200_000} dataState={HawkDataState.STALE} ageMs={240_000} />
+          <HawkStat
+            label="Revenue"
+            valueKobo={84_200_000}
+            dataState={HawkDataState.STALE}
+            ageMs={240_000}
+          />
         </PreviewState>
         <PreviewState name="loading">
           <HawkStat label="Revenue" dataState={HawkDataState.LOADING} />
@@ -470,7 +487,14 @@ export function PageChart() {
           <HawkLineChart data={WEEK.slice(0, 4)} height={80} />
         </PreviewState>
         <PreviewState name="donut">
-          <HawkDonutChart data={[{ label: 'A', value: 3 }, { label: 'B', value: 1 }]} size={80} thickness={14} />
+          <HawkDonutChart
+            data={[
+              { label: 'A', value: 3 },
+              { label: 'B', value: 1 },
+            ]}
+            size={80}
+            thickness={14}
+          />
         </PreviewState>
         <PreviewState name="sparkline">
           <HawkSparkline values={[4, 9, 6, 12, 8]} />
@@ -497,7 +521,12 @@ export function PageTable() {
   ];
 
   const columns = [
-    { key: 'name', header: 'Professional', render: (r: (typeof ROWS)[number]) => r.name, width: '30%' },
+    {
+      key: 'name',
+      header: 'Professional',
+      render: (r: (typeof ROWS)[number]) => r.name,
+      width: '30%',
+    },
     { key: 'bank', header: 'Bank', render: (r: (typeof ROWS)[number]) => r.bank },
     {
       key: 'amount',
@@ -615,7 +644,12 @@ export function PageChat() {
               timestamp="14:04"
               status="read"
             />
-            <HawkChatBubble own message="Are you free at 15:00?" timestamp="14:04" status="delivered" />
+            <HawkChatBubble
+              own
+              message="Are you free at 15:00?"
+              timestamp="14:04"
+              status="delivered"
+            />
             <HawkChatBubble
               own
               message="This one did not send."
@@ -632,13 +666,21 @@ export function PageChat() {
         note="Enter sends; Shift+Enter breaks the line. The reverse would make every multi-line message an accident."
       >
         <PreviewStage className="p-0">
-          <HawkChatComposer value={draft} onChange={setDraft} onSend={() => setDraft('')} onAttach={() => {}} />
+          <HawkChatComposer
+            value={draft}
+            onChange={setDraft}
+            onSend={() => setDraft('')}
+            onAttach={() => {}}
+          />
         </PreviewStage>
       </PreviewSection>
 
       <PreviewSection title="Closed thread">
         <PreviewStage className="p-0">
-          <HawkChatComposer disabled disabledReason="This conversation ended when the call finished." />
+          <HawkChatComposer
+            disabled
+            disabledReason="This conversation ended when the call finished."
+          />
         </PreviewStage>
       </PreviewSection>
 

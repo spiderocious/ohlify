@@ -128,7 +128,12 @@ function DrawerNameMatch({
 
   return (
     <div
-      className={cn('flex flex-col gap-hawk-3 rounded-hawk-sm border p-hawk-5', tone.softBg, tone.border, className)}
+      className={cn(
+        'flex flex-col gap-hawk-3 rounded-hawk-sm border p-hawk-5',
+        tone.softBg,
+        tone.border,
+        className,
+      )}
     >
       <div className="flex items-center gap-hawk-3">
         <HawkIcon
@@ -155,12 +160,7 @@ function DrawerNameMatch({
 /** The drawer skeleton, mirroring its own layout. */
 function DrawerSkeleton() {
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Loading"
-      className="flex flex-col gap-hawk-7"
-    >
+    <div role="status" aria-busy="true" aria-label="Loading" className="flex flex-col gap-hawk-7">
       <div className="flex flex-col gap-hawk-3">
         <HawkSkeletonLine widthFactor={0.25} height={9} />
         {[0.9, 0.7, 0.8, 0.6].map((factor, index) => (

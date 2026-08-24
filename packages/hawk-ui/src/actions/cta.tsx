@@ -101,12 +101,7 @@ export function HawkContinueBar({
       )}
       <div className="flex items-center gap-hawk-4">
         {secondaryLabel && (
-          <HawkButton
-            label={secondaryLabel}
-            variant="ghost"
-            size="lg"
-            onClick={onSecondary}
-          />
+          <HawkButton label={secondaryLabel} variant="ghost" size="lg" onClick={onSecondary} />
         )}
         <HawkButton
           label={label}

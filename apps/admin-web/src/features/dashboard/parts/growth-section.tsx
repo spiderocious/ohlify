@@ -111,9 +111,8 @@ export function GrowthSection({
             <div className="flex flex-col gap-hawk-5">
               <HawkStepperVertical steps={toActivationFunnel(data)} current={6} />
               <HawkCaption ink="muted" className="leading-snug">
-                Where onboarding leaks, stage by stage. The gap worth acting on is the last
-                one — professionals who cleared KYC and never took a call are supply already
-                paid for.
+                Where onboarding leaks, stage by stage. The gap worth acting on is the last one —
+                professionals who cleared KYC and never took a call are supply already paid for.
               </HawkCaption>
             </div>
           )}
@@ -135,14 +134,10 @@ export function GrowthSection({
                   value={data.growth.supply.available_now}
                   record
                 />
-                <HawkKeyValue
-                  label="No rate set"
-                  value={data.growth.supply.missing_rates}
-                  record
-                />
+                <HawkKeyValue label="No rate set" value={data.growth.supply.missing_rates} record />
                 <HawkCaption ink="muted" className="leading-snug">
-                  Bookable means approved, available, and carrying at least one rate. A
-                  professional with no rate never appears in search — they are invisible supply.
+                  Bookable means approved, available, and carrying at least one rate. A professional
+                  with no rate never appears in search — they are invisible supply.
                 </HawkCaption>
               </div>
             )}

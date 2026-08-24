@@ -94,9 +94,7 @@ export const assemble = async (userId: string, adminRole: string | undefined) =>
       // would have been a fig leaf while the balance sat one key away. Non-money
       // vitals (calls, rating, strikes) stay: support needs those to do their job.
       wallet_kobo: canSeeMoney ? koboToJson(BigInt(vitals.wallet_kobo)) : null,
-      lifetime_earned_kobo: canSeeMoney
-        ? koboToJson(BigInt(vitals.lifetime_earned_kobo))
-        : null,
+      lifetime_earned_kobo: canSeeMoney ? koboToJson(BigInt(vitals.lifetime_earned_kobo)) : null,
       lifetime_spent_kobo: canSeeMoney ? koboToJson(BigInt(vitals.lifetime_spent_kobo)) : null,
       escrow_kobo: canSeeMoney ? koboToJson(BigInt(vitals.escrow_kobo)) : null,
       calls_total: num(vitals.calls_total),

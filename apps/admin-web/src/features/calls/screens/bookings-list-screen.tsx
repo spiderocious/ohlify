@@ -34,9 +34,7 @@ export function BookingsListScreen() {
 
   const list = useAdminBookings({ status });
 
-  const unpaid = list.items.filter(
-    (row) => row.status === AdminBookingStatus.PENDING,
-  ).length;
+  const unpaid = list.items.filter((row) => row.status === AdminBookingStatus.PENDING).length;
   const pageValue = list.items.reduce((sum, row) => sum + Number(row.total_paid_kobo), 0);
 
   const kpis: HawkKpi[] = [

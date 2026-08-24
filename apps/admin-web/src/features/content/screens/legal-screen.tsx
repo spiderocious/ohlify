@@ -45,7 +45,10 @@ export function LegalScreen() {
 
   return (
     <>
-      <HawkAdminPageHeader title="Legal documents" subtitle="EULA, privacy, terms — version-controlled." />
+      <HawkAdminPageHeader
+        title="Legal documents"
+        subtitle="EULA, privacy, terms — version-controlled."
+      />
 
       <div className="px-6 py-6">
         <div className="mb-4 max-w-xs">

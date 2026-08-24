@@ -17,11 +17,7 @@ export {
   formatAge,
 } from './data-state.js';
 
-export {
-  HAWK_AVATAR_PX,
-  HAWK_ICON_BUTTON_PX,
-  HAWK_ICON_BUTTON_GLYPH_PX,
-} from './size.js';
+export { HAWK_AVATAR_PX, HAWK_ICON_BUTTON_PX, HAWK_ICON_BUTTON_GLYPH_PX } from './size.js';
 export type {
   HawkButtonSize,
   HawkIconButtonSize,

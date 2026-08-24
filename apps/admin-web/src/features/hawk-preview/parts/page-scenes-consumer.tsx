@@ -73,12 +73,7 @@ import {
   lookupStatus,
 } from '@ohlify/hawk-ui';
 
-import {
-  PreviewGrid,
-  PreviewPage,
-  PreviewSection,
-  PreviewStage,
-} from './preview-shell.js';
+import { PreviewGrid, PreviewPage, PreviewSection, PreviewStage } from './preview-shell.js';
 
 const call = (k: string) => lookupStatus('call', k)!;
 const kyc = (k: string) => lookupStatus('kyc', k)!;
@@ -98,7 +93,11 @@ function Phone({ children, dark = false }: { children: React.ReactNode; dark?: b
 }
 
 function Scroll({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-0 flex-1 flex-col gap-hawk-6 overflow-y-auto p-hawk-5">{children}</div>;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-hawk-6 overflow-y-auto p-hawk-5">
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -124,7 +123,11 @@ export function SceneOnboarding() {
               <HawkList carded={false}>
                 <HawkKycItemRow label="Your profile" status={kyc('verified')} />
                 <HawkKycItemRow label="Recent calls" status={kyc('verified')} />
-                <HawkKycItemRow label="Wallet" status={kyc('under_review')} description="Loading…" />
+                <HawkKycItemRow
+                  label="Wallet"
+                  status={kyc('under_review')}
+                  description="Loading…"
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -136,8 +139,16 @@ export function SceneOnboarding() {
               <HawkHeading level={3}>How will you use Ohlify?</HawkHeading>
               <HawkRadioGroup
                 options={[
-                  { value: 'client', label: 'I want advice', description: 'Talk to a professional by the minute' },
-                  { value: 'professional', label: 'I give advice', description: 'Get paid for your time' },
+                  {
+                    value: 'client',
+                    label: 'I want advice',
+                    description: 'Talk to a professional by the minute',
+                  },
+                  {
+                    value: 'professional',
+                    label: 'I give advice',
+                    description: 'Get paid for your time',
+                  },
                 ]}
                 value={role}
                 onChange={setRole}
@@ -154,7 +165,12 @@ export function SceneOnboarding() {
               <HawkHeading level={3}>Set your rates</HawkHeading>
               <HawkCaption>You can change these any time.</HawkCaption>
               <HawkList>
-                <HawkRateRow label="Standard consultation" amountKobo={250_000} minimumMinutes={15} onEdit={() => {}} />
+                <HawkRateRow
+                  label="Standard consultation"
+                  amountKobo={250_000}
+                  minimumMinutes={15}
+                  onEdit={() => {}}
+                />
               </HawkList>
               <HawkButton label="Add another rate" variant="outline" block onClick={() => {}} />
             </Scroll>
@@ -333,7 +349,13 @@ export function SceneHome() {
               </div>
               <HawkSectionHeader title="Recent calls" />
               <HawkList>
-                <HawkCallRow name="Chidi Nwosu" duration="12:04" costKobo={301_000} timestamp="14:22" status={call('completed')} />
+                <HawkCallRow
+                  name="Chidi Nwosu"
+                  duration="12:04"
+                  costKobo={301_000}
+                  timestamp="14:22"
+                  status={call('completed')}
+                />
                 <HawkCallRow name="Fatima Bello" timestamp="Yesterday" status={call('missed')} />
               </HawkList>
             </Scroll>
@@ -389,8 +411,23 @@ export function SceneSearch() {
                 block
               />
               <HawkList>
-                <HawkProfessionalRow name="Adaeze Okonkwo" headline="Tax & corporate law" ratePerMinuteKobo={250_000} rating={4.8} presence="online" verified onClick={() => {}} />
-                <HawkProfessionalRow name="Segun Adeyemi" headline="Tax advisory" ratePerMinuteKobo={200_000} rating={4.2} presence="offline" onClick={() => {}} />
+                <HawkProfessionalRow
+                  name="Adaeze Okonkwo"
+                  headline="Tax & corporate law"
+                  ratePerMinuteKobo={250_000}
+                  rating={4.8}
+                  presence="online"
+                  verified
+                  onClick={() => {}}
+                />
+                <HawkProfessionalRow
+                  name="Segun Adeyemi"
+                  headline="Tax advisory"
+                  ratePerMinuteKobo={200_000}
+                  rating={4.2}
+                  presence="offline"
+                  onClick={() => {}}
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -432,11 +469,22 @@ export function SceneSearch() {
               </HawkCard>
               <HawkSectionHeader title="Reviews" />
               <HawkList>
-                <HawkReviewRow author="Chidi Nwosu" rating={5} comment="Clear and did not waste my time." timestamp="2 days ago" />
+                <HawkReviewRow
+                  author="Chidi Nwosu"
+                  rating={5}
+                  comment="Clear and did not waste my time."
+                  timestamp="2 days ago"
+                />
               </HawkList>
             </Scroll>
             <div className="border-t border-hawk-line bg-hawk-paper p-hawk-5">
-              <HawkTalkToCta name="Adaeze" ratePerMinuteKobo={250_000} videoAvailable onAudio={() => {}} onVideo={() => {}} />
+              <HawkTalkToCta
+                name="Adaeze"
+                ratePerMinuteKobo={250_000}
+                videoAvailable
+                onAudio={() => {}}
+                onVideo={() => {}}
+              />
             </div>
           </Phone>
         </PreviewStage>
@@ -519,7 +567,9 @@ export function SceneSchedule() {
                 title="You are booked"
                 description="Tue 3 Sep at 14:30. We will remind you 15 minutes before."
                 action={<HawkButton label="Add to calendar" block onClick={() => {}} />}
-                secondaryAction={<HawkButton label="Done" variant="ghost" block onClick={() => {}} />}
+                secondaryAction={
+                  <HawkButton label="Done" variant="ghost" block onClick={() => {}} />
+                }
               />
             </div>
           </Phone>
@@ -571,7 +621,9 @@ export function SceneCall() {
                 highlight={<HawkFigure value={301_000} size="lg" />}
                 description="12 minutes 4 seconds with Adaeze Okonkwo."
                 action={<HawkButton label="Leave a review" block onClick={() => {}} />}
-                secondaryAction={<HawkButton label="Done" variant="ghost" block onClick={() => {}} />}
+                secondaryAction={
+                  <HawkButton label="Done" variant="ghost" block onClick={() => {}} />
+                }
               />
             </div>
           </Phone>
@@ -606,9 +658,29 @@ export function SceneCalls() {
                 onChange={() => {}}
               />
               <HawkList>
-                <HawkCallRow name="Adaeze Okonkwo" duration="12:04" costKobo={301_000} timestamp="14:22" status={call('completed')} onClick={() => {}} />
-                <HawkCallRow name="Fatima Bello" video timestamp="Yesterday" status={call('missed')} onClick={() => {}} />
-                <HawkCallRow name="Segun Adeyemi" duration="04:11" costKobo={82_000} timestamp="18 Aug" status={call('completed')} onClick={() => {}} />
+                <HawkCallRow
+                  name="Adaeze Okonkwo"
+                  duration="12:04"
+                  costKobo={301_000}
+                  timestamp="14:22"
+                  status={call('completed')}
+                  onClick={() => {}}
+                />
+                <HawkCallRow
+                  name="Fatima Bello"
+                  video
+                  timestamp="Yesterday"
+                  status={call('missed')}
+                  onClick={() => {}}
+                />
+                <HawkCallRow
+                  name="Segun Adeyemi"
+                  duration="04:11"
+                  costKobo={82_000}
+                  timestamp="18 Aug"
+                  status={call('completed')}
+                  onClick={() => {}}
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -689,9 +761,27 @@ export function SceneChats() {
               <HawkAppBar title="Chats" sticky={false} />
               <Scroll>
                 <HawkList>
-                  <HawkChatRow name="Dr. Adaeze Okonkwo" preview="See you at 4pm then" timestamp="12m" unread={2} presence="online" onClick={() => {}} />
-                  <HawkChatRow name="Tunde Bello" preview="Thanks for your time" timestamp="2h" ownLast onClick={() => {}} />
-                  <HawkChatRow name="Chidi Eze" preview="Let me check my calendar" timestamp="1d" onClick={() => {}} />
+                  <HawkChatRow
+                    name="Dr. Adaeze Okonkwo"
+                    preview="See you at 4pm then"
+                    timestamp="12m"
+                    unread={2}
+                    presence="online"
+                    onClick={() => {}}
+                  />
+                  <HawkChatRow
+                    name="Tunde Bello"
+                    preview="Thanks for your time"
+                    timestamp="2h"
+                    ownLast
+                    onClick={() => {}}
+                  />
+                  <HawkChatRow
+                    name="Chidi Eze"
+                    preview="Let me check my calendar"
+                    timestamp="1d"
+                    onClick={() => {}}
+                  />
                 </HawkList>
               </Scroll>
               <HawkBottomNav items={CHAT_NAV} value="chats" onChange={() => {}} />
@@ -743,11 +833,7 @@ export function SceneChats() {
                 </HawkCard>
 
                 {/* Optimistic: dimmed with a clock until the server confirms. */}
-                <HawkChatBubble
-                  own
-                  message="Thank you, that was very helpful."
-                  status="sending"
-                />
+                <HawkChatBubble own message="Thank you, that was very helpful." status="sending" />
               </div>
               <HawkQuickReplies replies={['Thanks!', 'Can we schedule?']} onSelect={() => {}} />
               <HawkChatComposer onSend={() => {}} onAttach={() => {}} />
@@ -873,15 +959,40 @@ export function SceneWallet() {
                 actions={
                   <>
                     <HawkButton label="Top up" size="sm" onDark onClick={() => {}} />
-                    <HawkButton label="Withdraw" size="sm" variant="outline" onDark onClick={() => {}} />
+                    <HawkButton
+                      label="Withdraw"
+                      size="sm"
+                      variant="outline"
+                      onDark
+                      onClick={() => {}}
+                    />
                   </>
                 }
               />
               <HawkSectionHeader title="Recent" />
               <HawkList>
-                <HawkTransactionRow title="Call with Chidi" amountKobo={301_000} direction="debit" timestamp="14:22" icon={IconPhone} status={call('completed')} />
-                <HawkTransactionRow title="Wallet top-up" amountKobo={5_000_000} direction="credit" timestamp="09:15" icon={IconWallet} />
-                <HawkTransactionRow title="Refund" amountKobo={82_000} direction="reversal" timestamp="18 Aug" icon={IconReceipt} />
+                <HawkTransactionRow
+                  title="Call with Chidi"
+                  amountKobo={301_000}
+                  direction="debit"
+                  timestamp="14:22"
+                  icon={IconPhone}
+                  status={call('completed')}
+                />
+                <HawkTransactionRow
+                  title="Wallet top-up"
+                  amountKobo={5_000_000}
+                  direction="credit"
+                  timestamp="09:15"
+                  icon={IconWallet}
+                />
+                <HawkTransactionRow
+                  title="Refund"
+                  amountKobo={82_000}
+                  direction="reversal"
+                  timestamp="18 Aug"
+                  icon={IconReceipt}
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -941,8 +1052,23 @@ export function SceneProfile() {
             <HawkAppBar title="Notifications" sticky={false} />
             <Scroll>
               <HawkList>
-                <HawkNotificationRow title="Payment received" body="₦8,420 from your call with Chidi." timestamp="14:25" icon={IconWallet} semantic="success" unread onClick={() => {}} />
-                <HawkNotificationRow title="Missed call" body="Fatima Bello tried to reach you." timestamp="Yesterday" icon={IconPhone} semantic="caution" onClick={() => {}} />
+                <HawkNotificationRow
+                  title="Payment received"
+                  body="₦8,420 from your call with Chidi."
+                  timestamp="14:25"
+                  icon={IconWallet}
+                  semantic="success"
+                  unread
+                  onClick={() => {}}
+                />
+                <HawkNotificationRow
+                  title="Missed call"
+                  body="Fatima Bello tried to reach you."
+                  timestamp="Yesterday"
+                  icon={IconPhone}
+                  semantic="caution"
+                  onClick={() => {}}
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -960,9 +1086,20 @@ export function SceneProfile() {
               <HawkList>
                 <HawkMenuLink label="Personal details" icon={IconUser} onClick={() => {}} />
                 <HawkMenuLink label="Your rates" icon={IconReceipt} onClick={() => {}} />
-                <HawkMenuLink label="Bank account" description="GTBank ••••4821" icon={IconWallet} onClick={() => {}} />
+                <HawkMenuLink
+                  label="Bank account"
+                  description="GTBank ••••4821"
+                  icon={IconWallet}
+                  onClick={() => {}}
+                />
                 <HawkMenuLink label="Settings" icon={IconSettings} onClick={() => {}} />
-                <HawkMenuLink label="Sign out" icon={IconLogOut} destructive noChevron onClick={() => {}} />
+                <HawkMenuLink
+                  label="Sign out"
+                  icon={IconLogOut}
+                  destructive
+                  noChevron
+                  onClick={() => {}}
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -972,7 +1109,10 @@ export function SceneProfile() {
           <Phone>
             <HawkAppBar title="Notifications" sticky={false} />
             <div className="flex flex-1 flex-col justify-center">
-              <HawkEmptyState title="Nothing new" description="We will let you know when something happens." />
+              <HawkEmptyState
+                title="Nothing new"
+                description="We will let you know when something happens."
+              />
               <HawkErrorState compact onRetry={() => {}} />
             </div>
           </Phone>
@@ -1013,12 +1153,28 @@ export function SceneKyc() {
           <Phone>
             <HawkAppBar title="Verification" onBack={() => {}} sticky={false} />
             <Scroll>
-              <HawkKycProgress completed={2} total={4} description="Verified professionals get 3× more calls." />
+              <HawkKycProgress
+                completed={2}
+                total={4}
+                description="Verified professionals get 3× more calls."
+              />
               <HawkList>
                 <HawkKycStep label="Email address" status={kyc('verified')} />
                 <HawkKycStep label="Identity document" status={kyc('verified')} />
-                <HawkKycStep label="Bank account" description="Submitted 2 days ago" status={kyc('under_review')} onAction={() => {}} actionLabel="View" />
-                <HawkKycStep label="Proof of address" description="The document was unreadable" status={kyc('action_needed')} onAction={() => {}} actionLabel="Re-upload" />
+                <HawkKycStep
+                  label="Bank account"
+                  description="Submitted 2 days ago"
+                  status={kyc('under_review')}
+                  onAction={() => {}}
+                  actionLabel="View"
+                />
+                <HawkKycStep
+                  label="Proof of address"
+                  description="The document was unreadable"
+                  status={kyc('action_needed')}
+                  onAction={() => {}}
+                  actionLabel="Re-upload"
+                />
               </HawkList>
             </Scroll>
           </Phone>
@@ -1033,12 +1189,20 @@ export function SceneKyc() {
                 title="Under review"
                 message="We are checking your details. This usually takes a day."
               />
-              <HawkTextInput label="Account name" value="Adaeze Okonkwo" state={{ readOnly: true }} />
+              <HawkTextInput
+                label="Account name"
+                value="Adaeze Okonkwo"
+                state={{ readOnly: true }}
+              />
               <HawkTextInput label="Account number" value="0123456789" state={{ readOnly: true }} />
               <HawkTextInput
                 label="Bank"
                 value="GTBank"
-                state={{ readOnly: true, error: true, errorText: 'Does not match your verified identity' }}
+                state={{
+                  readOnly: true,
+                  error: true,
+                  errorText: 'Does not match your verified identity',
+                }}
               />
             </Scroll>
           </Phone>
@@ -1057,8 +1221,19 @@ export function SceneKyc() {
 export function SceneStateMatrix() {
   const rows = (
     <HawkList>
-      <HawkProfessionalRow name="Adaeze Okonkwo" headline="Tax law" ratePerMinuteKobo={250_000} rating={4.8} presence="online" />
-      <HawkProfessionalRow name="Chidi Nwosu" headline="Property" ratePerMinuteKobo={180_000} rating={4.5} />
+      <HawkProfessionalRow
+        name="Adaeze Okonkwo"
+        headline="Tax law"
+        ratePerMinuteKobo={250_000}
+        rating={4.8}
+        presence="online"
+      />
+      <HawkProfessionalRow
+        name="Chidi Nwosu"
+        headline="Property"
+        ratePerMinuteKobo={180_000}
+        rating={4.5}
+      />
     </HawkList>
   );
 
@@ -1140,9 +1315,17 @@ export function SceneBookings() {
       <PreviewStage>
         <div className="max-w-lg">
           <HawkList>
-            <HawkKycItemRow label="Tue 3 Sep · 14:00" status={booking('pending')} description="Proposed by Chidi Nwosu" />
+            <HawkKycItemRow
+              label="Tue 3 Sep · 14:00"
+              status={booking('pending')}
+              description="Proposed by Chidi Nwosu"
+            />
             <HawkKycItemRow label="Wed 4 Sep · 09:30" status={booking('confirmed')} />
-            <HawkKycItemRow label="Mon 1 Sep · 16:00" status={booking('late_cancellation')} description="Cancelled 20 minutes before" />
+            <HawkKycItemRow
+              label="Mon 1 Sep · 16:00"
+              status={booking('late_cancellation')}
+              description="Cancelled 20 minutes before"
+            />
             <HawkKycItemRow label="Fri 29 Aug · 11:00" status={booking('fulfilled')} />
           </HawkList>
         </div>
@@ -1166,7 +1349,12 @@ export function SceneProHome() {
         <PreviewStage label="the pass" ground>
           <HawkPass.Root>
             <HawkPass.Body>
-              <HawkIdentity name="Adaeze Okonkwo" subtitle="Tax & corporate law" size="lg" verified />
+              <HawkIdentity
+                name="Adaeze Okonkwo"
+                subtitle="Tax & corporate law"
+                size="lg"
+                verified
+              />
               <HawkFigure value={842_000} size="lg" />
               <HawkCaption>Earned this month</HawkCaption>
             </HawkPass.Body>
@@ -1188,8 +1376,19 @@ export function SceneProHome() {
 
         <PreviewStage label="rates" ground>
           <HawkList>
-            <HawkRateRow label="Standard consultation" amountKobo={250_000} minimumMinutes={15} onEdit={() => {}} />
-            <HawkRateRow label="Extended review" amountKobo={400_000} minimumMinutes={30} active={false} onEdit={() => {}} />
+            <HawkRateRow
+              label="Standard consultation"
+              amountKobo={250_000}
+              minimumMinutes={15}
+              onEdit={() => {}}
+            />
+            <HawkRateRow
+              label="Extended review"
+              amountKobo={400_000}
+              minimumMinutes={30}
+              active={false}
+              onEdit={() => {}}
+            />
           </HawkList>
         </PreviewStage>
       </PreviewGrid>
@@ -1216,7 +1415,9 @@ export function SceneTakeover() {
                 title="You are verified"
                 description="Your profile is live and clients can find you."
                 action={<HawkButton label="Set your rates" block onClick={() => {}} />}
-                secondaryAction={<HawkButton label="Later" variant="ghost" block onClick={() => {}} />}
+                secondaryAction={
+                  <HawkButton label="Later" variant="ghost" block onClick={() => {}} />
+                }
               />
             </div>
           </Phone>
@@ -1230,7 +1431,13 @@ export function SceneTakeover() {
               <HawkList carded={false}>
                 <HawkTile title="Profile" subtitle="Done" icon={IconUser} />
                 <HawkTile title="Rates" subtitle="Done" icon={IconReceipt} />
-                <HawkTile title="Bank account" subtitle="Not started" icon={IconWallet} chevron onClick={() => {}} />
+                <HawkTile
+                  title="Bank account"
+                  subtitle="Not started"
+                  icon={IconWallet}
+                  chevron
+                  onClick={() => {}}
+                />
               </HawkList>
             </Scroll>
             <HawkContinueBar onContinue={() => {}} />

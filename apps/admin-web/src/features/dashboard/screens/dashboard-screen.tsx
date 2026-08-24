@@ -47,8 +47,7 @@ export function DashboardScreen() {
   // The service already omits the money block for them — this keeps the whole
   // section out of the layout rather than rendering an explanatory box on a
   // board they read every day.
-  const canViewMoney =
-    admin?.role === AdminRole.ADMIN || admin?.role === AdminRole.FINANCE_OPS;
+  const canViewMoney = admin?.role === AdminRole.ADMIN || admin?.role === AdminRole.FINANCE_OPS;
 
   const attentionSignals = useMemo(
     () => (query.data ? toAttentionSignals(query.data) : []),

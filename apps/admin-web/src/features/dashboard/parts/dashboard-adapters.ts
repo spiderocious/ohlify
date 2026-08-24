@@ -51,8 +51,7 @@ const delta = (
   percent: number | null,
   period: string,
   riseIsGood = true,
-): HawkStatDelta | undefined =>
-  percent === null ? undefined : { percent, period, riseIsGood };
+): HawkStatDelta | undefined => (percent === null ? undefined : { percent, period, riseIsGood });
 
 const series = (points: readonly AdminSeriesPoint[], granularity: string): HawkChartPoint[] =>
   points.map((point) => ({
@@ -182,7 +181,10 @@ export function toAttentionSignals(data: AdminDashboard): AttentionSignal[] {
   const ages: Record<string, string | undefined> = {
     uncredited_payments: formatAge(a.uncredited_payments.oldest_seconds),
     // The suspense signal's "age" is the amount — that is what needs acting on.
-    suspense: a.suspense.amount_kobo === 0 ? undefined : `₦${(a.suspense.amount_kobo / 100).toLocaleString()}`,
+    suspense:
+      a.suspense.amount_kobo === 0
+        ? undefined
+        : `₦${(a.suspense.amount_kobo / 100).toLocaleString()}`,
     withdrawals_stuck: formatAge(a.withdrawals_stuck.oldest_seconds),
     kyc: formatAge(a.kyc_pending.oldest_seconds),
     refunds: formatAge(a.refunds_pending.oldest_seconds),
@@ -209,7 +211,9 @@ export function toMoneyKpis(money: AdminDashboardMoney, range: DashboardRange): 
       valueKobo: money.net_revenue_kobo,
       icon: IconWallet,
       basis: 'net',
-      ...(delta(money.net_revenue_delta, period) ? { delta: delta(money.net_revenue_delta, period)! } : {}),
+      ...(delta(money.net_revenue_delta, period)
+        ? { delta: delta(money.net_revenue_delta, period)! }
+        : {}),
       trend: trend(money.revenue_series),
       semantic: 'success',
     },
@@ -219,7 +223,9 @@ export function toMoneyKpis(money: AdminDashboardMoney, range: DashboardRange): 
       valueKobo: money.gross_volume_kobo,
       icon: IconReceipt,
       basis: 'gross',
-      ...(delta(money.gross_volume_delta, period) ? { delta: delta(money.gross_volume_delta, period)! } : {}),
+      ...(delta(money.gross_volume_delta, period)
+        ? { delta: delta(money.gross_volume_delta, period)! }
+        : {}),
     },
     {
       key: 'processor_fees',
@@ -395,7 +401,9 @@ export function toActivationKpis(data: AdminDashboard, range: DashboardRange): H
 export function toActivationFunnel(data: AdminDashboard): HawkStep[] {
   const a = data.growth.activation;
   const share = (value: number): string =>
-    a.registered === 0 ? '—' : `${value.toLocaleString()} · ${Math.round((value / a.registered) * 100)}%`;
+    a.registered === 0
+      ? '—'
+      : `${value.toLocaleString()} · ${Math.round((value / a.registered) * 100)}%`;
 
   return [
     { label: 'Registered', timestamp: a.registered.toLocaleString() },
@@ -457,7 +465,9 @@ export function toVersionAdoption(data: AdminDashboard): VersionAdoption[] {
       platform: row.platform,
       sessions: row.sessions,
       belowMinimum:
-        minimum !== undefined && row.version !== 'unknown' && compareVersions(row.version, minimum) < 0,
+        minimum !== undefined &&
+        row.version !== 'unknown' &&
+        compareVersions(row.version, minimum) < 0,
     };
   });
 }

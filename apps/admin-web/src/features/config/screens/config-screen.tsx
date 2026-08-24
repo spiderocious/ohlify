@@ -201,14 +201,10 @@ export function ConfigScreen() {
               entirely, so it is the state worth reading first.
             */}
             {erroredKeys.length > 0 && (
-              <HawkCaption className="text-hawk-critical">
-                {erroredKeys.length} invalid
-              </HawkCaption>
+              <HawkCaption className="text-hawk-critical">{erroredKeys.length} invalid</HawkCaption>
             )}
             {dirtyKeys.length > 0 && (
-              <HawkCaption className="text-hawk-caution">
-                {dirtyKeys.length} unsaved
-              </HawkCaption>
+              <HawkCaption className="text-hawk-caution">{dirtyKeys.length} unsaved</HawkCaption>
             )}
             <HawkButton
               label="Save changes"
@@ -237,10 +233,7 @@ export function ConfigScreen() {
           cfg.data && (
             <div className="flex flex-col gap-hawk-6">
               {orderedGroupIds.length === 0 && (
-                <HawkEmptyState
-                  title="No keys match"
-                  description="Try a different search term."
-                />
+                <HawkEmptyState title="No keys match" description="Try a different search term." />
               )}
               {orderedGroupIds.map((groupId) => {
                 const rows = grouped.get(groupId) ?? [];

@@ -78,10 +78,7 @@ export function HawkJournalComposer({
   const remove = (id: string) => onChange(lines.filter((line) => line.id !== id));
 
   const add = () =>
-    onChange([
-      ...lines,
-      { id: `line-${Date.now()}-${lines.length}`, account: '', memo: '' },
-    ]);
+    onChange([...lines, { id: `line-${Date.now()}-${lines.length}`, account: '', memo: '' }]);
 
   return (
     <div className={cn('hawk-board flex flex-col gap-hawk-6', className)}>
@@ -129,17 +126,13 @@ export function HawkJournalComposer({
                     // A line is a debit or a credit, never both. Typing in one
                     // column clears the other rather than letting a line carry
                     // two amounts the ledger would reject downstream.
-                    onChange={(debitKobo) =>
-                      update(line.id, { debitKobo, creditKobo: undefined })
-                    }
+                    onChange={(debitKobo) => update(line.id, { debitKobo, creditKobo: undefined })}
                   />
                 </td>
                 <td className="px-hawk-4 py-hawk-3 align-top">
                   <HawkCurrencyInput
                     value={line.creditKobo}
-                    onChange={(creditKobo) =>
-                      update(line.id, { creditKobo, debitKobo: undefined })
-                    }
+                    onChange={(creditKobo) => update(line.id, { creditKobo, debitKobo: undefined })}
                   />
                 </td>
                 <td className="px-hawk-4 py-hawk-3 align-top">
@@ -233,11 +226,7 @@ export function HawkBalanceCheck({
         className,
       )}
     >
-      <HawkIcon
-        icon={balanced ? IconCheck : IconAlertTriangle}
-        size={15}
-        className={tone.text}
-      />
+      <HawkIcon icon={balanced ? IconCheck : IconAlertTriangle} size={15} className={tone.text} />
       <HawkText variant="label" className={cn('font-semibold', tone.onSoft)}>
         {balanced
           ? 'Balanced'

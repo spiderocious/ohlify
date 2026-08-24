@@ -54,7 +54,13 @@ const txn = (k: string) => lookupStatus('transaction', k)!;
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: IconHome },
   { key: 'users', label: 'Users', icon: IconUsers, group: 'People' },
-  { key: 'kyc', label: 'KYC', icon: IconIdCard, group: 'People', badge: <HawkStatusBadge status={kycStatus('under_review')} size="sm" /> },
+  {
+    key: 'kyc',
+    label: 'KYC',
+    icon: IconIdCard,
+    group: 'People',
+    badge: <HawkStatusBadge status={kycStatus('under_review')} size="sm" />,
+  },
   { key: 'calls', label: 'Calls', icon: IconPhone, group: 'Activity' },
   { key: 'reports', label: 'Reports', icon: IconFlag, group: 'Activity' },
   { key: 'withdrawals', label: 'Withdrawals', icon: IconBank, group: 'Money' },
@@ -224,16 +230,58 @@ export function SceneWithdrawal() {
   const [open, setOpen] = useState(false);
 
   const ROWS = [
-    { id: '1', name: 'Adaeze Okonkwo', bank: 'GTBank', account: '0123456789', amount: 8_420_000, status: 'pending', match: true },
-    { id: '2', name: 'Chidi Nwosu', bank: 'Zenith Bank', account: '2233445566', amount: 1_250_000, status: 'pending', match: false },
-    { id: '3', name: 'Fatima Bello', bank: 'Access Bank', account: '9988776655', amount: 640_000, status: 'approved', match: true },
-    { id: '4', name: 'Segun Adeyemi', bank: 'Kuda', account: '5544332211', amount: 210_000, status: 'rejected', match: true },
+    {
+      id: '1',
+      name: 'Adaeze Okonkwo',
+      bank: 'GTBank',
+      account: '0123456789',
+      amount: 8_420_000,
+      status: 'pending',
+      match: true,
+    },
+    {
+      id: '2',
+      name: 'Chidi Nwosu',
+      bank: 'Zenith Bank',
+      account: '2233445566',
+      amount: 1_250_000,
+      status: 'pending',
+      match: false,
+    },
+    {
+      id: '3',
+      name: 'Fatima Bello',
+      bank: 'Access Bank',
+      account: '9988776655',
+      amount: 640_000,
+      status: 'approved',
+      match: true,
+    },
+    {
+      id: '4',
+      name: 'Segun Adeyemi',
+      bank: 'Kuda',
+      account: '5544332211',
+      amount: 210_000,
+      status: 'rejected',
+      match: true,
+    },
   ];
 
   const columns = [
-    { key: 'name', header: 'Professional', width: '24%', render: (r: (typeof ROWS)[number]) => r.name },
+    {
+      key: 'name',
+      header: 'Professional',
+      width: '24%',
+      render: (r: (typeof ROWS)[number]) => r.name,
+    },
     { key: 'bank', header: 'Bank', width: '18%', render: (r: (typeof ROWS)[number]) => r.bank },
-    { key: 'account', header: 'Account', width: '18%', render: (r: (typeof ROWS)[number]) => r.account },
+    {
+      key: 'account',
+      header: 'Account',
+      width: '18%',
+      render: (r: (typeof ROWS)[number]) => r.account,
+    },
     {
       key: 'amount',
       header: 'Amount',
@@ -269,7 +317,10 @@ export function SceneWithdrawal() {
         rule="Three gates in sequence: the table shows the name-match verdict in a column so a mismatch is visible before opening anything; the drawer restates it in full; and approving requires typing APPROVE. Each is cheap, and together they make a mis-approval a deliberate act rather than a slip."
       >
         <Board>
-          <HawkRegisterScope value={HawkRegister.BOARD} className="flex h-full flex-col bg-hawk-paper">
+          <HawkRegisterScope
+            value={HawkRegister.BOARD}
+            className="flex h-full flex-col bg-hawk-paper"
+          >
             <HawkAdminPageHeader
               title="Withdrawals"
               subtitle="12 pending · ₦1,284,000 in total"
@@ -302,7 +353,13 @@ export function SceneWithdrawal() {
                   })
                 }
               />
-              <HawkButton label="Reject selected" variant="outline" destructive size="sm" onClick={() => {}} />
+              <HawkButton
+                label="Reject selected"
+                variant="outline"
+                destructive
+                size="sm"
+                onClick={() => {}}
+              />
             </HawkBulkActionBar>
             <div className="min-h-0 flex-1">
               <HawkTable
@@ -314,7 +371,13 @@ export function SceneWithdrawal() {
                 onSelectionChange={setSelected}
                 onRowClick={() => setOpen(true)}
                 footer={
-                  <HawkPagination hasPrevious={false} hasNext onPrevious={() => {}} onNext={() => {}} summary="Showing 4" />
+                  <HawkPagination
+                    hasPrevious={false}
+                    hasNext
+                    onPrevious={() => {}}
+                    onNext={() => {}}
+                    summary="Showing 4"
+                  />
                 }
               />
             </div>
@@ -328,7 +391,13 @@ export function SceneWithdrawal() {
           subtitle="OHL-4821-XQ"
           actions={
             <div className="flex w-full items-center justify-end gap-hawk-3">
-              <HawkButton label="Reject" variant="outline" destructive size="sm" onClick={() => setOpen(false)} />
+              <HawkButton
+                label="Reject"
+                variant="outline"
+                destructive
+                size="sm"
+                onClick={() => setOpen(false)}
+              />
               <HawkButton
                 label="Approve"
                 size="sm"
@@ -359,7 +428,10 @@ export function SceneWithdrawal() {
             <HawkDetailDrawer.Row label="Professional" value="Adaeze Okonkwo" />
             <HawkDetailDrawer.Row label="KYC" value="Verified · 12 Jun 2026" />
             <HawkDetailDrawer.Row label="Prior withdrawals" value="14" record />
-            <HawkDetailDrawer.Row label="Wallet balance" value={<HawkFigure value={842_000} size="sm" />} />
+            <HawkDetailDrawer.Row
+              label="Wallet balance"
+              value={<HawkFigure value={842_000} size="sm" />}
+            />
           </HawkDetailDrawer.Section>
           <HawkDetailDrawer.Section title="Progress">
             {/* The vertical stepper's home case: each step carries a timestamp,
@@ -395,11 +467,18 @@ export function SceneKycReview() {
     >
       <PreviewSection title="The review panel">
         <Board>
-          <HawkRegisterScope value={HawkRegister.BOARD} className="flex h-full flex-col overflow-y-auto bg-hawk-paper">
+          <HawkRegisterScope
+            value={HawkRegister.BOARD}
+            className="flex h-full flex-col overflow-y-auto bg-hawk-paper"
+          >
             <HawkAdminPageHeader
               title="Adaeze Okonkwo"
               subtitle="KYC · submitted 20 Aug 2026"
-              breadcrumb={<HawkBreadcrumb items={[{ label: 'KYC', onClick: () => {} }, { label: 'Adaeze Okonkwo' }]} />}
+              breadcrumb={
+                <HawkBreadcrumb
+                  items={[{ label: 'KYC', onClick: () => {} }, { label: 'Adaeze Okonkwo' }]}
+                />
+              }
               actions={
                 <>
                   <HawkButton
@@ -413,7 +492,8 @@ export function SceneKycReview() {
                         label: 'Reason',
                         message: 'The professional will see this message.',
                         multiline: true,
-                        validate: (v) => (v.trim().length < 10 ? 'Give at least ten characters' : undefined),
+                        validate: (v) =>
+                          v.trim().length < 10 ? 'Give at least ten characters' : undefined,
                       })
                     }
                   />
@@ -496,10 +576,42 @@ export function SceneKycReview() {
  */
 export function SceneTransactions() {
   const ROWS = [
-    { id: '1', ref: 'TXN-9001', user: 'Adaeze Okonkwo', kind: 'Call settlement', amount: 301_000, direction: 'credit', status: 'completed' },
-    { id: '2', ref: 'TXN-9002', user: 'Chidi Nwosu', kind: 'Wallet top-up', amount: 5_000_000, direction: 'credit', status: 'completed' },
-    { id: '3', ref: 'TXN-9003', user: 'Fatima Bello', kind: 'Withdrawal', amount: 8_420_000, direction: 'debit', status: 'pending' },
-    { id: '4', ref: 'TXN-9004', user: 'Segun Adeyemi', kind: 'Refund', amount: 82_000, direction: 'reversal', status: 'reversed' },
+    {
+      id: '1',
+      ref: 'TXN-9001',
+      user: 'Adaeze Okonkwo',
+      kind: 'Call settlement',
+      amount: 301_000,
+      direction: 'credit',
+      status: 'completed',
+    },
+    {
+      id: '2',
+      ref: 'TXN-9002',
+      user: 'Chidi Nwosu',
+      kind: 'Wallet top-up',
+      amount: 5_000_000,
+      direction: 'credit',
+      status: 'completed',
+    },
+    {
+      id: '3',
+      ref: 'TXN-9003',
+      user: 'Fatima Bello',
+      kind: 'Withdrawal',
+      amount: 8_420_000,
+      direction: 'debit',
+      status: 'pending',
+    },
+    {
+      id: '4',
+      ref: 'TXN-9004',
+      user: 'Segun Adeyemi',
+      kind: 'Refund',
+      amount: 82_000,
+      direction: 'reversal',
+      status: 'reversed',
+    },
   ];
 
   const columns = [
@@ -539,7 +651,10 @@ export function SceneTransactions() {
         rule="Amounts opt out of masking here. Masking hides the viewer's own money from a shoulder-surfer; an operator reviewing the ledger needs to read every figure, and a masked audit surface is not an audit surface."
       >
         <Board>
-          <HawkRegisterScope value={HawkRegister.BOARD} className="flex h-full flex-col bg-hawk-paper">
+          <HawkRegisterScope
+            value={HawkRegister.BOARD}
+            className="flex h-full flex-col bg-hawk-paper"
+          >
             <HawkAdminPageHeader title="Transactions" subtitle="Last 7 days" />
             <HawkFilterBar
               tabs={[
@@ -558,7 +673,15 @@ export function SceneTransactions() {
                 rows={ROWS}
                 rowKey={(r) => r.id}
                 onRowClick={() => {}}
-                footer={<HawkPagination hasPrevious hasNext onPrevious={() => {}} onNext={() => {}} summary="Showing 4 of 1,284" />}
+                footer={
+                  <HawkPagination
+                    hasPrevious
+                    hasNext
+                    onPrevious={() => {}}
+                    onNext={() => {}}
+                    summary="Showing 4 of 1,284"
+                  />
+                }
               />
             </div>
           </HawkRegisterScope>

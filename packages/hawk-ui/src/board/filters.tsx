@@ -81,7 +81,9 @@ export function HawkFilterBar<T extends string>({
                     <span
                       className={cn(
                         'hawk-record rounded-hawk-pill px-hawk-3 py-px text-hawk-tiny font-bold tabular-nums',
-                        active ? 'bg-hawk-acc-soft text-hawk-acc-on-soft' : 'bg-hawk-sunken text-hawk-ink-muted',
+                        active
+                          ? 'bg-hawk-acc-soft text-hawk-acc-on-soft'
+                          : 'bg-hawk-sunken text-hawk-ink-muted',
                       )}
                     >
                       {tab.count}
@@ -137,11 +139,7 @@ export interface HawkActiveFiltersProps {
  * Renders nothing when no filters are applied — an empty "Filters:" label is
  * chrome that costs a line and says nothing.
  */
-export function HawkActiveFilters({
-  filters,
-  onClearAll,
-  className,
-}: HawkActiveFiltersProps) {
+export function HawkActiveFilters({ filters, onClearAll, className }: HawkActiveFiltersProps) {
   if (filters.length === 0) return null;
 
   return (
@@ -233,7 +231,13 @@ export function HawkFilterRail({
 
       {activeCount > 0 && onClearAll && (
         <div className="border-t border-hawk-line p-hawk-pad">
-          <HawkButton label="Clear all filters" variant="outline" size="sm" block onClick={onClearAll} />
+          <HawkButton
+            label="Clear all filters"
+            variant="outline"
+            size="sm"
+            block
+            onClick={onClearAll}
+          />
         </div>
       )}
     </aside>

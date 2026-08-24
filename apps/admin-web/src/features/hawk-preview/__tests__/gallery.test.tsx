@@ -71,7 +71,13 @@ describe('the gallery renders', () => {
   for (const page of HAWK_PAGES) {
     it(`${page.group} · ${page.name} (${page.slug})`, () => {
       const Page = page.component;
-      expect(() => render(<HawkProvider><Page /></HawkProvider>)).not.toThrow();
+      expect(() =>
+        render(
+          <HawkProvider>
+            <Page />
+          </HawkProvider>,
+        ),
+      ).not.toThrow();
       expect(errors, `${page.slug} logged a console error`).toEqual([]);
     });
   }

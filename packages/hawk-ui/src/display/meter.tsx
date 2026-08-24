@@ -21,8 +21,7 @@ export const HawkMeterSeverity = {
   WARNING: 'warning',
   HAZARD: 'hazard',
 } as const;
-export type HawkMeterSeverity =
-  (typeof HawkMeterSeverity)[keyof typeof HawkMeterSeverity];
+export type HawkMeterSeverity = (typeof HawkMeterSeverity)[keyof typeof HawkMeterSeverity];
 
 export interface HawkMeterProps {
   /** Elapsed seconds. */
@@ -253,7 +252,9 @@ export function HawkProgressRing({
           className="hawk-motion transition-[stroke-dashoffset] duration-hawk-base ease-hawk-standard"
         />
       </svg>
-      {children && <div className="absolute inset-0 flex items-center justify-center">{children}</div>}
+      {children && (
+        <div className="absolute inset-0 flex items-center justify-center">{children}</div>
+      )}
     </div>
   );
 }

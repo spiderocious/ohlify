@@ -108,7 +108,9 @@ export function TrustSection({
             <HawkStatCompact
               label="Average rating"
               // Null means no review landed — not zero stars.
-              value={data.trust.average_rating === null ? '—' : data.trust.average_rating.toFixed(2)}
+              value={
+                data.trust.average_rating === null ? '—' : data.trust.average_rating.toFixed(2)
+              }
             />
             <HawkKeyValue
               label="Reviews in period"

@@ -13,7 +13,11 @@ import {
 } from '@ohlify/hawk-ui';
 import type { AdminDashboard } from '@ohlify/api';
 
-import { ChartSkeleton, DonutSkeleton, KpiStripSkeleton } from '../../../shared/parts/board-skeletons.js';
+import {
+  ChartSkeleton,
+  DonutSkeleton,
+  KpiStripSkeleton,
+} from '../../../shared/parts/board-skeletons.js';
 import { toComposition, toMoneyKpis, toRevenueSeries } from './dashboard-adapters.js';
 import { RANGE_SPECS, type DashboardRange } from './dashboard-range.js';
 

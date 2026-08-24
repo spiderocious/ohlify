@@ -9,12 +9,7 @@ import {
   formatAge,
   hasContent,
 } from '../contracts/data-state.js';
-import {
-  dimsContent,
-  errorTextOf,
-  isInert,
-  showsError,
-} from '../contracts/field-state.js';
+import { dimsContent, errorTextOf, isInert, showsError } from '../contracts/field-state.js';
 import { HawkFigure } from '../foundation/figure.js';
 import {
   costOfSeconds,
@@ -30,12 +25,7 @@ import {
   lookupStatus,
 } from '../status/lifecycle.js';
 import { HawkProvider } from '../theme/register.js';
-import {
-  HAWK_DANGER,
-  HAWK_HAZARD,
-  HAWK_QUARTET,
-  HAWK_SEMANTICS,
-} from '../theme/semantic.js';
+import { HAWK_DANGER, HAWK_HAZARD, HAWK_QUARTET, HAWK_SEMANTICS } from '../theme/semantic.js';
 
 /**
  * Contract tests.

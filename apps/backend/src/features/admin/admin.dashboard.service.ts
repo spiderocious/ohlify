@@ -205,34 +205,37 @@ export const overview = async (range: DashboardRange, adminRole: string | undefi
 
       // `null` rather than zeroes: a support operator seeing ₦0 revenue would
       // reasonably conclude the platform earned nothing.
-      money: !canSeeMoney || money === null || moneyPrevious === null ? null : {
-        net_revenue_kobo: toNumber(money.net_revenue_kobo),
-        net_revenue_delta: deltaPercent(
-          toNumber(money.net_revenue_kobo),
-          toNumber(moneyPrevious.net_revenue_kobo),
-        ),
-        gross_volume_kobo: toNumber(money.gross_volume_kobo),
-        gross_volume_delta: deltaPercent(
-          toNumber(money.gross_volume_kobo),
-          toNumber(moneyPrevious.gross_volume_kobo),
-        ),
-        processor_fees_kobo: toNumber(money.processor_fees_kobo),
-        processor_fees_delta: deltaPercent(
-          toNumber(money.processor_fees_kobo),
-          toNumber(moneyPrevious.processor_fees_kobo),
-        ),
-        escrow_kobo: toNumber(money.escrow_kobo),
-        revenue_series: toSeries(revenueSeries),
-        composition: composition.map((row) => ({
-          label: row.kind,
-          value: toNumber(row.total_kobo),
-        })),
-        ledger: {
-          balanced: drift.length === 0,
-          drift_accounts: drift.length,
-          difference_kobo: drift.reduce((sum, row) => sum + toNumber(row.drift_kobo), 0),
-        },
-      },
+      money:
+        !canSeeMoney || money === null || moneyPrevious === null
+          ? null
+          : {
+              net_revenue_kobo: toNumber(money.net_revenue_kobo),
+              net_revenue_delta: deltaPercent(
+                toNumber(money.net_revenue_kobo),
+                toNumber(moneyPrevious.net_revenue_kobo),
+              ),
+              gross_volume_kobo: toNumber(money.gross_volume_kobo),
+              gross_volume_delta: deltaPercent(
+                toNumber(money.gross_volume_kobo),
+                toNumber(moneyPrevious.gross_volume_kobo),
+              ),
+              processor_fees_kobo: toNumber(money.processor_fees_kobo),
+              processor_fees_delta: deltaPercent(
+                toNumber(money.processor_fees_kobo),
+                toNumber(moneyPrevious.processor_fees_kobo),
+              ),
+              escrow_kobo: toNumber(money.escrow_kobo),
+              revenue_series: toSeries(revenueSeries),
+              composition: composition.map((row) => ({
+                label: row.kind,
+                value: toNumber(row.total_kobo),
+              })),
+              ledger: {
+                balanced: drift.length === 0,
+                drift_accounts: drift.length,
+                difference_kobo: drift.reduce((sum, row) => sum + toNumber(row.drift_kobo), 0),
+              },
+            },
 
       calls: {
         live_now: toNumber(calls.live_now),

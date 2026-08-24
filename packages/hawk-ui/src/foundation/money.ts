@@ -47,7 +47,10 @@ export interface HawkMoneyOptions {
  * Grouping comes from `Intl.NumberFormat` rather than a hand-rolled regex so
  * locale grouping stays correct.
  */
-export function formatKobo(value: HawkKobo | null | undefined, options: HawkMoneyOptions = {}): string {
+export function formatKobo(
+  value: HawkKobo | null | undefined,
+  options: HawkMoneyOptions = {},
+): string {
   const { symbol = true, decimals = false, signed = false } = options;
   const kobo = toKobo(value);
   const negative = kobo < 0;

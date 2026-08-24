@@ -55,10 +55,8 @@ export const HawkTextVariant = {
 export type HawkTextVariant = (typeof HawkTextVariant)[keyof typeof HawkTextVariant];
 
 const VARIANT_CLASS: Record<HawkTextVariant, string> = {
-  'display-xl':
-    'text-hawk-display-xl font-black tracking-hawk-display',
-  'display-lg':
-    'text-hawk-display-lg font-black tracking-hawk-display',
+  'display-xl': 'text-hawk-display-xl font-black tracking-hawk-display',
+  'display-lg': 'text-hawk-display-lg font-black tracking-hawk-display',
   display: 'text-hawk-display font-extrabold tracking-hawk-display',
   title: 'text-hawk-title font-semibold tracking-hawk-tight',
   header: 'text-hawk-header font-semibold tracking-hawk-tight',
@@ -162,14 +160,7 @@ export function HawkHeading({
   ...rest
 }: HawkHeadingProps) {
   const Tag = `h${level}` as ElementType;
-  return (
-    <HawkText
-      as={Tag}
-      variant={variant ?? LEVEL_VARIANT[level]}
-      ink={ink}
-      {...rest}
-    />
-  );
+  return <HawkText as={Tag} variant={variant ?? LEVEL_VARIANT[level]} ink={ink} {...rest} />;
 }
 
 export type HawkCaptionProps = Omit<HawkTextProps, 'variant'>;

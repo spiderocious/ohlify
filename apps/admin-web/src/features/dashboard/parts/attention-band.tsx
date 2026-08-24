@@ -132,9 +132,7 @@ function AllClear() {
       <HawkText variant="label" className={cn('font-semibold', tone.onSoft)}>
         All clear
       </HawkText>
-      <HawkCaption ink="muted">
-        No stuck queues, unprocessed webhooks or ledger drift.
-      </HawkCaption>
+      <HawkCaption ink="muted">No stuck queues, unprocessed webhooks or ledger drift.</HawkCaption>
     </div>
   );
 }

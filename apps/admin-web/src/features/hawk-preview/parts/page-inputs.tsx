@@ -98,13 +98,28 @@ export function PageTextInput() {
 
       <PreviewSection title="Variants">
         <PreviewGrid columns={2}>
-          <HawkTextInput label="With a glyph" leadingIcon={IconMail} placeholder="you@example.com" />
-          <HawkTextInput label="With a counter" maxLength={40} showCount value={value} onChange={setValue} />
+          <HawkTextInput
+            label="With a glyph"
+            leadingIcon={IconMail}
+            placeholder="you@example.com"
+          />
+          <HawkTextInput
+            label="With a counter"
+            maxLength={40}
+            showCount
+            value={value}
+            onChange={setValue}
+          />
           <HawkPhoneInput label="Phone" />
           <HawkPasswordInput label="Password" showStrength value="hunter2" />
           <HawkHandleInput label="Handle" value="adaeze" available />
           <HawkHandleInput label="Handle" value="taken" available={false} />
-          <HawkTextArea label="Bio" maxLength={280} rows={3} placeholder="Tell clients about yourself" />
+          <HawkTextArea
+            label="Bio"
+            maxLength={280}
+            rows={3}
+            placeholder="Tell clients about yourself"
+          />
           <div className="flex flex-col gap-hawk-4">
             <HawkSearchInput placeholder="Search professionals" />
             <HawkSearchInput placeholder="Searching…" searching value="tax" />
@@ -180,7 +195,15 @@ export function PageCurrency() {
 
       <PreviewSection title="Stepper">
         <div className="flex flex-wrap gap-hawk-7">
-          <HawkStepper label="Minimum call length" value={minutes} onChange={setMinutes} min={5} max={60} step={5} suffix="min" />
+          <HawkStepper
+            label="Minimum call length"
+            value={minutes}
+            onChange={setMinutes}
+            min={5}
+            max={60}
+            step={5}
+            suffix="min"
+          />
           <HawkStepper label="Disabled" value={3} state={{ disabled: true }} />
         </div>
       </PreviewSection>
@@ -338,7 +361,11 @@ export function PageSelection() {
             label="I am a"
             options={[
               { value: 'client', label: 'Client', description: 'I want to talk to someone' },
-              { value: 'professional', label: 'Professional', description: 'I want to be paid for my time' },
+              {
+                value: 'professional',
+                label: 'Professional',
+                description: 'I want to be paid for my time',
+              },
             ]}
             value={role}
             onChange={setRole}
@@ -496,7 +523,12 @@ export function PageCode() {
           <HawkCodeInput length={4} value="1234" onChange={() => {}} />
         </PreviewState>
         <PreviewState name="error">
-          <HawkCodeInput length={4} value="12" state={{ error: true, errorText: 'Wrong code' }} onChange={() => {}} />
+          <HawkCodeInput
+            length={4}
+            value="12"
+            state={{ error: true, errorText: 'Wrong code' }}
+            onChange={() => {}}
+          />
         </PreviewState>
         <PreviewState name="locked" note="Disabled with the wait stated.">
           <HawkCodeInput

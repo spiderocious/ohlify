@@ -35,8 +35,7 @@ export const HawkOverlaySurface = {
   TAKEOVER: 'takeover',
   POPOVER: 'popover',
 } as const;
-export type HawkOverlaySurface =
-  (typeof HawkOverlaySurface)[keyof typeof HawkOverlaySurface];
+export type HawkOverlaySurface = (typeof HawkOverlaySurface)[keyof typeof HawkOverlaySurface];
 
 export interface HawkOverlayControl {
   readonly open: boolean;
@@ -70,10 +69,7 @@ export function useHawkOverlay(
 
   const close = useCallback(() => setOpen(false), [setOpen]);
 
-  return useMemo(
-    () => ({ open: value, setOpen, close }),
-    [value, setOpen, close],
-  );
+  return useMemo(() => ({ open: value, setOpen, close }), [value, setOpen, close]);
 }
 
 /* ── Scroll locking ───────────────────────────────────────────────────────
@@ -156,8 +152,7 @@ const SURFACE_PANEL: Record<HawkOverlaySurface, string> = {
     'w-full max-w-lg rounded-hawk-fixed-lg bg-hawk-paper shadow-hawk-modal animate-hawk-content-in',
   'bottom-sheet':
     'w-full max-w-2xl rounded-t-hawk-fixed-xl bg-hawk-paper shadow-hawk-modal animate-hawk-sheet-up',
-  'side-sheet':
-    'h-full w-full max-w-xl bg-hawk-paper shadow-hawk-modal animate-hawk-sheet-right',
+  'side-sheet': 'h-full w-full max-w-xl bg-hawk-paper shadow-hawk-modal animate-hawk-sheet-right',
   takeover: 'h-full w-full bg-hawk-paper animate-hawk-content-in',
   popover:
     'w-full max-w-sm rounded-hawk-fixed-md bg-hawk-paper shadow-hawk-popover animate-hawk-content-in',

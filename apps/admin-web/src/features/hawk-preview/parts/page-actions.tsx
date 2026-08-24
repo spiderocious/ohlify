@@ -57,7 +57,13 @@ export function PageButton() {
           {(['solid', 'outline', 'plain', 'ghost'] as const).map((variant) => (
             <PreviewRow key={variant} label={variant}>
               {(['sm', 'md', 'lg'] as const).map((size) => (
-                <HawkButton key={size} label="Approve" variant={variant} size={size} onClick={() => {}} />
+                <HawkButton
+                  key={size}
+                  label="Approve"
+                  variant={variant}
+                  size={size}
+                  onClick={() => {}}
+                />
               ))}
             </PreviewRow>
           ))}
@@ -88,7 +94,13 @@ export function PageButton() {
         <PreviewStage dark>
           <div className="flex flex-wrap gap-hawk-4">
             {(['solid', 'outline', 'plain', 'ghost'] as const).map((variant) => (
-              <HawkButton key={variant} label="Continue" variant={variant} onDark onClick={() => {}} />
+              <HawkButton
+                key={variant}
+                label="Continue"
+                variant={variant}
+                onDark
+                onClick={() => {}}
+              />
             ))}
           </div>
         </PreviewStage>
@@ -99,7 +111,13 @@ export function PageButton() {
           <div className="flex flex-wrap gap-hawk-4">
             <HawkButton label="Add rate" startIcon={IconPlus} onClick={() => {}} />
             <HawkButton label="Confirm" endIcon={IconCheck} variant="outline" onClick={() => {}} />
-            <HawkButton label="Filter" startIcon={IconFilter} variant="plain" pill onClick={() => {}} />
+            <HawkButton
+              label="Filter"
+              startIcon={IconFilter}
+              variant="plain"
+              pill
+              onClick={() => {}}
+            />
           </div>
           <HawkButton label="Continue" size="lg" block onClick={() => {}} />
         </div>
@@ -160,7 +178,13 @@ export function PageIconButton() {
         <div className="flex flex-col gap-hawk-5">
           <PreviewRow label="square">
             {(['xs', 'sm', 'md', 'lg'] as const).map((size) => (
-              <HawkIconButton key={size} icon={IconEdit} label="Edit" size={size} onClick={() => {}} />
+              <HawkIconButton
+                key={size}
+                icon={IconEdit}
+                label="Edit"
+                size={size}
+                onClick={() => {}}
+              />
             ))}
           </PreviewRow>
           <PreviewRow label="circle">
@@ -188,7 +212,13 @@ export function PageIconButton() {
           </PreviewRow>
           <PreviewRow label="destructive">
             <HawkIconButton icon={IconTrash} label="Delete" destructive onClick={() => {}} />
-            <HawkIconButton icon={IconTrash} label="Delete" destructive variant="plain" onClick={() => {}} />
+            <HawkIconButton
+              icon={IconTrash}
+              label="Delete"
+              destructive
+              variant="plain"
+              onClick={() => {}}
+            />
           </PreviewRow>
         </div>
       </PreviewSection>
@@ -309,8 +339,9 @@ export function PageLink() {
       >
         <PreviewStage>
           <p className="text-hawk-body text-hawk-ink">
-            Your withdrawal is being processed. <HawkLink onClick={() => {}}>Track it here</HawkLink>{' '}
-            or <HawkLink onClick={() => {}}>contact support</HawkLink> if it takes longer than a day.
+            Your withdrawal is being processed.{' '}
+            <HawkLink onClick={() => {}}>Track it here</HawkLink> or{' '}
+            <HawkLink onClick={() => {}}>contact support</HawkLink> if it takes longer than a day.
           </p>
         </PreviewStage>
       </PreviewSection>
@@ -343,7 +374,13 @@ export function PageLink() {
               icon={IconWallet}
               onClick={() => {}}
             />
-            <HawkMenuLink label="Sign out" icon={IconLogOut} destructive noChevron onClick={() => {}} />
+            <HawkMenuLink
+              label="Sign out"
+              icon={IconLogOut}
+              destructive
+              noChevron
+              onClick={() => {}}
+            />
           </div>
         </PreviewStage>
       </PreviewSection>

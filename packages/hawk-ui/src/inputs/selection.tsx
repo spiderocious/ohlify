@@ -92,10 +92,7 @@ export function HawkCheckbox({
           className={cn('flex min-w-0 flex-col', inert ? 'cursor-not-allowed' : 'cursor-pointer')}
         >
           {label && (
-            <HawkText
-              variant="body"
-              ink={state.disabled ? 'disabled' : 'default'}
-            >
+            <HawkText variant="body" ink={state.disabled ? 'disabled' : 'default'}>
               {label}
             </HawkText>
           )}
@@ -277,9 +274,7 @@ export function HawkCheckboxGroup<T extends string>({
   className,
 }: HawkCheckboxGroupProps<T>) {
   const toggle = (option: T) => {
-    const next = value.includes(option)
-      ? value.filter((v) => v !== option)
-      : [...value, option];
+    const next = value.includes(option) ? value.filter((v) => v !== option) : [...value, option];
     onChange?.(next);
   };
 
@@ -370,13 +365,7 @@ export function HawkSwitch({
   if (!label && !description) return <span className={className}>{control}</span>;
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-hawk-5',
-        reversed && 'justify-between',
-        className,
-      )}
-    >
+    <div className={cn('flex items-center gap-hawk-5', reversed && 'justify-between', className)}>
       {reversed && (
         <label htmlFor={id} className="flex min-w-0 flex-col">
           <HawkText variant="body" ink={state.disabled ? 'disabled' : 'default'}>
@@ -522,9 +511,7 @@ export function HawkRating({
           <HawkIcon
             icon={IconStar}
             size={size}
-            className={cn(
-              filled ? 'fill-hawk-caution text-hawk-caution' : 'text-hawk-line-strong',
-            )}
+            className={cn(filled ? 'fill-hawk-caution text-hawk-caution' : 'text-hawk-line-strong')}
           />
         );
 

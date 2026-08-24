@@ -223,10 +223,7 @@ export const findLiveForCalleeAll = async (
  * Closes a call that never connected. Nothing was talked, so nothing is
  * billed and no settlement journal is written.
  */
-export const markCancelled = async (
-  runner: QueryRunner,
-  callId: string,
-): Promise<void> => {
+export const markCancelled = async (runner: QueryRunner, callId: string): Promise<void> => {
   await runner.query(
     `UPDATE instant_calls
         SET status = '${InstantCallStatus.CANCELLED}',

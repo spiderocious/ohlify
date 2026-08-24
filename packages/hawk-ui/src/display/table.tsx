@@ -342,7 +342,9 @@ export function HawkTable<T>({
       </div>
 
       {footer && (
-        <div className="border-t border-hawk-line bg-hawk-stock px-hawk-pad py-hawk-5">{footer}</div>
+        <div className="border-t border-hawk-line bg-hawk-stock px-hawk-pad py-hawk-5">
+          {footer}
+        </div>
       )}
     </div>
   );

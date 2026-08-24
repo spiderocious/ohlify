@@ -71,10 +71,7 @@ export const invite = async (input: {
   try {
     await client.query('BEGIN');
 
-    const conversation = await chatRepo.findConversationByIdForUpdate(
-      client,
-      input.conversationId,
-    );
+    const conversation = await chatRepo.findConversationByIdForUpdate(client, input.conversationId);
     if (!conversation) {
       await client.query('ROLLBACK');
       return new ServiceError('not_found', CHAT_INVITE_MESSAGES.NOT_FOUND, 404);
@@ -208,10 +205,7 @@ export const resolveInvite = async (input: {
   try {
     await client.query('BEGIN');
 
-    const conversation = await chatRepo.findConversationByIdForUpdate(
-      client,
-      input.conversationId,
-    );
+    const conversation = await chatRepo.findConversationByIdForUpdate(client, input.conversationId);
     if (!conversation) {
       await client.query('ROLLBACK');
       return new ServiceError('not_found', CHAT_INVITE_MESSAGES.NOT_FOUND, 404);
@@ -350,8 +344,7 @@ export const removeParticipant = async (input: {
       input.conversationId,
       input.actorUserId,
     );
-    const actorIsOwner =
-      actor !== null && actor.role === ConversationParticipantRole.OWNER;
+    const actorIsOwner = actor !== null && actor.role === ConversationParticipantRole.OWNER;
     const actorIsSelf = participant.user_id === input.actorUserId;
     if (!actorIsOwner && !actorIsSelf) {
       await client.query('ROLLBACK');

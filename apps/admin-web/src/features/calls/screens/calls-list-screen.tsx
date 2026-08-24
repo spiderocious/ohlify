@@ -116,9 +116,7 @@ export function CallsListScreen() {
       header: 'Connected',
       align: 'right',
       width: '11%',
-      render: (row) => (
-        <span className="hawk-record">{formatDuration(row.connected_seconds)}</span>
-      ),
+      render: (row) => <span className="hawk-record">{formatDuration(row.connected_seconds)}</span>,
     },
     {
       key: 'status',
@@ -144,11 +142,7 @@ export function CallsListScreen() {
           live > 0 ? `${live} in progress right now` : 'Inspect, force-end, or refund calls.'
         }
         actions={
-          <HawkButton
-            label="Test call"
-            variant="outline"
-            onClick={() => setShowTest(true)}
-          />
+          <HawkButton label="Test call" variant="outline" onClick={() => setShowTest(true)} />
         }
         kpis={kpis}
         tabs={statusTabs('call')}

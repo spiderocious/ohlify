@@ -57,11 +57,7 @@ export interface HawkButtonDockProps {
   className?: string;
 }
 
-export function HawkButtonDock({
-  children,
-  safeArea = false,
-  className,
-}: HawkButtonDockProps) {
+export function HawkButtonDock({ children, safeArea = false, className }: HawkButtonDockProps) {
   return (
     <div
       className={cn(

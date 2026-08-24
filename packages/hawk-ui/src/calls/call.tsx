@@ -106,9 +106,7 @@ export function HawkCallSurface({
         </HawkText>
 
         <div className="flex items-center gap-hawk-3">
-          {unstable && (
-            <HawkIcon icon={IconWifiOff} size={14} className="text-hawk-hazard" />
-          )}
+          {unstable && <HawkIcon icon={IconWifiOff} size={14} className="text-hawk-hazard" />}
           <HawkText
             variant="caption"
             ink={unstable ? undefined : 'inverse-muted'}
@@ -116,9 +114,7 @@ export function HawkCallSurface({
           >
             {STATE_LABEL[state]}
           </HawkText>
-          {video && (
-            <HawkIcon icon={IconVideo} size={13} className="text-hawk-ink-inverse-muted" />
-          )}
+          {video && <HawkIcon icon={IconVideo} size={13} className="text-hawk-ink-inverse-muted" />}
         </div>
 
         {active && (
@@ -227,8 +223,7 @@ export const HawkNetworkQuality = {
   POOR: 'poor',
   LOST: 'lost',
 } as const;
-export type HawkNetworkQuality =
-  (typeof HawkNetworkQuality)[keyof typeof HawkNetworkQuality];
+export type HawkNetworkQuality = (typeof HawkNetworkQuality)[keyof typeof HawkNetworkQuality];
 
 /**
  * The connection indicator.
@@ -266,11 +261,7 @@ export function HawkCallQuality({
     <span className={cn('inline-flex items-center gap-hawk-2', className)}>
       <HawkIcon
         icon={
-          quality === 'lost'
-            ? IconWifiOff
-            : quality === 'poor'
-              ? IconChartWeak
-              : IconNetworkQuality
+          quality === 'lost' ? IconWifiOff : quality === 'poor' ? IconChartWeak : IconNetworkQuality
         }
         size={13}
         className={tone.text}

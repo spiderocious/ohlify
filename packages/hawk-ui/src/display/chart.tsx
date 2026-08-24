@@ -89,13 +89,19 @@ export function HawkBarChart({
         {data.map((point) => {
           const tone = quartet(point.semantic ?? semantic);
           return (
-            <div key={point.label} className="flex flex-1 flex-col items-center justify-end gap-hawk-2">
+            <div
+              key={point.label}
+              className="flex flex-1 flex-col items-center justify-end gap-hawk-2"
+            >
               <span className="hawk-record text-hawk-tiny font-semibold tabular-nums text-hawk-ink-muted">
                 {format(point.value)}
               </span>
               <div
                 title={`${point.label}: ${format(point.value)}`}
-                className={cn('hawk-motion w-full rounded-t-hawk-xs transition-[height] duration-hawk-base', tone.solidBg)}
+                className={cn(
+                  'hawk-motion w-full rounded-t-hawk-xs transition-[height] duration-hawk-base',
+                  tone.solidBg,
+                )}
                 // A zero-value bar still gets 2px, so "nothing happened" reads
                 // as a measured zero rather than a missing column.
                 style={{ height: Math.max(2, (point.value / max) * (height - 24)) }}
@@ -172,7 +178,15 @@ export function HawkLineChart({
         </defs>
 
         {[0, 25, 50, 75, 100].map((y) => (
-          <line key={y} x1={0} y1={y} x2={width} y2={y} stroke="var(--hawk-line)" strokeWidth={0.4} />
+          <line
+            key={y}
+            x1={0}
+            y1={y}
+            x2={width}
+            y2={y}
+            stroke="var(--hawk-line)"
+            strokeWidth={0.4}
+          />
         ))}
 
         {area && <path d={fill} fill={`url(#${gradientId})`} />}
@@ -250,7 +264,9 @@ export function HawkDonutChart({
           />
           {total > 0 &&
             data.map((point, index) => {
-              const tone = quartet(point.semantic ?? SERIES[index % SERIES.length] ?? HawkSemantic.NEUTRAL);
+              const tone = quartet(
+                point.semantic ?? SERIES[index % SERIES.length] ?? HawkSemantic.NEUTRAL,
+              );
               const fraction = point.value / total;
               const dash = circumference * fraction;
               const segment = (
@@ -277,7 +293,9 @@ export function HawkDonutChart({
 
       <ul className="flex min-w-0 flex-col gap-hawk-3">
         {data.map((point, index) => {
-          const tone = quartet(point.semantic ?? SERIES[index % SERIES.length] ?? HawkSemantic.NEUTRAL);
+          const tone = quartet(
+            point.semantic ?? SERIES[index % SERIES.length] ?? HawkSemantic.NEUTRAL,
+          );
           return (
             <li key={point.label} className="flex items-center gap-hawk-3">
               <span className={cn('h-2.5 w-2.5 shrink-0 rounded-sm', tone.solidBg)} />

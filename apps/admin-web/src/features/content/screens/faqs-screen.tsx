@@ -74,13 +74,7 @@ export function FaqsScreen() {
   );
 }
 
-function FaqEditor({
-  draft,
-  onClose,
-}: {
-  draft: Partial<AdminFaq> | null;
-  onClose: () => void;
-}) {
+function FaqEditor({ draft, onClose }: { draft: Partial<AdminFaq> | null; onClose: () => void }) {
   const create = useCreateFaq();
   const update = useUpdateFaq(draft?.id ?? '');
   const del = useDeleteFaq(draft?.id ?? '');
@@ -130,7 +124,9 @@ function FaqEditor({
       width={560}
       footer={
         <>
-          {isEdit && <AppButton label="Delete" variant="outline" height={36} onPressed={onDelete} />}
+          {isEdit && (
+            <AppButton label="Delete" variant="outline" height={36} onPressed={onDelete} />
+          )}
           <AppButton
             label={isEdit ? 'Save' : 'Create'}
             variant="solid"

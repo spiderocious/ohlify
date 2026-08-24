@@ -14,10 +14,7 @@ const FIVE_CHARS = 5;
 // param ("prefix must be exactly 5 characters"), and clients surface these
 // strings to users verbatim.
 const affix = (name: 'prefix' | 'suffix') =>
-  z
-    .string()
-    .length(FIVE_CHARS, `${name} must be exactly ${FIVE_CHARS} characters`)
-    .optional();
+  z.string().length(FIVE_CHARS, `${name} must be exactly ${FIVE_CHARS} characters`).optional();
 
 export const UploadUriQuerySchema = z.object({
   prefix: affix('prefix'),

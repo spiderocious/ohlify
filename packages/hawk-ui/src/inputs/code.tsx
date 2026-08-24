@@ -180,9 +180,9 @@ export function HawkKeypad({
 
   return (
     <div className={cn('grid w-full max-w-xs grid-cols-3 gap-hawk-3', className)}>
-      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) =>
-        <div key={digit}>{key(digit, () => onDigit?.(digit), digit)}</div>,
-      )}
+      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+        <div key={digit}>{key(digit, () => onDigit?.(digit), digit)}</div>
+      ))}
       <div>
         {biometricIcon
           ? key(<HawkIcon icon={biometricIcon} size={22} />, onBiometric, 'Unlock with biometrics')

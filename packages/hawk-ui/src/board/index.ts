@@ -5,18 +5,9 @@ export { HawkDetailDrawer } from './detail-drawer.js';
 export type { HawkDetailDrawerRootProps } from './detail-drawer.js';
 
 export { HawkJournalComposer, HawkBalanceCheck, HawkLedgerRow } from './journal.js';
-export type {
-  HawkJournalLine,
-  HawkJournalComposerProps,
-  HawkLedgerRowProps,
-} from './journal.js';
+export type { HawkJournalLine, HawkJournalComposerProps, HawkLedgerRowProps } from './journal.js';
 
-export {
-  HawkFilterBar,
-  HawkActiveFilters,
-  HawkFilterRail,
-  HawkFilterGroup,
-} from './filters.js';
+export { HawkFilterBar, HawkActiveFilters, HawkFilterRail, HawkFilterGroup } from './filters.js';
 export type {
   HawkFilterBarProps,
   HawkFilterTab,
@@ -43,8 +34,4 @@ export {
   HawkModerationItem,
   HawkSystemTag,
 } from './shell.js';
-export type {
-  HawkAdminShellProps,
-  HawkAdminNavItem,
-  HawkModerationItemProps,
-} from './shell.js';
+export type { HawkAdminShellProps, HawkAdminNavItem, HawkModerationItemProps } from './shell.js';

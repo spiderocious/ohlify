@@ -18,12 +18,7 @@ export type {
 export { HawkLink, HawkNavLink, HawkMenuLink } from './link.js';
 export type { HawkLinkProps, HawkNavLinkProps, HawkMenuLinkProps } from './link.js';
 
-export {
-  HawkFab,
-  HawkContinueBar,
-  HawkTalkToCta,
-  HawkQuickReplies,
-} from './cta.js';
+export { HawkFab, HawkContinueBar, HawkTalkToCta, HawkQuickReplies } from './cta.js';
 export type {
   HawkFabProps,
   HawkContinueBarProps,

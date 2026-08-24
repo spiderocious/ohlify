@@ -289,8 +289,10 @@ export function HawkDropdown<T extends string>({
 
 /* ────────────────────────────────────────────────────────────────────────── */
 
-export interface HawkComboboxProps<T extends string>
-  extends Omit<HawkDropdownProps<T>, 'value' | 'onChange'> {
+export interface HawkComboboxProps<T extends string> extends Omit<
+  HawkDropdownProps<T>,
+  'value' | 'onChange'
+> {
   value?: T;
   onChange?: (value: T) => void;
   /** Search text, when the caller filters server-side. */

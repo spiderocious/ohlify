@@ -64,11 +64,10 @@ describe('deriveBillableSeconds', () => {
 
     it('closes an unterminated stream at the last event it saw', () => {
       // The app was killed mid-call: no `ca:ended` ever arrived.
-      const d = deriveBillableSeconds(
-        [ev(DurationEvent.ACTIVE, 0), ev('ca:heartbeat', 45)],
-        0,
-        { connectedAt: at(0), endedAt: at(300) },
-      );
+      const d = deriveBillableSeconds([ev(DurationEvent.ACTIVE, 0), ev('ca:heartbeat', 45)], 0, {
+        connectedAt: at(0),
+        endedAt: at(300),
+      });
 
       expect(d.billableSeconds).toBe(45);
       expect(d.source).toBe(DurationSource.EVENT_LOG);

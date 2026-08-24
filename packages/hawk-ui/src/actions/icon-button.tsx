@@ -22,8 +22,7 @@ export const HawkIconButtonShape = {
   SQUARE: 'square',
   CIRCLE: 'circle',
 } as const;
-export type HawkIconButtonShape =
-  (typeof HawkIconButtonShape)[keyof typeof HawkIconButtonShape];
+export type HawkIconButtonShape = (typeof HawkIconButtonShape)[keyof typeof HawkIconButtonShape];
 
 export interface HawkIconButtonProps {
   icon: HawkIconComponent;

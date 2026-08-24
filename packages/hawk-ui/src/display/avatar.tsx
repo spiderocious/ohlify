@@ -90,10 +90,7 @@ export function HawkAvatar({
           src={src}
           alt={name}
           onError={() => setFailed(true)}
-          className={cn(
-            'h-full w-full object-cover',
-            square ? 'rounded-hawk-sm' : 'rounded-full',
-          )}
+          className={cn('h-full w-full object-cover', square ? 'rounded-hawk-sm' : 'rounded-full')}
         />
       ) : (
         <span

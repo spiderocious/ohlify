@@ -37,13 +37,7 @@ export interface HawkPassRootProps {
   className?: string;
 }
 
-function PassRoot({
-  children,
-  as: Tag = 'article',
-  href,
-  onClick,
-  className,
-}: HawkPassRootProps) {
+function PassRoot({ children, as: Tag = 'article', href, onClick, className }: HawkPassRootProps) {
   // The evidence rule, enforced. Dev-only: the check costs a children walk on
   // every render and the failure mode it guards is a build-time authoring
   // mistake, not a runtime condition.

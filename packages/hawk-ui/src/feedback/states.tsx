@@ -287,11 +287,7 @@ export function HawkStepperProgress({ steps, current, className }: HawkStepperPr
             <span
               className={cn(
                 'truncate text-hawk-tiny font-medium',
-                active
-                  ? 'text-hawk-acc'
-                  : done
-                    ? 'text-hawk-ink-muted'
-                    : 'text-hawk-ink-disabled',
+                active ? 'text-hawk-acc' : done ? 'text-hawk-ink-muted' : 'text-hawk-ink-disabled',
               )}
             >
               {step}
@@ -351,11 +347,7 @@ export interface HawkStepperVerticalProps {
  * The connector stops after the last node. A trailing line implies a step the
  * flow has not been told about.
  */
-export function HawkStepperVertical({
-  steps,
-  current = 0,
-  className,
-}: HawkStepperVerticalProps) {
+export function HawkStepperVertical({ steps, current = 0, className }: HawkStepperVerticalProps) {
   const statusOf = (step: HawkStep, index: number): HawkStepStatus => {
     if (step.status) return step.status;
     if (index < current) return HawkStepStatus.DONE;

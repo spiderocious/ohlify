@@ -24,10 +24,7 @@ export function CampaignsScreen() {
 
   return (
     <>
-      <HawkAdminPageHeader
-        title="Campaigns"
-        subtitle="Send a notification to a group of users."
-      />
+      <HawkAdminPageHeader title="Campaigns" subtitle="Send a notification to a group of users." />
 
       <div className="flex flex-col gap-hawk-6 px-hawk-pad pb-hawk-9">
         <HawkCallout

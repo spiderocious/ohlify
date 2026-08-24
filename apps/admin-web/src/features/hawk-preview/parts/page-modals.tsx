@@ -133,9 +133,7 @@ export function PageModals() {
             <HawkText variant="label" ink="strong">
               Your wallet just got faster
             </HawkText>
-            <HawkCaption>
-              Withdrawals now land within an hour. Nothing for you to do.
-            </HawkCaption>
+            <HawkCaption>Withdrawals now land within an hour. Nothing for you to do.</HawkCaption>
           </div>
         }
       />
@@ -165,7 +163,12 @@ export function PageModals() {
 
       <PreviewStates columns={3}>
         <PreviewState name="feedback">
-          <HawkButton label="Open" size="sm" variant="outline" onClick={() => setOpen('feedback')} />
+          <HawkButton
+            label="Open"
+            size="sm"
+            variant="outline"
+            onClick={() => setOpen('feedback')}
+          />
         </PreviewState>
         <PreviewState name="confirm">
           <HawkButton label="Open" size="sm" variant="outline" onClick={() => setOpen('confirm')} />
@@ -251,7 +254,8 @@ export function PageDrawerService() {
                   label: 'Reason',
                   placeholder: 'The document was unreadable',
                   multiline: true,
-                  validate: (v) => (v.trim().length < 10 ? 'Give at least ten characters' : undefined),
+                  validate: (v) =>
+                    v.trim().length < 10 ? 'Give at least ten characters' : undefined,
                 });
                 record(`prompt → ${value === null ? 'dismissed' : `"${value}"`}`);
               }}
@@ -277,8 +281,8 @@ export function PageDrawerService() {
                   (dismiss) => (
                     <div className="flex flex-col gap-hawk-4">
                       <HawkText variant="body">
-                        The render function receives its own dismiss, so content can close
-                        itself without the caller holding a handle.
+                        The render function receives its own dismiss, so content can close itself
+                        without the caller holding a handle.
                       </HawkText>
                       <HawkButton label="Close" block onClick={dismiss} />
                     </div>
@@ -313,7 +317,12 @@ export function PageDrawerService() {
         note="dismissAll() resolves every open prompt to the negative answer. A caller awaiting a confirm during a logout must not be left hanging on a promise that can never resolve — and it must certainly not receive true."
       >
         <PreviewStage>
-          <HawkButton label="HawkDrawer.dismissAll()" variant="ghost" size="sm" onClick={() => HawkDrawer.dismissAll()} />
+          <HawkButton
+            label="HawkDrawer.dismissAll()"
+            variant="ghost"
+            size="sm"
+            onClick={() => HawkDrawer.dismissAll()}
+          />
         </PreviewStage>
       </PreviewSection>
 

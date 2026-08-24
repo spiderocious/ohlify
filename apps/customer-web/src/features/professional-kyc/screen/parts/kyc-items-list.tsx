@@ -346,9 +346,7 @@ function openCallRateModal(item: KycItemSpec) {
   const existing = (item.value ?? null) as KycCallRateValue | null;
   DrawerService.showCustomModal(
     item.label,
-    (dismiss) => (
-      <CallRateModalContent callType={callType} existing={existing} onDone={dismiss} />
-    ),
+    (dismiss) => <CallRateModalContent callType={callType} existing={existing} onDone={dismiss} />,
     { position: 'center' },
   );
 }

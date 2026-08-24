@@ -186,7 +186,12 @@ export function ChatThreadScreen() {
             <AppText variant="body" align="center" color="var(--ohl-text-muted)">
               Could not load this conversation.
             </AppText>
-            <AppButton label="Try again" radius={100} height={36} onPressed={() => void refetch()} />
+            <AppButton
+              label="Try again"
+              radius={100}
+              height={36}
+              onPressed={() => void refetch()}
+            />
           </div>
         </Show>
         <Repeat each={ordered}>

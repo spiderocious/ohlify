@@ -2,12 +2,7 @@ import type { ReactNode } from 'react';
 
 import { HawkIcon } from '../foundation/icon.js';
 import { HawkText } from '../foundation/text.js';
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconClose,
-  IconInfo,
-} from '../icons/index.js';
+import { IconAlertTriangle, IconCheck, IconClose, IconInfo } from '../icons/index.js';
 import type { HawkIconComponent } from '../icons/index.js';
 import { HAWK_HAZARD, HawkSemantic, quartet } from '../theme/semantic.js';
 import { cn } from '../utils/cn.js';
@@ -146,9 +141,7 @@ export function HawkBanner({
       <HawkIcon icon={glyph} size={16} className={cn('shrink-0', tone.text)} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {title && (
-          <span className={cn('text-hawk-label font-semibold', tone.onSoft)}>{title}</span>
-        )}
+        {title && <span className={cn('text-hawk-label font-semibold', tone.onSoft)}>{title}</span>}
         <span className={cn('truncate text-hawk-label', tone.onSoft)}>{message}</span>
       </div>
 

@@ -225,11 +225,24 @@ export function PageNavigation() {
         <PreviewGrid columns={2}>
           <PreviewStage label="menu">
             <HawkMenu
-              trigger={<HawkButton label="Actions" variant="outline" size="sm" endIcon={IconMoreVertical} />}
+              trigger={
+                <HawkButton
+                  label="Actions"
+                  variant="outline"
+                  size="sm"
+                  endIcon={IconMoreVertical}
+                />
+              }
               items={[
                 { label: 'Edit', icon: IconEdit, onClick: () => {} },
                 { label: 'Duplicate', onClick: () => {} },
-                { label: 'Delete', icon: IconTrash, destructive: true, separated: true, onClick: () => {} },
+                {
+                  label: 'Delete',
+                  icon: IconTrash,
+                  destructive: true,
+                  separated: true,
+                  onClick: () => {},
+                },
               ]}
             />
           </PreviewStage>
@@ -260,7 +273,10 @@ export function PageNavigation() {
         </PreviewState>
         <PreviewState name="active">
           <HawkTabs
-            tabs={[{ value: 'a', label: 'All' }, { value: 'b', label: 'Pending' }]}
+            tabs={[
+              { value: 'a', label: 'All' },
+              { value: 'b', label: 'Pending' },
+            ]}
             value="b"
             onChange={() => {}}
           />
@@ -305,7 +321,13 @@ export function PageMoney() {
               actions={
                 <>
                   <HawkButton label="Top up" size="sm" onDark variant="solid" onClick={() => {}} />
-                  <HawkButton label="Withdraw" size="sm" onDark variant="outline" onClick={() => {}} />
+                  <HawkButton
+                    label="Withdraw"
+                    size="sm"
+                    onDark
+                    variant="outline"
+                    onClick={() => {}}
+                  />
                 </>
               }
             />

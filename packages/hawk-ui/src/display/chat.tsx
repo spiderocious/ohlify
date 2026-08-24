@@ -4,12 +4,7 @@ import { HawkIconButton } from '../actions/icon-button.js';
 import { HawkIcon } from '../foundation/icon.js';
 import { HawkSkeleton, HawkSkeletonLine } from '../foundation/skeleton.js';
 import { HawkText } from '../foundation/text.js';
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconPaperclip,
-  IconSendPlane,
-} from '../icons/index.js';
+import { IconAlertTriangle, IconCheck, IconPaperclip, IconSendPlane } from '../icons/index.js';
 import { cn } from '../utils/cn.js';
 
 export const HawkMessageStatus = {
@@ -19,8 +14,7 @@ export const HawkMessageStatus = {
   READ: 'read',
   FAILED: 'failed',
 } as const;
-export type HawkMessageStatus =
-  (typeof HawkMessageStatus)[keyof typeof HawkMessageStatus];
+export type HawkMessageStatus = (typeof HawkMessageStatus)[keyof typeof HawkMessageStatus];
 
 export interface HawkChatBubbleProps {
   message: ReactNode;
@@ -58,7 +52,11 @@ export function HawkChatBubble({
 
   return (
     <div
-      className={cn('flex w-full flex-col gap-hawk-1', own ? 'items-end' : 'items-start', className)}
+      className={cn(
+        'flex w-full flex-col gap-hawk-1',
+        own ? 'items-end' : 'items-start',
+        className,
+      )}
     >
       {author && !own && (
         <HawkText variant="caption" ink="muted" className="px-hawk-3">
@@ -75,7 +73,9 @@ export function HawkChatBubble({
           failed && 'border border-hawk-critical',
         )}
       >
-        {attachment && <div className="mb-hawk-3 overflow-hidden rounded-hawk-sm">{attachment}</div>}
+        {attachment && (
+          <div className="mb-hawk-3 overflow-hidden rounded-hawk-sm">{attachment}</div>
+        )}
         <div className="whitespace-pre-wrap break-words text-hawk-body">{message}</div>
       </div>
 
@@ -247,7 +247,13 @@ export interface HawkMediaProps {
  * not reflow line by line as they arrive — the single most disorienting thing a
  * scrolling list can do.
  */
-export function HawkMedia({ src, alt, ratio = 16 / 9, lightbox = false, className }: HawkMediaProps) {
+export function HawkMedia({
+  src,
+  alt,
+  ratio = 16 / 9,
+  lightbox = false,
+  className,
+}: HawkMediaProps) {
   const [open, setOpen] = useState(false);
   // An absent src is a *placeholder*, not a failure — a document slot before
   // anything is uploaded, or a preview a caller has not resolved yet. Rendering

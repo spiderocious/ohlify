@@ -143,18 +143,16 @@ export const inviteParticipant: RequestHandler = asyncHandler(
   },
 );
 
-export const respondToInvite: RequestHandler = asyncHandler(
-  async (req: Request, res: Response) => {
-    const r = await inviteService.resolveInvite({
-      conversationId: String(req.params['id']),
-      participantId: String(req.params['participantId']),
-      professionalUserId: req.userId!,
-      approve: (req.body as RespondToChatInviteDto).approve,
-    });
-    if (!r.success) bail(r);
-    else ResponseUtil.ok(res, r.data);
-  },
-);
+export const respondToInvite: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const r = await inviteService.resolveInvite({
+    conversationId: String(req.params['id']),
+    participantId: String(req.params['participantId']),
+    professionalUserId: req.userId!,
+    approve: (req.body as RespondToChatInviteDto).approve,
+  });
+  if (!r.success) bail(r);
+  else ResponseUtil.ok(res, r.data);
+});
 
 export const removeParticipant: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
