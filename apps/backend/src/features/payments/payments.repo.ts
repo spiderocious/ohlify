@@ -17,15 +17,17 @@ export interface CreatePaymentInput {
   callId?: string | null;
   authorizationUrl?: string;
   accessCode?: string;
+  /** What the user asked to receive; `amountKobo` is what the card is charged. */
+  creditKobo?: number;
 }
 
 export const createPending = async (input: CreatePaymentInput): Promise<PaymentRow> => {
   const res = await pool.query<PaymentRow>(
     `INSERT INTO payments (
        id, reference, purpose, user_id, call_id, amount_kobo,
-       authorization_url, access_code, status
+       authorization_url, access_code, credit_kobo, status
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
      RETURNING *`,
     [
       id('pay'),
@@ -36,6 +38,9 @@ export const createPending = async (input: CreatePaymentInput): Promise<PaymentR
       input.amountKobo,
       input.authorizationUrl ?? null,
       input.accessCode ?? null,
+      // What the user asked to receive. Recorded so settlement is a lookup
+      // rather than a re-derivation from whatever the processor charged.
+      input.creditKobo ?? null,
     ],
   );
   return res.rows[0]!;

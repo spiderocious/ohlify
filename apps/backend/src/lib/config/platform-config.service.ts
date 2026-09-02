@@ -161,6 +161,16 @@ export interface WalletConfig {
   funding_fee_bps: number;
   funding_fee_flat_kobo: number;
   funding_fee_cap_kobo: number;
+
+  /**
+   * Charges at or above this skip the flat component.
+   *
+   * Paystack waives its ₦100 flat fee below ₦2,500. Without this the flat fee
+   * was added to every top-up, so a ₦500 funding was charged ₦100 that
+   * Paystack never took — a 20% overcharge on a small top-up, entirely
+   * invisible because the ledger balanced against our own inflated figure.
+   */
+  funding_fee_flat_threshold_kobo: number;
   // Paystack's charge for paying money OUT. Server-only — professionals never
   // see it while `absorb` is the mode.
   withdrawal_fee_mode: ProcessorFeeMode;
@@ -277,6 +287,7 @@ const DEFAULT_SNAPSHOT: ConfigSnapshot = {
     funding_fee_bps: 150,
     funding_fee_flat_kobo: 10_000,
     funding_fee_cap_kobo: 200_000,
+    funding_fee_flat_threshold_kobo: 250_000,
     withdrawal_fee_mode: ProcessorFeeMode.ABSORB,
     withdrawal_fee_flat_kobo: 5_000,
   },
@@ -580,6 +591,13 @@ const buildSnapshot = (rows: ConfigRow[]): ConfigSnapshot => {
       funding_fee_cap_kobo: num(
         get('wallet.funding_fee_cap_kobo', d.wallet.funding_fee_cap_kobo),
         d.wallet.funding_fee_cap_kobo,
+      ),
+      funding_fee_flat_threshold_kobo: num(
+        get(
+          'wallet.funding_fee_flat_threshold_kobo',
+          d.wallet.funding_fee_flat_threshold_kobo,
+        ),
+        d.wallet.funding_fee_flat_threshold_kobo,
       ),
       withdrawal_fee_mode: oneOf(
         get('wallet.withdrawal_fee_mode', d.wallet.withdrawal_fee_mode),

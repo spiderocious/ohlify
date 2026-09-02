@@ -31,6 +31,8 @@ export interface PaymentRow {
   paid_at: Date | null;
   failed_reason: string | null;
   paystack_fees_kobo: string | null;
+  /** What the user asked to receive. NULL for rows predating migration 0107. */
+  credit_kobo: string | null;
   raw_paystack_payload: unknown;
   created_at: Date;
   updated_at: Date;

@@ -230,6 +230,9 @@ export const initializeFunding = async (dto: InitializeFundingDto, userId: strin
     reference,
     authorizationUrl: paystackResult.authorization_url,
     accessCode: paystackResult.access_code,
+    // The intent, recorded. Settlement credits THIS rather than re-deriving
+    // it from what the processor charged — see migration 0107.
+    creditKobo: charge.creditKobo,
   });
 
   const view: FundingInitView = {

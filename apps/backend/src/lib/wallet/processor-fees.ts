@@ -23,8 +23,17 @@ export interface FundingCharge {
  */
 export const computeFundingCharge = (creditKobo: number): FundingCharge => {
   const cfg = platformConfig.wallet();
-  const uncapped =
-    Math.ceil((creditKobo * cfg.funding_fee_bps) / 10_000) + cfg.funding_fee_flat_kobo;
+
+  // The flat component is WAIVED below the threshold — Paystack does not take
+  // its ₦100 on a charge under ₦2,500, and we were charging it anyway. On a
+  // ₦500 top-up that was a ₦100 overcharge (20%), and it hid perfectly: the
+  // ledger balanced, because it balanced against our own inflated figure
+  // rather than against what Paystack actually collected.
+  const flatKobo = creditKobo >= cfg.funding_fee_flat_threshold_kobo
+    ? cfg.funding_fee_flat_kobo
+    : 0;
+
+  const uncapped = Math.ceil((creditKobo * cfg.funding_fee_bps) / 10_000) + flatKobo;
   const feeKobo = Math.min(uncapped, cfg.funding_fee_cap_kobo);
 
   if (cfg.funding_fee_mode === ProcessorFeeMode.ABSORB) {

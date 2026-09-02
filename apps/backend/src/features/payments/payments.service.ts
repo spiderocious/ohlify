@@ -149,13 +149,50 @@ const handleChargeSuccess = async (
   });
 
   if (payment.purpose === PaymentPurpose.WALLET_FUNDING) {
+    // Credit what the user ASKED FOR, when we recorded it.
+    //
+    // The old path derived the credit as `charged - processor_fee`, which is
+    // only correct while our arithmetic and Paystack's agree. They did not:
+    // with "customer bears transaction charge" set on the Paystack account,
+    // they grossed our already-grossed charge up a second time, so the fee
+    // was applied twice and the user overpaid. Deriving the credit hid it,
+    // because the ledger balanced against our own inflated figure.
+    //
+    // Falls back to the derivation for rows written before migration 0107,
+    // which have no recorded intent to honour.
+    const recordedCredit =
+      payment.credit_kobo === null ? null : Number(payment.credit_kobo);
+    const netCreditKobo =
+      recordedCredit ?? fundingCreditKobo(verified.amountKobo, verified.feesKobo);
+
+    // A gap here means the processor moved the charge under us. It does not
+    // block the credit — the user is owed what they asked for either way —
+    // but it must be visible rather than silently absorbed.
+    if (recordedCredit !== null) {
+      const derived = fundingCreditKobo(verified.amountKobo, verified.feesKobo);
+      if (derived !== recordedCredit) {
+        logger.warn(
+          {
+            paymentId: payment.id,
+            reference: payment.reference,
+            recordedCredit,
+            derivedCredit: derived,
+            chargedKobo: verified.amountKobo,
+            processorFeeKobo: verified.feesKobo,
+            differenceKobo: derived - recordedCredit,
+          },
+          'funding charge differs from our quote — check Paystack fee-bearer settings',
+        );
+      }
+    }
+
     await applyFunding(runner, {
       userId: payment.user_id,
       paymentId: payment.id,
       reference: payment.reference,
       grossKobo: verified.amountKobo,
       feeKobo: verified.feesKobo,
-      netCreditKobo: fundingCreditKobo(verified.amountKobo, verified.feesKobo),
+      netCreditKobo,
     });
   } else if (payment.purpose === PaymentPurpose.CALL_PAYMENT) {
     logger.info(
