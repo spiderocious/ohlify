@@ -550,7 +550,7 @@ export const endCall = async (callId: string, userId: string, connectedSeconds: 
       return new ServiceSuccess(toView(updated), INSTANT_CALL_MESSAGES.ENDED);
     }
 
-    await settleActiveCall(client, call, Math.max(0, connectedSeconds));
+    await settleActiveCall(client, call, Math.max(0, connectedSeconds), userId);
     const updated = (await repo.findByIdForUpdate(client, callId))!;
     return new ServiceSuccess(toView(updated), INSTANT_CALL_MESSAGES.ENDED);
   });

@@ -7,6 +7,7 @@ import { deriveBillableSeconds, DurationSource } from '@features/call-session-ev
 import * as minutesRepo from '@features/minutes/minutes.repo.js';
 import { platformConfig } from '@lib/config/platform-config.service.js';
 import { logger } from '@lib/logger.js';
+import { insertEvent, OutboxAggregateType, OutboxEventType } from '@lib/outbox/index.js';
 import { nowUtc } from '@lib/time.js';
 import { settleMinutes } from '@lib/wallet/flows/minutes-settle.js';
 
@@ -38,6 +39,13 @@ export const settleActiveCall = async (
   client: QueryRunner,
   call: InstantCallRow,
   clientReportedSeconds: number,
+  /**
+   * Who ended it, so the "call over" push can target the other party.
+   *
+   * Optional: the stale-active resolver settles calls nobody ended, and there
+   * is no one to exclude — both sides are already gone.
+   */
+  endedByUserId?: string,
 ): Promise<SettlementOutcome> => {
   const capSeconds = call.seconds_allotted;
   const events = await eventsRepo.listAllByCallId(call.id);
@@ -94,6 +102,30 @@ export const settleActiveCall = async (
       escrowKobo: amountKobo,
     });
   }
+
+  // Tell the OTHER party the call is over.
+  //
+  // The ring paths all push `PUSH_CALL_CANCELLED`; this one — an ACTIVE call
+  // being hung up — pushed nothing at all. When one side ended a connected
+  // call, the other was never told: their screen stayed live, their meter kept
+  // running, and only Agora's `onUserOffline` could save them — which never
+  // fires if the hanging-up party had not yet joined the channel.
+  //
+  // `endedBy` is whoever called `end`; the push targets the other one.
+  const peerUserId =
+    endedByUserId === call.caller_user_id ? call.callee_user_id : call.caller_user_id;
+  await insertEvent(client, {
+    aggregateType: OutboxAggregateType.CALL,
+    aggregateId: call.id,
+    eventType: OutboxEventType.PUSH_CALL_CANCELLED,
+    payload: {
+      call_id: call.id,
+      target_user_id: peerUserId,
+      // Distinct from `cancelled` (a ring the caller withdrew): this call was
+      // live, so the peer's screen must tear down rather than stop ringing.
+      reason: 'peer_hangup',
+    },
+  });
 
   await repo.finalize(client, {
     callId: call.id,

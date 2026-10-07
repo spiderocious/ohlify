@@ -108,6 +108,26 @@ else
   bad "hawk-pages.generated.ts is stale — run: node tools/hawk-pages.mjs"
 fi
 
+# 7 — Every gallery part is a real module.
+#
+# A zero-byte `page-*.tsx` typechecks locally the moment Nx serves a cached
+# build, then fails the deploy with "is not a module" — the registry imports
+# from it regardless of whether it has content. Cheap to assert, so assert it
+# rather than relying on a cold cache to notice.
+empty=""
+for f in apps/admin-web/src/features/hawk-preview/parts/*.tsx \
+         apps/admin-web/src/features/hawk-preview/parts/*.ts; do
+  [ -e "$f" ] || continue
+  if [ ! -s "$f" ] || ! grep -q "^export" "$f"; then
+    empty="$empty$f\n"
+  fi
+done
+if [ -z "$empty" ]; then
+  pass "every gallery part exports at least one symbol"
+else
+  bad "a gallery part is empty or exports nothing:"; printf "%b" "$empty"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "All gates passed."
